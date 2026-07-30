@@ -1,0 +1,348 @@
+// NEXUS OS ENTERPRISE CORE SCHEMA
+// PostgreSQL 16 + Multi-Tenant RLS + UUID v7 + Object Engine
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+// -------------------------------------------------------------
+// 1. TENANT & WORKSPACE CONTEXT (Multi-Tenant Hierarchy)
+// -------------------------------------------------------------
+
+model Tenant {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @db.VarChar(255)
+  slug        String   @unique @db.VarChar(100)
+  plan        PlanType @default(ENTERPRISE)
+  status      TenantStatus @default(ACTIVE)
+  metadata    Json?    @db.JsonB
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspaces        Workspace[]
+  users             User[]
+  objectDefinitions ObjectDefinition[]
+  nexusObjects      NexusObject[]
+  workflowDefs      WorkflowDefinition[]
+  domainEvents      DomainEvent[]
+  auditLogs         AuditLog[]
+
+  @@map("tenants")
+}
+
+enum PlanType {
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+  CUSTOM
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  PROVISIONING
+  DELETED
+}
+
+model Workspace {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String   @db.VarChar(255)
+  code        String   @db.VarChar(50)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships  WorkspaceMember[]
+  nexusObjects NexusObject[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("workspaces")
+}
+
+model User {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  email        String    @db.VarChar(255)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  fullName     String    @map("full_name") @db.VarChar(255)
+  avatarUrl    String?   @map("avatar_url") @db.Text
+  role         UserRole  @default(MEMBER)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships  WorkspaceMember[]
+  ownedObjects NexusObject[]     @relation("OwnedObjects")
+  assignedObjects NexusObject[]   @relation("AssignedObjects")
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  WORKSPACE_ADMIN
+  MEMBER
+  GUEST
+}
+
+model WorkspaceMember {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  role        String   @default("MEMBER") @db.VarChar(50)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+// -------------------------------------------------------------
+// 2. OBJECT DEFINITION ENGINE (Dynamic Types per Tenant)
+// -------------------------------------------------------------
+
+model ObjectDefinition {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  key         String   @db.VarChar(100)
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  icon        String?  @db.VarChar(100)
+  schema      Json     @db.JsonB // JSON Schema for dynamic fields validation
+  permissions Json?    @db.JsonB
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  nexusObjects NexusObject[]
+  workflows    WorkflowDefinition[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("object_definitions")
+}
+
+// -------------------------------------------------------------
+// 3. CORE UNIVERSAL OBJECT ENGINE (nexus_objects)
+// -------------------------------------------------------------
+
+model NexusObject {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  workspaceId        String   @map("workspace_id") @db.Uuid
+  objectDefinitionId String   @map("object_definition_id") @db.Uuid
+  objectTypeKey      String   @map("object_type_key") @db.VarChar(100)
+  
+  title              String   @db.VarChar(500)
+  description        String?  @db.Text
+  status             String   @default("DRAFT") @db.VarChar(100)
+  priority           String   @default("MEDIUM") @db.VarChar(50)
+  progress           Int      @default(0)
+  
+  ownerId            String   @map("owner_id") @db.Uuid
+  assigneeId         String?  @map("assignee_id") @db.Uuid
+  
+  startDate          DateTime? @map("start_date") @db.Timestamptz(6)
+  dueDate            DateTime? @map("due_date") @db.Timestamptz(6)
+  
+  metadata           Json?    @db.JsonB // Flexible dynamic attributes
+  version            Int      @default(1) // Optimistic locking
+  
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  objectDefinition ObjectDefinition @relation(fields: [objectDefinitionId], references: [id])
+  owner            User             @relation("OwnedObjects", fields: [ownerId], references: [id])
+  assignee         User?            @relation("AssignedObjects", fields: [assigneeId], references: [id])
+
+  fieldValues       ObjectFieldValue[]
+  sourceRelations   ObjectRelation[]   @relation("SourceRelations")
+  targetRelations   ObjectRelation[]   @relation("TargetRelations")
+  history           ObjectHistory[]
+  comments          ObjectComment[]
+  attachments       ObjectAttachment[]
+
+  @@index([tenantId, workspaceId])
+  @@index([tenantId, objectTypeKey])
+  @@index([tenantId, status])
+  @@index([tenantId, ownerId])
+  @@index([tenantId, assigneeId])
+  @@map("nexus_objects")
+}
+
+// -------------------------------------------------------------
+// 4. OBJECT FIELD VALUE ENGINE (Typed EAV Hybrid for Fast Queries)
+// -------------------------------------------------------------
+
+model ObjectFieldValue {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectId     String    @map("object_id") @db.Uuid
+  fieldKey     String    @map("field_key") @db.VarChar(100)
+  valueText    String?   @map("value_text") @db.Text
+  valueNumber  Decimal?  @map("value_number") @db.Decimal(18, 4)
+  valueDate    DateTime? @map("value_date") @db.Timestamptz(6)
+  valueBoolean Boolean?  @map("value_boolean")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  object NexusObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@unique([objectId, fieldKey])
+  @@index([objectId])
+  @@index([fieldKey, valueNumber])
+  @@index([fieldKey, valueDate])
+  @@map("object_field_values")
+}
+
+// -------------------------------------------------------------
+// 5. OBJECT RELATION GRAPH (N:N Directed Graph Topology)
+// -------------------------------------------------------------
+
+model ObjectRelation {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceObjectId String   @map("source_object_id") @db.Uuid
+  targetObjectId String   @map("target_object_id") @db.Uuid
+  relationType   String   @map("relation_type") @db.VarChar(100) // e.g. BLOCKS, CONTAINS, REQUIRES_APPROVAL
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  sourceObject NexusObject @relation("SourceRelations", fields: [sourceObjectId], references: [id], onDelete: Cascade)
+  targetObject NexusObject @relation("TargetRelations", fields: [targetObjectId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceObjectId, targetObjectId, relationType])
+  @@index([sourceObjectId])
+  @@index([targetObjectId])
+  @@map("object_relations")
+}
+
+// -------------------------------------------------------------
+// 6. WORKFLOW ENGINE (Configurable State Machine)
+// -------------------------------------------------------------
+
+model WorkflowDefinition {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  objectDefinitionId String   @map("object_definition_id") @db.Uuid
+  name               String   @db.VarChar(255)
+  states             Json     @db.JsonB // ["CREATED", "IN_REVIEW", "APPROVED", "REJECTED"]
+  transitions        Json     @db.JsonB // [{ from: "CREATED", to: "IN_REVIEW", permission: "submit" }]
+  isDefault          Boolean  @default(true) @map("is_default")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  objectDefinition ObjectDefinition @relation(fields: [objectDefinitionId], references: [id], onDelete: Cascade)
+
+  @@map("workflow_definitions")
+}
+
+// -------------------------------------------------------------
+// 7. AUDIT & FORENSIC HISTORY ENGINE
+// -------------------------------------------------------------
+
+model ObjectHistory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectId  String   @map("object_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  fieldKey  String   @map("field_key") @db.VarChar(100)
+  oldValue  Json?    @map("old_value") @db.JsonB
+  newValue  Json?    @map("new_value") @db.JsonB
+  ipAddress String?  @map("ip_address") @db.VarChar(45)
+  userAgent String?  @map("user_agent") @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  object NexusObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@index([objectId])
+  @@index([userId])
+  @@map("object_history")
+}
+
+model ObjectComment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectId  String   @map("object_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  object NexusObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@index([objectId])
+  @@map("object_comments")
+}
+
+model ObjectAttachment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectId  String   @map("object_id") @db.Uuid
+  fileName  String   @map("file_name") @db.VarChar(255)
+  fileUrl   String   @map("file_url") @db.Text
+  fileSize  Int      @map("file_size")
+  mimeType  String   @map("mime_type") @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  object NexusObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@index([objectId])
+  @@map("object_attachments")
+}
+
+// -------------------------------------------------------------
+// 8. DOMAIN EVENT BUS & AUDIT LOGS (Outbox Pattern)
+// -------------------------------------------------------------
+
+model DomainEvent {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  aggregateId String    @map("aggregate_id") @db.Uuid
+  eventType   String    @map("event_type") @db.VarChar(100)
+  payload     Json      @db.JsonB
+  status      EventStatus @default(PENDING)
+  processedAt DateTime? @map("processed_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("domain_events")
+}
+
+enum EventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  resource   String   @db.VarChar(100)
+  resourceId String?  @map("resource_id") @db.Uuid
+  details    Json?    @db.JsonB
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}

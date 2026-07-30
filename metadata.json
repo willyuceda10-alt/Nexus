@@ -1,0 +1,6 @@
+{
+  "name": "Nexus OS",
+  "description": "Enterprise SaaS Project & Portfolio Management OS with Object Engine, Gantt, Kanban, Health Score, Governance, Risk & Approval Workflows.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
