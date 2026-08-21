@@ -22,7 +22,8 @@
     "prisma:validate": "prisma validate",
     "prisma:format": "prisma format",
     "prisma:migrate:dev": "prisma migrate dev",
-    "prisma:migrate:deploy": "prisma migrate deploy"
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:seed:dev": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
