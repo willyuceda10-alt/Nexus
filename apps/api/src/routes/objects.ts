@@ -5,6 +5,7 @@ import {
   authenticate,
   requireTenantRoles,
   resolveActor,
+  type ActorContext,
 } from '../auth.js';
 import { withTenant } from '../tenant-transaction.js';
 
@@ -50,10 +51,46 @@ const updateObjectSchema = z
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
 
-function asJson(value: Record<string, unknown> | null | undefined) {
-  if (value === undefined) return undefined;
+function asJson(value: Record<string, unknown> | null) {
   if (value === null) return Prisma.JsonNull;
   return value as Prisma.InputJsonValue;
+}
+
+function isTenantAdmin(actor: ActorContext): boolean {
+  return actor.role === 'OWNER' || actor.role === 'TENANT_ADMIN';
+}
+
+async function canAccessWorkspace(
+  tx: Prisma.TransactionClient,
+  actor: ActorContext,
+  workspaceId: string,
+): Promise<boolean> {
+  if (isTenantAdmin(actor)) return true;
+
+  const membership = await tx.workspaceMember.findUnique({
+    where: {
+      workspaceId_userId: {
+        workspaceId,
+        userId: actor.userId,
+      },
+    },
+    select: { tenantId: true },
+  });
+
+  return membership?.tenantId === actor.tenantId;
+}
+
+async function isActiveTenantUser(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  userId: string,
+): Promise<boolean> {
+  const membership = await tx.tenantMembership.findUnique({
+    where: { tenantId_userId: { tenantId, userId } },
+    include: { user: { select: { isActive: true } } },
+  });
+
+  return membership?.status === 'ACTIVE' && membership.user.isActive;
 }
 
 export async function objectRoutes(app: FastifyInstance): Promise<void> {
@@ -73,11 +110,29 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
       const query = parsed.data;
 
       const result = await withTenant(actor.tenantId, async (tx) => {
+        let allowedWorkspaceIds: string[] | undefined;
+
+        if (!isTenantAdmin(actor)) {
+          const memberships = await tx.workspaceMember.findMany({
+            where: { tenantId: actor.tenantId, userId: actor.userId },
+            select: { workspaceId: true },
+          });
+          allowedWorkspaceIds = memberships.map((item) => item.workspaceId);
+
+          if (query.workspaceId && !allowedWorkspaceIds.includes(query.workspaceId)) {
+            return { forbidden: true as const, items: [], nextCursor: null };
+          }
+        }
+
         const rows = await tx.nexusObject.findMany({
           where: {
             tenantId: actor.tenantId,
             deletedAt: null,
-            ...(query.workspaceId ? { workspaceId: query.workspaceId } : {}),
+            ...(query.workspaceId
+              ? { workspaceId: query.workspaceId }
+              : allowedWorkspaceIds
+                ? { workspaceId: { in: allowedWorkspaceIds } }
+                : {}),
             ...(query.type ? { objectTypeKey: query.type } : {}),
             ...(query.status ? { status: query.status } : {}),
           },
@@ -98,12 +153,17 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
         const hasMore = rows.length > query.limit;
         const items = hasMore ? rows.slice(0, query.limit) : rows;
         return {
+          forbidden: false as const,
           items,
           nextCursor: hasMore ? items.at(-1)?.id ?? null : null,
         };
       });
 
-      return result;
+      if (result.forbidden) {
+        return reply.code(403).send({ error: 'workspace_access_denied' });
+      }
+
+      return { items: result.items, nextCursor: result.nextCursor };
     },
   );
 
@@ -122,7 +182,11 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
       const actor = request.actor!;
       const data = parsed.data;
 
-      const created = await withTenant(actor.tenantId, async (tx) => {
+      const result = await withTenant(actor.tenantId, async (tx) => {
+        if (!(await canAccessWorkspace(tx, actor, data.workspaceId))) {
+          return { kind: 'forbidden' as const };
+        }
+
         const [workspace, definition] = await Promise.all([
           tx.workspace.findFirst({
             where: { id: data.workspaceId, tenantId: actor.tenantId },
@@ -135,11 +199,18 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
         ]);
 
         if (!workspace || !definition) {
-          return null;
+          return { kind: 'not_found' as const };
         }
 
         if (definition.key !== data.objectTypeKey) {
-          throw new Error('Object type key does not match its definition.');
+          return { kind: 'definition_mismatch' as const };
+        }
+
+        if (
+          data.assigneeId &&
+          !(await isActiveTenantUser(tx, actor.tenantId, data.assigneeId))
+        ) {
+          return { kind: 'invalid_assignee' as const };
         }
 
         const object = await tx.nexusObject.create({
@@ -149,14 +220,14 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
             objectDefinitionId: data.objectDefinitionId,
             objectTypeKey: data.objectTypeKey,
             title: data.title,
-            description: data.description,
             status: data.status,
             priority: data.priority,
             progress: data.progress,
             ownerId: actor.userId,
-            assigneeId: data.assigneeId,
-            startDate: data.startDate,
-            dueDate: data.dueDate,
+            ...(data.description !== undefined ? { description: data.description } : {}),
+            ...(data.assigneeId !== undefined ? { assigneeId: data.assigneeId } : {}),
+            ...(data.startDate !== undefined ? { startDate: data.startDate } : {}),
+            ...(data.dueDate !== undefined ? { dueDate: data.dueDate } : {}),
             ...(data.metadata !== undefined ? { metadata: asJson(data.metadata) } : {}),
           },
         });
@@ -183,6 +254,8 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
               action: 'OBJECT_CREATED',
               resource: 'NEXUS_OBJECT',
               resourceId: object.id,
+              correlationId: request.id,
+              ipAddress: request.ip,
               details: {
                 objectTypeKey: object.objectTypeKey,
                 workspaceId: object.workspaceId,
@@ -191,17 +264,32 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
           }),
         ]);
 
-        return object;
+        return { kind: 'created' as const, object };
       });
 
-      if (!created) {
+      if (result.kind === 'forbidden') {
+        return reply.code(403).send({ error: 'workspace_access_denied' });
+      }
+      if (result.kind === 'not_found') {
         return reply.code(404).send({
           error: 'context_not_found',
           message: 'Workspace or object definition was not found in this tenant.',
         });
       }
+      if (result.kind === 'definition_mismatch') {
+        return reply.code(400).send({
+          error: 'object_definition_mismatch',
+          message: 'objectTypeKey does not match the selected object definition.',
+        });
+      }
+      if (result.kind === 'invalid_assignee') {
+        return reply.code(400).send({
+          error: 'invalid_assignee',
+          message: 'The assignee is not an active member of this tenant.',
+        });
+      }
 
-      return reply.code(201).send(created);
+      return reply.code(201).send(result.object);
     },
   );
 
@@ -215,8 +303,8 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({
           error: 'validation_error',
           details: {
-            params: params.success ? undefined : params.error.flatten(),
-            body: body.success ? undefined : body.error.flatten(),
+            ...(params.success ? {} : { params: params.error.flatten() }),
+            ...(body.success ? {} : { body: body.error.flatten() }),
           },
         });
       }
@@ -224,8 +312,29 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
       const actor = request.actor!;
       const { version, ...updates } = body.data;
 
-      const updated = await withTenant(actor.tenantId, async (tx) => {
-        const result = await tx.nexusObject.updateMany({
+      const result = await withTenant(actor.tenantId, async (tx) => {
+        const current = await tx.nexusObject.findFirst({
+          where: {
+            id: params.data.id,
+            tenantId: actor.tenantId,
+            deletedAt: null,
+          },
+          select: { id: true, workspaceId: true },
+        });
+
+        if (!current) return { kind: 'not_found' as const };
+        if (!(await canAccessWorkspace(tx, actor, current.workspaceId))) {
+          return { kind: 'forbidden' as const };
+        }
+
+        if (
+          updates.assigneeId &&
+          !(await isActiveTenantUser(tx, actor.tenantId, updates.assigneeId))
+        ) {
+          return { kind: 'invalid_assignee' as const };
+        }
+
+        const updateResult = await tx.nexusObject.updateMany({
           where: {
             id: params.data.id,
             tenantId: actor.tenantId,
@@ -246,7 +355,9 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
           },
         });
 
-        if (result.count !== 1) return null;
+        if (updateResult.count !== 1) {
+          return { kind: 'version_conflict' as const };
+        }
 
         const object = await tx.nexusObject.findUniqueOrThrow({
           where: { id: params.data.id },
@@ -274,6 +385,8 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
               action: 'OBJECT_UPDATED',
               resource: 'NEXUS_OBJECT',
               resourceId: object.id,
+              correlationId: request.id,
+              ipAddress: request.ip,
               details: {
                 version: object.version,
                 changedFields: Object.keys(updates),
@@ -282,17 +395,26 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
           }),
         ]);
 
-        return object;
+        return { kind: 'updated' as const, object };
       });
 
-      if (!updated) {
+      if (result.kind === 'not_found') {
+        return reply.code(404).send({ error: 'not_found' });
+      }
+      if (result.kind === 'forbidden') {
+        return reply.code(403).send({ error: 'workspace_access_denied' });
+      }
+      if (result.kind === 'invalid_assignee') {
+        return reply.code(400).send({ error: 'invalid_assignee' });
+      }
+      if (result.kind === 'version_conflict') {
         return reply.code(409).send({
           error: 'version_conflict',
-          message: 'The object changed since you loaded it, or it no longer exists.',
+          message: 'The object changed since you loaded it. Reload before saving again.',
         });
       }
 
-      return updated;
+      return result.object;
     },
   );
 
@@ -302,7 +424,7 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
       preHandler: [
         authenticate,
         resolveActor,
-        requireTenantRoles('SUPER_ADMIN', 'TENANT_ADMIN'),
+        requireTenantRoles('OWNER', 'TENANT_ADMIN'),
       ],
     },
     async (request, reply) => {
@@ -346,6 +468,8 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
               action: 'OBJECT_SOFT_DELETED',
               resource: 'NEXUS_OBJECT',
               resourceId: params.data.id,
+              correlationId: request.id,
+              ipAddress: request.ip,
             },
           }),
         ]);
