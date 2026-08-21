@@ -1,6 +1,6 @@
 targetScope = 'resourceGroup'
 
-@description('Short product prefix used in resource names.')
+@description('Stable technical prefix used in Azure resource names. The public product is Bridata Project.')
 param namePrefix string = 'nexus'
 
 @allowed([
@@ -13,7 +13,8 @@ param environment string = 'dev'
 param location string = resourceGroup().location
 
 param tags object = {
-  product: 'Nexus OS'
+  product: 'Bridata Project'
+  technicalPlatform: 'Nexus Core'
   environment: environment
   managedBy: 'Bicep'
 }
