@@ -3,19 +3,13 @@ import {
   Search,
   Plus,
   Bell,
-  Command,
   Building,
   ChevronDown,
-  UserCheck,
   Shield,
-  Layers,
-  Sparkles,
   Check,
-  CheckCircle2,
-  Clock,
-  X,
 } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
+import { BRAND } from '../../config/brand';
 
 export const Header: React.FC = () => {
   const {
@@ -43,7 +37,7 @@ export const Header: React.FC = () => {
   const getBreadcrumbTitle = () => {
     switch (activeTab) {
       case 'home': return 'Inicio / Dashboard';
-      case 'project': case 'projects': return 'Edificio Corporativo Nexus — Fase I';
+      case 'project': case 'projects': return 'Centro de Proyectos';
       case 'portfolios': return 'Portafolios & Programas';
       case 'governance': return 'Gobernanza & Riesgos';
       case 'meetings': return 'Reuniones & Decisiones';
@@ -51,13 +45,12 @@ export const Header: React.FC = () => {
       case 'timeline': return 'Timeline Histórico';
       case 'reports': return 'Reportes & KPIs';
       case 'settings': return 'Configuración';
-      default: return 'Nexus OS';
+      default: return BRAND.name;
     }
   };
 
   return (
     <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-8 flex-shrink-0 z-10 shadow-sm">
-      {/* Breadcrumbs & Workspace Selector */}
       <div className="flex items-center gap-4 text-sm font-medium text-slate-400">
         <div className="relative">
           <button
@@ -104,21 +97,19 @@ export const Header: React.FC = () => {
         <span className="text-slate-900 font-semibold">{getBreadcrumbTitle()}</span>
       </div>
 
-      {/* Center Search Input & Right Actions */}
       <div className="flex items-center gap-4">
-        {/* Search Bar */}
         <div className="relative">
           <input
             type="text"
             readOnly
             onClick={() => setIsCommandPaletteOpen(true)}
-            placeholder="Buscar en Nexus (⌘K)"
+            placeholder={`Buscar en ${BRAND.name} (⌘K)`}
+            aria-label={`Buscar en ${BRAND.name}`}
             className="bg-slate-100 border-none rounded-full py-1.5 px-4 pl-9 text-xs w-64 text-slate-700 placeholder:text-slate-400 cursor-pointer focus:ring-2 focus:ring-indigo-500 transition-all"
           />
           <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-2.5" />
         </div>
 
-        {/* Persona Role Switcher */}
         <div className="relative">
           <button
             onClick={() => setIsPersonaDropdownOpen(!isPersonaDropdownOpen)}
@@ -162,11 +153,11 @@ export const Header: React.FC = () => {
           )}
         </div>
 
-        {/* Notifications */}
         <div className="relative">
           <button
             onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
             className="p-2 hover:bg-slate-50 rounded-full text-slate-500 relative transition-colors"
+            aria-label="Abrir notificaciones"
           >
             <Bell className="h-4 w-4" />
             {pendingApprovals.length > 0 && (
@@ -212,13 +203,12 @@ export const Header: React.FC = () => {
           )}
         </div>
 
-        {/* Primary Create Button */}
         <button
           onClick={() => openCreateModal('TASK')}
           className="px-4 py-2 bg-indigo-600 rounded-lg text-sm font-semibold text-white shadow-sm shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center gap-1.5 active:scale-95"
         >
           <Plus className="h-4 w-4" />
-          <span>+ Nuevo Objeto</span>
+          <span>Nuevo objeto</span>
         </button>
       </div>
     </header>
