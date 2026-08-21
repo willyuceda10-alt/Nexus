@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -25,7 +26,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       const incoming = request.headers['x-correlation-id'];
       return typeof incoming === 'string' && incoming.length <= 128
         ? incoming
-        : crypto.randomUUID();
+        : randomUUID();
     },
     bodyLimit: 1_048_576,
   });
