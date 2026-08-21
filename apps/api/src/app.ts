@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { config } from './config.js';
@@ -53,7 +53,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     return payload;
   });
 
-  app.setErrorHandler((error, request, reply) => {
+  app.setErrorHandler((error: FastifyError, request, reply) => {
     request.log.error({ err: error }, 'Unhandled Nexus API error');
     const statusCode = error.statusCode && error.statusCode < 500 ? error.statusCode : 500;
     void reply.code(statusCode).send({
