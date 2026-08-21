@@ -2,5 +2,5 @@
   "name": "Bridata Project",
   "description": "Enterprise SaaS para gestión de proyectos y portafolios con Object Engine, Gantt, Kanban, Health Score, gobernanza, riesgos, aprobaciones y automatización.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }
