@@ -112,12 +112,6 @@ resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   properties: {
     adminUserEnabled: false
     publicNetworkAccess: 'Enabled'
-    policies: {
-      retentionPolicy: {
-        days: environment == 'prod' ? 30 : 7
-        status: 'enabled'
-      }
-    }
   }
 }
 
