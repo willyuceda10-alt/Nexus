@@ -28,14 +28,6 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Upload generated lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: nexus-package-lock
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
-
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
@@ -44,6 +36,19 @@ jobs:
 
       - name: Generate Prisma client
         run: npm run prisma:generate
+
+      - name: Generate Prisma baseline SQL
+        run: npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > generated-baseline.sql
+
+      - name: Upload generated build inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-generated-build-inputs
+          path: |
+            package-lock.json
+            generated-baseline.sql
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Validate Azure Bicep
         run: az bicep build --file infra/azure/main.bicep --stdout > /dev/null
