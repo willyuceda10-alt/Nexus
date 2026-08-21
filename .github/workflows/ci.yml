@@ -37,6 +37,9 @@ jobs:
       - name: Generate Prisma client
         run: npm run prisma:generate
 
+      - name: Validate Azure Bicep
+        run: az bicep build --file infra/azure/main.bicep --stdout > /dev/null
+
       - name: Typecheck
         run: npm run typecheck
 
