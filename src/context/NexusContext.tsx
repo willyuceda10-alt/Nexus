@@ -23,6 +23,7 @@ import {
   mockComments,
   mockApprovals,
 } from '../data/mockData';
+import { calculateProjectHealth } from '../domain/projectHealth';
 
 interface NexusContextType {
   tenant: Tenant;
@@ -39,21 +40,18 @@ interface NexusContextType {
   comments: Comment[];
   approvals: ApprovalStep[];
 
-  // Navigation & View States
-  activeTab: string; // 'home' | 'project' | 'portfolios' | 'governance' | 'meetings' | 'documents' | 'reports' | 'settings' | 'timeline'
+  activeTab: string;
   setActiveTab: (tab: string) => void;
   selectedProjectId: string | null;
   setSelectedProjectId: (id: string | null) => void;
-  projectActiveSubTab: string; // 'table' | 'kanban' | 'gantt' | 'timeline' | 'governance' | 'finance' | 'workload' | 'meetings'
+  projectActiveSubTab: string;
   setProjectActiveSubTab: (subTab: string) => void;
 
-  // Universal Peek View Drawer
   selectedObject: NexusObject | null;
   isDrawerOpen: boolean;
   openObjectDrawer: (objectId: string) => void;
   closeObjectDrawer: () => void;
 
-  // Modals & Triggers
   isCreateModalOpen: boolean;
   createModalDefaultType: ObjectType;
   openCreateModal: (type?: ObjectType) => void;
@@ -61,23 +59,32 @@ interface NexusContextType {
   isCommandPaletteOpen: boolean;
   setIsCommandPaletteOpen: (open: boolean) => void;
 
-  // CRUD & Business Engine Actions
   createNexusObject: (data: Partial<NexusObject>) => NexusObject;
   updateNexusObject: (id: string, updates: Partial<NexusObject>) => void;
   deleteNexusObject: (id: string) => void;
-  addRelation: (sourceId: string, targetId: string, relationType: ObjectRelation['relationType'], notes?: string) => void;
+  addRelation: (
+    sourceId: string,
+    targetId: string,
+    relationType: ObjectRelation['relationType'],
+    notes?: string,
+  ) => void;
   addComment: (objectId: string, content: string) => void;
-  decideApproval: (approvalId: string, status: 'APPROVED' | 'REJECTED', comment?: string) => void;
+  decideApproval: (
+    approvalId: string,
+    status: 'APPROVED' | 'REJECTED',
+    comment?: string,
+  ) => void;
 
-  // Calculated Metrics
   getProjectHealth: (projectId: string) => ProjectHealthMetrics;
-  getLinkedObjects: (objectId: string) => { object: NexusObject; relationType: string; notes?: string }[];
+  getLinkedObjects: (
+    objectId: string,
+  ) => { object: NexusObject; relationType: string; notes?: string }[];
 }
 
 const NexusContext = createContext<NexusContextType | undefined>(undefined);
 
 export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [tenant, setTenant] = useState<Tenant>(mockTenant);
+  const [tenant] = useState<Tenant>(mockTenant);
   const [workspaces] = useState<Workspace[]>(mockWorkspaces);
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>('ws-001');
   const [users] = useState<User[]>(mockUsers);
@@ -89,50 +96,47 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [comments, setComments] = useState<Comment[]>(mockComments);
   const [approvals, setApprovals] = useState<ApprovalStep[]>(mockApprovals);
 
-  // App Navigation
   const [activeTab, setActiveTab] = useState<string>('home');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>('prj-101');
   const [projectActiveSubTab, setProjectActiveSubTab] = useState<string>('table');
 
-  // Peek Drawer State
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
 
-  // Modals & Command Palette
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
   const [createModalDefaultType, setCreateModalDefaultType] = useState<ObjectType>('TASK');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
 
-  // Current logged in user object
-  const currentUser = useMemo(() => {
-    return users.find((u) => u.id === currentUserId) || users[0];
+  const currentUser = useMemo<User>(() => {
+    const user = users.find((item) => item.id === currentUserId) ?? users[0];
+    if (!user) {
+      throw new Error('Nexus requires at least one user in the current prototype dataset.');
+    }
+    return user;
   }, [users, currentUserId]);
 
-  // Current active workspace object
   const currentWorkspace = useMemo(() => {
     if (!currentWorkspaceId) return null;
-    return workspaces.find((w) => w.id === currentWorkspaceId) || null;
+    return workspaces.find((workspace) => workspace.id === currentWorkspaceId) ?? null;
   }, [workspaces, currentWorkspaceId]);
 
-  // Selected object for drawer
   const selectedObject = useMemo(() => {
     if (!selectedObjectId) return null;
-    return objects.find((o) => o.id === selectedObjectId) || null;
+    return objects.find((object) => object.id === selectedObjectId) ?? null;
   }, [objects, selectedObjectId]);
 
-  // Command Palette Keyboard Listener (Ctrl + K / Cmd + K)
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setIsCommandPaletteOpen((prev) => !prev);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+        event.preventDefault();
+        setIsCommandPaletteOpen((previous) => !previous);
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Universal Drawer Opener
   const openObjectDrawer = (objectId: string) => {
     setSelectedObjectId(objectId);
     setIsDrawerOpen(true);
@@ -152,12 +156,13 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsCreateModalOpen(false);
   };
 
-  // Business Action: Create Object
+  // Prototype-only local write. The API becomes authoritative once the UI is
+  // switched from mockData to /api/v1.
   const createNexusObject = (data: Partial<NexusObject>): NexusObject => {
-    const newId = `${data.type?.toLowerCase().slice(0, 3) || 'obj'}-${Date.now().toString().slice(-4)}`;
+    const newId = `${data.type?.toLowerCase().slice(0, 3) || 'obj'}-${crypto.randomUUID()}`;
     const now = new Date().toISOString();
 
-    const newObj: NexusObject = {
+    const newObject: NexusObject = {
       id: newId,
       tenantId: tenant.id,
       workspaceId: currentWorkspaceId || 'ws-001',
@@ -181,84 +186,75 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       ...data,
     };
 
-    setObjects((prev) => [newObj, ...prev]);
+    setObjects((previous) => [newObject, ...previous]);
 
-    // Record activity log
     const log: ActivityLog = {
-      id: `act-${Date.now()}`,
+      id: `act-${crypto.randomUUID()}`,
       objectId: newId,
       userId: currentUser.id,
       userName: currentUser.name,
       userAvatar: currentUser.avatar,
-      action: `Creó el objeto (${newObj.type}) "${newObj.title}"`,
-      newValue: newObj.status,
+      action: `Creó el objeto (${newObject.type}) "${newObject.title}"`,
+      newValue: newObject.status,
       timestamp: now,
     };
-    setActivityLogs((prev) => [log, ...prev]);
+    setActivityLogs((previous) => [log, ...previous]);
 
-    return newObj;
+    return newObject;
   };
 
-  // Business Action: Update Object
   const updateNexusObject = (id: string, updates: Partial<NexusObject>) => {
     const now = new Date().toISOString();
-    setObjects((prev) =>
-      prev.map((obj) => {
-        if (obj.id === id) {
-          const updated = { ...obj, ...updates, updatedAt: now };
+    setObjects((previous) =>
+      previous.map((object) => {
+        if (object.id !== id) return object;
 
-          // If status changed, record log
-          if (updates.status && updates.status !== obj.status) {
-            const log: ActivityLog = {
-              id: `act-${Date.now()}`,
-              objectId: id,
-              userId: currentUser.id,
-              userName: currentUser.name,
-              userAvatar: currentUser.avatar,
-              action: `Cambió estado a ${updates.status}`,
-              oldValue: obj.status,
-              newValue: updates.status,
-              timestamp: now,
-            };
-            setActivityLogs((prevLogs) => [log, ...prevLogs]);
-          }
+        const updated = { ...object, ...updates, updatedAt: now };
 
-          return updated;
+        if (updates.status && updates.status !== object.status) {
+          const log: ActivityLog = {
+            id: `act-${crypto.randomUUID()}`,
+            objectId: id,
+            userId: currentUser.id,
+            userName: currentUser.name,
+            userAvatar: currentUser.avatar,
+            action: `Cambió estado a ${updates.status}`,
+            oldValue: object.status,
+            newValue: updates.status,
+            timestamp: now,
+          };
+          setActivityLogs((previousLogs) => [log, ...previousLogs]);
         }
-        return obj;
-      })
+
+        return updated;
+      }),
     );
   };
 
-  // Business Action: Delete Object
   const deleteNexusObject = (id: string) => {
-    setObjects((prev) => prev.filter((o) => o.id !== id));
-    if (selectedObjectId === id) {
-      closeObjectDrawer();
-    }
+    setObjects((previous) => previous.filter((object) => object.id !== id));
+    if (selectedObjectId === id) closeObjectDrawer();
   };
 
-  // Business Action: Add Relation
   const addRelation = (
     sourceObjectId: string,
     targetObjectId: string,
     relationType: ObjectRelation['relationType'],
-    notes?: string
+    notes?: string,
   ) => {
-    const newRel: ObjectRelation = {
-      id: `rel-${Date.now()}`,
+    const newRelation: ObjectRelation = {
+      id: `rel-${crypto.randomUUID()}`,
       sourceObjectId,
       targetObjectId,
       relationType,
-      notes,
+      ...(notes ? { notes } : {}),
     };
-    setRelations((prev) => [...prev, newRel]);
+    setRelations((previous) => [...previous, newRelation]);
   };
 
-  // Business Action: Add Comment
   const addComment = (objectId: string, content: string) => {
     const newComment: Comment = {
-      id: `cmt-${Date.now()}`,
+      id: `cmt-${crypto.randomUUID()}`,
       objectId,
       userId: currentUser.id,
       userName: currentUser.name,
@@ -266,44 +262,56 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       content,
       createdAt: new Date().toISOString(),
     };
-    setComments((prev) => [newComment, ...prev]);
+    setComments((previous) => [newComment, ...previous]);
   };
 
-  // Business Action: Approval Decision
-  const decideApproval = (approvalId: string, status: 'APPROVED' | 'REJECTED', comment?: string) => {
+  const decideApproval = (
+    approvalId: string,
+    status: 'APPROVED' | 'REJECTED',
+    comment?: string,
+  ) => {
     const now = new Date().toISOString();
-    setApprovals((prev) =>
-      prev.map((app) => {
-        if (app.id === approvalId) {
-          const updated = { ...app, status, comment, decidedAt: now };
+    setApprovals((previous) =>
+      previous.map((approval) => {
+        if (approval.id !== approvalId) return approval;
 
-          // Also update target object status if applicable
-          if (app.objectId) {
-            updateNexusObject(app.objectId, {
-              status: status === 'APPROVED' ? 'APPROVED' : 'REJECTED',
-            });
-          }
-          return updated;
-        }
-        return app;
-      })
+        const updated: ApprovalStep = {
+          ...approval,
+          status,
+          decidedAt: now,
+          ...(comment ? { comment } : {}),
+        };
+
+        updateNexusObject(approval.objectId, {
+          status: status === 'APPROVED' ? 'APPROVED' : 'REJECTED',
+        });
+
+        return updated;
+      }),
     );
   };
 
-  // Get Linked Objects Graph
   const getLinkedObjects = (objectId: string) => {
     const linked: { object: NexusObject; relationType: string; notes?: string }[] = [];
 
-    relations.forEach((rel) => {
-      if (rel.sourceObjectId === objectId) {
-        const target = objects.find((o) => o.id === rel.targetObjectId);
+    relations.forEach((relation) => {
+      if (relation.sourceObjectId === objectId) {
+        const target = objects.find((object) => object.id === relation.targetObjectId);
         if (target) {
-          linked.push({ object: target, relationType: rel.relationType, notes: rel.notes });
+          linked.push({
+            object: target,
+            relationType: relation.relationType,
+            ...(relation.notes ? { notes: relation.notes } : {}),
+          });
         }
-      } else if (rel.targetObjectId === objectId) {
-        const source = objects.find((o) => o.id === rel.sourceObjectId);
+      } else if (relation.targetObjectId === objectId) {
+        const source = objects.find((object) => object.id === relation.sourceObjectId);
         if (source) {
-          linked.push({ object: source, relationType: `INVERSE_${rel.relationType}`, notes: rel.notes });
+          linked.push({
+            object: source,
+            relationType: `INVERSE_${relation.relationType}`,
+            ...(relation.notes ? { notes: relation.notes } : {}),
+          });
         }
       }
     });
@@ -311,43 +319,10 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return linked;
   };
 
-  // Project Health Calculation Engine
   const getProjectHealth = (projectId: string): ProjectHealthMetrics => {
-    const proj = objects.find((o) => o.id === projectId);
-    const projObjects = objects.filter((o) => o.projectId === projectId);
-
-    const tasks = projObjects.filter((o) => o.type === 'TASK' || o.type === 'DELIVERABLE' || o.type === 'MILESTONE');
-    const risks = projObjects.filter((o) => o.type === 'RISK');
-
-    // Progress & schedule variance
-    const progressAvg = tasks.length ? tasks.reduce((sum, t) => sum + t.progress, 0) / tasks.length : proj?.progress || 0;
-    const scheduleScore = Math.min(100, Math.round(progressAvg * 1.1));
-
-    // Budget Score
-    const budgetTotal = proj?.budgetTotal || 1;
-    const budgetSpent = proj?.budgetSpent || 0;
-    const budgetBurnPercentage = Math.round((budgetSpent / budgetTotal) * 100);
-    const budgetScore = Math.max(0, 100 - (budgetBurnPercentage > 85 ? (budgetBurnPercentage - 85) * 3 : 0));
-
-    // Risk Score
-    const criticalRisks = risks.filter((r) => (r.riskScore || 0) >= 15 && !r.isRealized);
-    const riskScore = Math.max(0, 100 - criticalRisks.length * 15);
-
-    // Health Score Formula
-    const healthScore = Math.round(
-      0.35 * scheduleScore + 0.25 * budgetScore + 0.2 * riskScore + 0.2 * 90
-    );
-
-    return {
-      healthScore,
-      scheduleScore,
-      budgetScore,
-      riskScore,
-      teamScore: 92,
-      overdueTasksCount: tasks.filter((t) => t.status === 'BLOCKED').length,
-      criticalRisksCount: criticalRisks.length,
-      budgetBurnPercentage,
-    };
+    const project = objects.find((object) => object.id === projectId);
+    const projectObjects = objects.filter((object) => object.projectId === projectId);
+    return calculateProjectHealth(project, projectObjects);
   };
 
   return (
@@ -366,34 +341,28 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         activityLogs,
         comments,
         approvals,
-
         activeTab,
         setActiveTab,
         selectedProjectId,
         setSelectedProjectId,
         projectActiveSubTab,
         setProjectActiveSubTab,
-
         selectedObject,
         isDrawerOpen,
         openObjectDrawer,
         closeObjectDrawer,
-
         isCreateModalOpen,
         createModalDefaultType,
         openCreateModal,
         closeCreateModal,
-
         isCommandPaletteOpen,
         setIsCommandPaletteOpen,
-
         createNexusObject,
         updateNexusObject,
         deleteNexusObject,
         addRelation,
         addComment,
         decideApproval,
-
         getProjectHealth,
         getLinkedObjects,
       }}
