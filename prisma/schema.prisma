@@ -1,5 +1,5 @@
 // NEXUS OS ENTERPRISE CORE SCHEMA
-// PostgreSQL 16 + Multi-Tenant RLS + UUID v7 + Object Engine
+// PostgreSQL 16 + Multi-Tenant RLS + Universal Object Graph + Transactional Outbox
 
 datasource db {
   provider = "postgresql"
@@ -7,31 +7,37 @@ datasource db {
 }
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions"]
+  provider = "prisma-client-js"
 }
 
-// -------------------------------------------------------------
-// 1. TENANT & WORKSPACE CONTEXT (Multi-Tenant Hierarchy)
-// -------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 1. TENANTS, GLOBAL USERS & MEMBERSHIPS
+// -----------------------------------------------------------------------------
 
 model Tenant {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name        String   @db.VarChar(255)
-  slug        String   @unique @db.VarChar(100)
-  plan        PlanType @default(ENTERPRISE)
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String       @db.VarChar(255)
+  slug        String       @unique @db.VarChar(100)
+  plan        PlanType     @default(ENTERPRISE)
   status      TenantStatus @default(ACTIVE)
-  metadata    Json?    @db.JsonB
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  metadata    Json?        @db.JsonB
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspaces        Workspace[]
-  users             User[]
-  objectDefinitions ObjectDefinition[]
-  nexusObjects      NexusObject[]
-  workflowDefs      WorkflowDefinition[]
-  domainEvents      DomainEvent[]
-  auditLogs         AuditLog[]
+  memberships         TenantMembership[]
+  workspaces           Workspace[]
+  workspaceMemberships WorkspaceMember[]
+  objectDefinitions    ObjectDefinition[]
+  nexusObjects         NexusObject[]
+  objectFieldValues    ObjectFieldValue[]
+  objectRelations      ObjectRelation[]
+  objectHistory        ObjectHistory[]
+  objectComments       ObjectComment[]
+  objectAttachments    ObjectAttachment[]
+  workflowDefs         WorkflowDefinition[]
+  integrationConnections IntegrationConnection[]
+  domainEvents         DomainEvent[]
+  auditLogs            AuditLog[]
 
   @@map("tenants")
 }
@@ -48,6 +54,83 @@ enum TenantStatus {
   SUSPENDED
   PROVISIONING
   DELETED
+}
+
+model User {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String    @db.VarChar(255)
+  fullName        String    @map("full_name") @db.VarChar(255)
+  avatarUrl       String?   @map("avatar_url") @db.Text
+  isActive        Boolean   @default(true) @map("is_active")
+  isPlatformAdmin Boolean   @default(false) @map("is_platform_admin")
+  lastLoginAt     DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  identities           UserIdentity[]
+  tenantMemberships    TenantMembership[]
+  workspaceMemberships WorkspaceMember[]
+  ownedObjects         NexusObject[] @relation("OwnedObjects")
+  assignedObjects      NexusObject[] @relation("AssignedObjects")
+
+  @@index([email])
+  @@map("users")
+}
+
+model UserIdentity {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  provider         IdentityProvider
+  issuer           String           @db.VarChar(500)
+  subject          String           @db.VarChar(255)
+  providerTenantId String?          @map("provider_tenant_id") @db.VarChar(255)
+  emailSnapshot    String?          @map("email_snapshot") @db.VarChar(255)
+  lastSeenAt       DateTime?        @map("last_seen_at") @db.Timestamptz(6)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, issuer, subject])
+  @@index([userId])
+  @@index([providerTenantId])
+  @@map("user_identities")
+}
+
+enum IdentityProvider {
+  ENTRA_ID
+  LOCAL
+  GOOGLE
+  GITHUB
+}
+
+model TenantMembership {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String           @map("tenant_id") @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  role      TenantRole       @default(MEMBER)
+  status    MembershipStatus @default(ACTIVE)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@map("tenant_memberships")
+}
+
+enum TenantRole {
+  OWNER
+  TENANT_ADMIN
+  MEMBER
+  GUEST
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
 }
 
 model Workspace {
@@ -68,54 +151,34 @@ model Workspace {
   @@map("workspaces")
 }
 
-model User {
-  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId     String    @map("tenant_id") @db.Uuid
-  email        String    @db.VarChar(255)
-  passwordHash String    @map("password_hash") @db.VarChar(255)
-  fullName     String    @map("full_name") @db.VarChar(255)
-  avatarUrl    String?   @map("avatar_url") @db.Text
-  role         UserRole  @default(MEMBER)
-  isActive     Boolean   @default(true) @map("is_active")
-  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  memberships  WorkspaceMember[]
-  ownedObjects NexusObject[]     @relation("OwnedObjects")
-  assignedObjects NexusObject[]   @relation("AssignedObjects")
-
-  @@unique([tenantId, email])
-  @@index([tenantId])
-  @@map("users")
-}
-
-enum UserRole {
-  SUPER_ADMIN
-  TENANT_ADMIN
-  WORKSPACE_ADMIN
-  MEMBER
-  GUEST
-}
-
 model WorkspaceMember {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId String   @map("workspace_id") @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  role        String   @default("MEMBER") @db.VarChar(50)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String        @map("tenant_id") @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, userId])
+  @@index([tenantId, userId])
   @@map("workspace_members")
 }
 
-// -------------------------------------------------------------
-// 2. OBJECT DEFINITION ENGINE (Dynamic Types per Tenant)
-// -------------------------------------------------------------
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MANAGER
+  MEMBER
+  VIEWER
+}
+
+// -----------------------------------------------------------------------------
+// 2. DYNAMIC OBJECT DEFINITIONS
+// -----------------------------------------------------------------------------
 
 model ObjectDefinition {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -124,13 +187,13 @@ model ObjectDefinition {
   name        String   @db.VarChar(255)
   description String?  @db.Text
   icon        String?  @db.VarChar(100)
-  schema      Json     @db.JsonB // JSON Schema for dynamic fields validation
+  schema      Json     @db.JsonB
   permissions Json?    @db.JsonB
   isSystem    Boolean  @default(false) @map("is_system")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   nexusObjects NexusObject[]
   workflows    WorkflowDefinition[]
 
@@ -139,32 +202,27 @@ model ObjectDefinition {
   @@map("object_definitions")
 }
 
-// -------------------------------------------------------------
-// 3. CORE UNIVERSAL OBJECT ENGINE (nexus_objects)
-// -------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 3. UNIVERSAL OBJECT GRAPH
+// -----------------------------------------------------------------------------
 
 model NexusObject {
-  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId           String   @map("tenant_id") @db.Uuid
-  workspaceId        String   @map("workspace_id") @db.Uuid
-  objectDefinitionId String   @map("object_definition_id") @db.Uuid
-  objectTypeKey      String   @map("object_type_key") @db.VarChar(100)
-  
-  title              String   @db.VarChar(500)
-  description        String?  @db.Text
-  status             String   @default("DRAFT") @db.VarChar(100)
-  priority           String   @default("MEDIUM") @db.VarChar(50)
-  progress           Int      @default(0)
-  
-  ownerId            String   @map("owner_id") @db.Uuid
-  assigneeId         String?  @map("assignee_id") @db.Uuid
-  
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  workspaceId        String    @map("workspace_id") @db.Uuid
+  objectDefinitionId String    @map("object_definition_id") @db.Uuid
+  objectTypeKey      String    @map("object_type_key") @db.VarChar(100)
+  title              String    @db.VarChar(500)
+  description        String?   @db.Text
+  status             String    @default("DRAFT") @db.VarChar(100)
+  priority           String    @default("MEDIUM") @db.VarChar(50)
+  progress           Int       @default(0)
+  ownerId            String    @map("owner_id") @db.Uuid
+  assigneeId         String?   @map("assignee_id") @db.Uuid
   startDate          DateTime? @map("start_date") @db.Timestamptz(6)
   dueDate            DateTime? @map("due_date") @db.Timestamptz(6)
-  
-  metadata           Json?    @db.JsonB // Flexible dynamic attributes
-  version            Int      @default(1) // Optimistic locking
-  
+  metadata           Json?     @db.JsonB
+  version            Int       @default(1)
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -174,94 +232,96 @@ model NexusObject {
   objectDefinition ObjectDefinition @relation(fields: [objectDefinitionId], references: [id])
   owner            User             @relation("OwnedObjects", fields: [ownerId], references: [id])
   assignee         User?            @relation("AssignedObjects", fields: [assigneeId], references: [id])
-
-  fieldValues       ObjectFieldValue[]
-  sourceRelations   ObjectRelation[]   @relation("SourceRelations")
-  targetRelations   ObjectRelation[]   @relation("TargetRelations")
-  history           ObjectHistory[]
-  comments          ObjectComment[]
-  attachments       ObjectAttachment[]
+  fieldValues      ObjectFieldValue[]
+  sourceRelations  ObjectRelation[] @relation("SourceRelations")
+  targetRelations  ObjectRelation[] @relation("TargetRelations")
+  history          ObjectHistory[]
+  comments         ObjectComment[]
+  attachments      ObjectAttachment[]
 
   @@index([tenantId, workspaceId])
   @@index([tenantId, objectTypeKey])
   @@index([tenantId, status])
   @@index([tenantId, ownerId])
   @@index([tenantId, assigneeId])
+  @@index([tenantId, updatedAt])
   @@map("nexus_objects")
 }
 
-// -------------------------------------------------------------
-// 4. OBJECT FIELD VALUE ENGINE (Typed EAV Hybrid for Fast Queries)
-// -------------------------------------------------------------
-
 model ObjectFieldValue {
   id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
   objectId     String    @map("object_id") @db.Uuid
   fieldKey     String    @map("field_key") @db.VarChar(100)
   valueText    String?   @map("value_text") @db.Text
   valueNumber  Decimal?  @map("value_number") @db.Decimal(18, 4)
   valueDate    DateTime? @map("value_date") @db.Timestamptz(6)
   valueBoolean Boolean?  @map("value_boolean")
+  valueJson    Json?     @map("value_json") @db.JsonB
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   object NexusObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
 
   @@unique([objectId, fieldKey])
-  @@index([objectId])
-  @@index([fieldKey, valueNumber])
-  @@index([fieldKey, valueDate])
+  @@index([tenantId, fieldKey, valueNumber])
+  @@index([tenantId, fieldKey, valueDate])
   @@map("object_field_values")
 }
 
-// -------------------------------------------------------------
-// 5. OBJECT RELATION GRAPH (N:N Directed Graph Topology)
-// -------------------------------------------------------------
-
 model ObjectRelation {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
   sourceObjectId String   @map("source_object_id") @db.Uuid
   targetObjectId String   @map("target_object_id") @db.Uuid
-  relationType   String   @map("relation_type") @db.VarChar(100) // e.g. BLOCKS, CONTAINS, REQUIRES_APPROVAL
+  relationType   String   @map("relation_type") @db.VarChar(100)
   notes          String?  @db.Text
+  metadata       Json?    @db.JsonB
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   sourceObject NexusObject @relation("SourceRelations", fields: [sourceObjectId], references: [id], onDelete: Cascade)
   targetObject NexusObject @relation("TargetRelations", fields: [targetObjectId], references: [id], onDelete: Cascade)
 
   @@unique([sourceObjectId, targetObjectId, relationType])
-  @@index([sourceObjectId])
-  @@index([targetObjectId])
+  @@index([tenantId, sourceObjectId])
+  @@index([tenantId, targetObjectId])
   @@map("object_relations")
 }
 
-// -------------------------------------------------------------
-// 6. WORKFLOW ENGINE (Configurable State Machine)
-// -------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 4. WORKFLOW ENGINE
+// -----------------------------------------------------------------------------
 
 model WorkflowDefinition {
   id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId           String   @map("tenant_id") @db.Uuid
   objectDefinitionId String   @map("object_definition_id") @db.Uuid
   name               String   @db.VarChar(255)
-  states             Json     @db.JsonB // ["CREATED", "IN_REVIEW", "APPROVED", "REJECTED"]
-  transitions        Json     @db.JsonB // [{ from: "CREATED", to: "IN_REVIEW", permission: "submit" }]
+  states             Json     @db.JsonB
+  transitions        Json     @db.JsonB
   isDefault          Boolean  @default(true) @map("is_default")
+  version            Int      @default(1)
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   objectDefinition ObjectDefinition @relation(fields: [objectDefinitionId], references: [id], onDelete: Cascade)
 
+  @@index([tenantId, objectDefinitionId])
   @@map("workflow_definitions")
 }
 
-// -------------------------------------------------------------
-// 7. AUDIT & FORENSIC HISTORY ENGINE
-// -------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 5. AUDIT, COLLABORATION & FILE METADATA
+// -----------------------------------------------------------------------------
 
 model ObjectHistory {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
   objectId  String   @map("object_id") @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
   fieldKey  String   @map("field_key") @db.VarChar(100)
   oldValue  Json?    @map("old_value") @db.JsonB
   newValue  Json?    @map("new_value") @db.JsonB
@@ -269,80 +329,135 @@ model ObjectHistory {
   userAgent String?  @map("user_agent") @db.Text
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   object NexusObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
 
-  @@index([objectId])
-  @@index([userId])
+  @@index([tenantId, objectId, createdAt])
   @@map("object_history")
 }
 
 model ObjectComment {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
   objectId  String   @map("object_id") @db.Uuid
   userId    String   @map("user_id") @db.Uuid
   content   String   @db.Text
+  metadata  Json?    @db.JsonB
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   object NexusObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
 
-  @@index([objectId])
+  @@index([tenantId, objectId, createdAt])
   @@map("object_comments")
 }
 
 model ObjectAttachment {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  objectId  String   @map("object_id") @db.Uuid
-  fileName  String   @map("file_name") @db.VarChar(255)
-  fileUrl   String   @map("file_url") @db.Text
-  fileSize  Int      @map("file_size")
-  mimeType  String   @map("mime_type") @db.VarChar(100)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  objectId    String   @map("object_id") @db.Uuid
+  fileName    String   @map("file_name") @db.VarChar(255)
+  storageKey  String   @map("storage_key") @db.Text
+  fileSize    BigInt   @map("file_size")
+  mimeType    String   @map("mime_type") @db.VarChar(150)
+  checksumSha256 String? @map("checksum_sha256") @db.VarChar(64)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   object NexusObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
 
-  @@index([objectId])
+  @@index([tenantId, objectId])
   @@map("object_attachments")
 }
 
-// -------------------------------------------------------------
-// 8. DOMAIN EVENT BUS & AUDIT LOGS (Outbox Pattern)
-// -------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 6. EXTERNAL INTEGRATIONS (secrets stay in Azure Key Vault)
+// -----------------------------------------------------------------------------
 
-model DomainEvent {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String    @map("tenant_id") @db.Uuid
-  aggregateId String    @map("aggregate_id") @db.Uuid
-  eventType   String    @map("event_type") @db.VarChar(100)
-  payload     Json      @db.JsonB
-  status      EventStatus @default(PENDING)
-  processedAt DateTime? @map("processed_at") @db.Timestamptz(6)
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+model IntegrationConnection {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String            @map("tenant_id") @db.Uuid
+  provider            IntegrationProvider
+  status              IntegrationStatus @default(PENDING)
+  displayName         String?           @map("display_name") @db.VarChar(255)
+  externalTenantId    String?           @map("external_tenant_id") @db.VarChar(255)
+  scopes              String[]          @default([])
+  credentialReference String?           @map("credential_reference") @db.Text
+  config               Json?             @db.JsonB
+  lastSyncAt           DateTime?         @map("last_sync_at") @db.Timestamptz(6)
+  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId, status])
+  @@index([tenantId, provider, status])
+  @@map("integration_connections")
+}
+
+enum IntegrationProvider {
+  MICROSOFT_365
+  SAP
+  GITHUB
+  SLACK
+  GOOGLE_WORKSPACE
+  CUSTOM
+}
+
+enum IntegrationStatus {
+  PENDING
+  ACTIVE
+  DEGRADED
+  DISCONNECTED
+}
+
+// -----------------------------------------------------------------------------
+// 7. TRANSACTIONAL OUTBOX & AUDIT LOG
+// -----------------------------------------------------------------------------
+
+model DomainEvent {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String      @map("tenant_id") @db.Uuid
+  aggregateId    String      @map("aggregate_id") @db.Uuid
+  eventType      String      @map("event_type") @db.VarChar(150)
+  payload        Json        @db.JsonB
+  status         EventStatus @default(PENDING)
+  attempts       Int         @default(0)
+  availableAt    DateTime    @default(now()) @map("available_at") @db.Timestamptz(6)
+  lockedAt       DateTime?   @map("locked_at") @db.Timestamptz(6)
+  processedAt    DateTime?   @map("processed_at") @db.Timestamptz(6)
+  lastError      String?     @map("last_error") @db.Text
+  idempotencyKey String?     @unique @map("idempotency_key") @db.VarChar(255)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, availableAt])
   @@map("domain_events")
 }
 
 enum EventStatus {
   PENDING
+  PROCESSING
   PROCESSED
   FAILED
 }
 
 model AuditLog {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId   String   @map("tenant_id") @db.Uuid
-  userId     String?  @map("user_id") @db.Uuid
-  action     String   @db.VarChar(100)
-  resource   String   @db.VarChar(100)
-  resourceId String?  @map("resource_id") @db.Uuid
-  details    Json?    @db.JsonB
-  ipAddress  String?  @map("ip_address") @db.VarChar(45)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  userId        String?  @map("user_id") @db.Uuid
+  action        String   @db.VarChar(100)
+  resource      String   @db.VarChar(100)
+  resourceId    String?  @map("resource_id") @db.Uuid
+  details       Json?    @db.JsonB
+  correlationId String?  @map("correlation_id") @db.VarChar(128)
+  ipAddress     String?  @map("ip_address") @db.VarChar(45)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, createdAt])
+  @@index([tenantId, resource, resourceId])
   @@map("audit_logs")
 }

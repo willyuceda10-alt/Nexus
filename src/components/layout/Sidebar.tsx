@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Home,
-  Briefcase,
   Layers,
   Folder,
   ShieldAlert,
@@ -11,12 +10,10 @@ import {
   BarChart3,
   Settings,
   ChevronRight,
-  Sparkles,
-  Zap,
-  Users,
   CheckSquare,
 } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
+import { BRAND } from '../../config/brand';
 
 export const Sidebar: React.FC = () => {
   const {
@@ -46,19 +43,24 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 flex flex-col h-full flex-shrink-0 shadow-sm z-20">
-      {/* Brand Header */}
-      <div className="p-5 flex items-center gap-3 border-b border-slate-100">
-        <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-sm shadow-indigo-200 flex-shrink-0">
-          <div className="w-4 h-4 border-2 border-white rounded-full"></div>
+      <div className="px-4 py-4 flex items-center gap-3 border-b border-slate-100">
+        <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-sm shadow-indigo-200 flex-shrink-0">
+          <span className="text-[11px] font-extrabold tracking-tight text-white">{BRAND.initials}</span>
         </div>
-        <span className="text-xl font-bold tracking-tight text-slate-900">Nexus OS</span>
+        <div className="min-w-0 leading-tight">
+          <div className="text-sm font-extrabold tracking-tight text-slate-900 truncate">
+            {BRAND.company}
+          </div>
+          <div className="text-[10px] font-semibold tracking-[0.16em] uppercase text-slate-400">
+            {BRAND.product}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar py-4 px-3 space-y-6">
-        {/* Main Nav Section */}
         <div>
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold px-3 mb-2">
-            Gestión SaaS
+            Gestión empresarial
           </div>
           <nav className="space-y-1">
             {navItems.map((item) => {
@@ -95,7 +97,6 @@ export const Sidebar: React.FC = () => {
           </nav>
         </div>
 
-        {/* Quick Project Access Section */}
         <div>
           <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-400 font-bold px-3 mb-2">
             <span>Proyectos Activos</span>
@@ -129,7 +130,6 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Footer Settings & Persona User Card */}
       <div className="p-4 border-t border-slate-100 space-y-3">
         <button
           onClick={() => setActiveTab('settings')}
@@ -140,7 +140,7 @@ export const Sidebar: React.FC = () => {
           }`}
         >
           <Settings className="h-4 w-4 text-slate-400" />
-          <span>Configuración System</span>
+          <span>Configuración</span>
         </button>
 
         <div className="bg-slate-50 rounded-xl p-3 flex items-center gap-3 border border-slate-100">
