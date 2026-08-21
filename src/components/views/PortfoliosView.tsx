@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, Plus, DollarSign, Activity, Folder } from 'lucide-react';
+import { Layers } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
 
 export const PortfoliosView: React.FC = () => {
@@ -20,6 +20,9 @@ export const PortfoliosView: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {portfolios.map((p) => {
           const portfolioProjects = objects.filter((o) => p.projectIds.includes(o.id));
+          const executionPercentage = p.budgetAllocated
+            ? Math.round((p.budgetSpent / p.budgetAllocated) * 100)
+            : 0;
 
           return (
             <div
@@ -28,7 +31,7 @@ export const PortfoliosView: React.FC = () => {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-slate-400">ID: #{p.id}</span>
+                  <span className="text-[10px] font-bold uppercase text-slate-400">{p.code}</span>
                   <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{p.name}</h3>
                 </div>
                 <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
@@ -41,28 +44,33 @@ export const PortfoliosView: React.FC = () => {
               <div className="mt-4 grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded-xl dark:bg-slate-800/50">
                 <div>
                   <span className="text-slate-400 font-medium">Presupuesto Asignado:</span>
-                  <div className="font-extrabold text-slate-900 dark:text-slate-100">${(p.totalBudget / 1000000).toFixed(1)}M USD</div>
+                  <div className="font-extrabold text-slate-900 dark:text-slate-100">
+                    ${(p.budgetAllocated / 1000000).toFixed(1)}M USD
+                  </div>
                 </div>
                 <div>
                   <span className="text-slate-400 font-medium">Ejecutado a la Fecha:</span>
-                  <div className="font-extrabold text-indigo-600">${(p.spentBudget / 1000000).toFixed(1)}M USD</div>
+                  <div className="font-extrabold text-indigo-600">
+                    ${(p.budgetSpent / 1000000).toFixed(1)}M USD · {executionPercentage}%
+                  </div>
                 </div>
               </div>
 
               <div className="mt-4 space-y-2">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Proyectos Asociados:</div>
                 {portfolioProjects.map((prj) => (
-                  <div
+                  <button
+                    type="button"
                     key={prj.id}
                     onClick={() => {
                       setSelectedProjectId(prj.id);
                       setActiveTab('project');
                     }}
-                    className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-100 bg-slate-50 p-2.5 text-xs transition hover:bg-indigo-50/50 dark:border-slate-800 dark:bg-slate-800/60"
+                    className="flex w-full cursor-pointer items-center justify-between rounded-lg border border-slate-100 bg-slate-50 p-2.5 text-left text-xs transition hover:bg-indigo-50/50 dark:border-slate-800 dark:bg-slate-800/60"
                   >
                     <span className="font-semibold text-slate-800 dark:text-slate-200">{prj.title}</span>
                     <span className="font-mono text-indigo-600 font-bold">{prj.progress}%</span>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
