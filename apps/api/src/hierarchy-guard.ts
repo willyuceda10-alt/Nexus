@@ -57,43 +57,66 @@ type ValidationResult =
   | { kind: 'not_found'; message: string }
   | { kind: 'mismatch'; message: string };
 
+async function validateProgramMove(
+  tx: Prisma.TransactionClient,
+  actor: ActorContext,
+  workspaceId: string,
+  programId: string,
+  nextPortfolioId: string,
+): Promise<ValidationResult> {
+  const projects = await tx.nexusObject.findMany({
+    where: {
+      tenantId: actor.tenantId,
+      workspaceId,
+      objectTypeKey: 'PROJECT',
+      deletedAt: null,
+    },
+    select: { metadata: true },
+  });
+
+  const hasConflict = projects.some((project) => {
+    const metadata = jsonRecord(project.metadata);
+    return metadata.programId === programId &&
+      typeof metadata.portfolioId === 'string' &&
+      metadata.portfolioId !== nextPortfolioId;
+  });
+
+  return hasConflict
+    ? {
+        kind: 'mismatch',
+        message: 'This program cannot move because a linked project explicitly belongs to another portfolio.',
+      }
+    : { kind: 'ok' };
+}
+
 async function validateHierarchyMetadata(
   tx: Prisma.TransactionClient,
   actor: ActorContext,
   workspaceId: string,
   objectTypeKey: string,
   metadata: Record<string, unknown>,
+  currentObjectId?: string,
 ): Promise<ValidationResult> {
   const portfolioId = metadataId(metadata, 'portfolioId');
   const programId = metadataId(metadata, 'programId');
 
   if (portfolioId === 'invalid' || programId === 'invalid') {
-    return {
-      kind: 'invalid',
-      message: 'portfolioId and programId must be UUIDs when provided.',
-    };
+    return { kind: 'invalid', message: 'portfolioId and programId must be UUIDs when provided.' };
   }
 
   if (objectTypeKey === 'PORTFOLIO') {
     if (portfolioId || programId) {
-      return {
-        kind: 'invalid',
-        message: 'A portfolio cannot reference a parent portfolio or program.',
-      };
+      return { kind: 'invalid', message: 'A portfolio cannot reference a parent portfolio or program.' };
     }
     return { kind: 'ok' };
   }
 
   if (objectTypeKey === 'PROGRAM' && !portfolioId) {
-    return {
-      kind: 'invalid',
-      message: 'A program must reference a portfolioId.',
-    };
+    return { kind: 'invalid', message: 'A program must reference a portfolioId.' };
   }
 
-  let portfolio: { id: string } | null = null;
   if (portfolioId) {
-    portfolio = await tx.nexusObject.findFirst({
+    const portfolio = await tx.nexusObject.findFirst({
       where: {
         id: portfolioId,
         tenantId: actor.tenantId,
@@ -104,10 +127,7 @@ async function validateHierarchyMetadata(
       select: { id: true },
     });
     if (!portfolio) {
-      return {
-        kind: 'not_found',
-        message: 'The referenced portfolio does not exist in this workspace.',
-      };
+      return { kind: 'not_found', message: 'The referenced portfolio does not exist in this workspace.' };
     }
   }
 
@@ -124,33 +144,26 @@ async function validateHierarchyMetadata(
       select: { id: true, metadata: true },
     });
     if (!program) {
-      return {
-        kind: 'not_found',
-        message: 'The referenced program does not exist in this workspace.',
-      };
+      return { kind: 'not_found', message: 'The referenced program does not exist in this workspace.' };
     }
   }
 
   if (objectTypeKey === 'PROGRAM' && programId) {
-    return {
-      kind: 'invalid',
-      message: 'A program cannot reference another program as its parent.',
-    };
+    return { kind: 'invalid', message: 'A program cannot reference another program as its parent.' };
   }
 
   if (program) {
     const parentPortfolioId = jsonRecord(program.metadata).portfolioId;
     if (typeof parentPortfolioId !== 'string') {
-      return {
-        kind: 'mismatch',
-        message: 'The referenced program has no valid parent portfolio.',
-      };
+      return { kind: 'mismatch', message: 'The referenced program has no valid parent portfolio.' };
     }
     if (portfolioId && parentPortfolioId !== portfolioId) {
-      return {
-        kind: 'mismatch',
-        message: 'programId belongs to a different portfolio than portfolioId.',
-      };
+      return { kind: 'mismatch', message: 'programId belongs to a different portfolio than portfolioId.' };
+    }
+  }
+
+  if (objectTypeKey === 'PROGRAM' && currentObjectId && portfolioId) {
+    return validateProgramMove(tx, actor, workspaceId, currentObjectId, portfolioId);
   }
 
   return { kind: 'ok' };
@@ -175,74 +188,94 @@ async function hierarchyWriteGuard(request: FastifyRequest, reply: FastifyReply)
   if (request.method === 'POST') {
     const parsed = createBodySchema.safeParse(request.body);
     if (!parsed.success) return;
-
     const { workspaceId, objectTypeKey, metadata = {} } = parsed.data;
+
     const result = await withTenant(actor.tenantId, async (tx) => {
       if (hierarchyObjectTypes.has(objectTypeKey) && !(await canManageWorkspace(tx, actor, workspaceId))) {
         return { kind: 'forbidden' as const };
       }
-
-      if (!['PORTFOLIO', 'PROGRAM', 'PROJECT'].includes(objectTypeKey)) {
-        return { kind: 'ok' as const };
-      }
-
-      const validation = await validateHierarchyMetadata(tx, actor, workspaceId, objectTypeKey, metadata);
-      return validation;
+      if (!['PORTFOLIO', 'PROGRAM', 'PROJECT'].includes(objectTypeKey)) return { kind: 'ok' as const };
+      return validateHierarchyMetadata(tx, actor, workspaceId, objectTypeKey, metadata);
     });
 
     if (result.kind === 'forbidden') {
-      await reply.code(403).send({
-        error: 'hierarchy_management_denied',
-        message: 'Managing portfolios and programs requires a management role in this workspace.',
-      });
+      await reply.code(403).send({ error: 'hierarchy_management_denied', message: 'Managing portfolios and programs requires a management role in this workspace.' });
       return;
     }
     if (result.kind !== 'ok') await sendValidationError(reply, result);
     return;
   }
 
+  const params = idParamsSchema.safeParse(request.params);
+  if (!params.success) return;
+
   if (request.method === 'PATCH') {
-    const params = idParamsSchema.safeParse(request.params);
     const body = patchBodySchema.safeParse(request.body);
-    if (!params.success || !body.success) return;
+    if (!body.success) return;
 
     const result = await withTenant(actor.tenantId, async (tx) => {
       const current = await tx.nexusObject.findFirst({
         where: { id: params.data.id, tenantId: actor.tenantId, deletedAt: null },
-        select: { workspaceId: true, objectTypeKey: true, metadata: true },
+        select: { id: true, workspaceId: true, objectTypeKey: true },
       });
       if (!current) return { kind: 'ok' as const };
-
-      if (
-        hierarchyObjectTypes.has(current.objectTypeKey) &&
-        !(await canManageWorkspace(tx, actor, current.workspaceId))
-      ) {
+      if (hierarchyObjectTypes.has(current.objectTypeKey) && !(await canManageWorkspace(tx, actor, current.workspaceId))) {
         return { kind: 'forbidden' as const };
       }
-
-      if (!['PORTFOLIO', 'PROGRAM', 'PROJECT'].includes(current.objectTypeKey)) {
-        return { kind: 'ok' as const };
-      }
+      if (!['PORTFOLIO', 'PROGRAM', 'PROJECT'].includes(current.objectTypeKey)) return { kind: 'ok' as const };
       if (body.data.metadata === undefined) return { kind: 'ok' as const };
 
-      const metadata = body.data.metadata ?? {};
       return validateHierarchyMetadata(
         tx,
         actor,
         current.workspaceId,
         current.objectTypeKey,
-        metadata,
+        body.data.metadata ?? {},
+        current.id,
       );
     });
 
     if (result.kind === 'forbidden') {
-      await reply.code(403).send({
-        error: 'hierarchy_management_denied',
-        message: 'Managing portfolios and programs requires a management role in this workspace.',
-      });
+      await reply.code(403).send({ error: 'hierarchy_management_denied', message: 'Managing portfolios and programs requires a management role in this workspace.' });
       return;
     }
     if (result.kind !== 'ok') await sendValidationError(reply, result);
+    return;
+  }
+
+  if (request.method === 'DELETE') {
+    const result = await withTenant(actor.tenantId, async (tx) => {
+      const current = await tx.nexusObject.findFirst({
+        where: { id: params.data.id, tenantId: actor.tenantId, deletedAt: null },
+        select: { id: true, workspaceId: true, objectTypeKey: true },
+      });
+      if (!current || !hierarchyObjectTypes.has(current.objectTypeKey)) return { kind: 'ok' as const };
+
+      const possibleChildren = await tx.nexusObject.findMany({
+        where: {
+          tenantId: actor.tenantId,
+          workspaceId: current.workspaceId,
+          deletedAt: null,
+          objectTypeKey: current.objectTypeKey === 'PORTFOLIO'
+            ? { in: ['PROGRAM', 'PROJECT'] }
+            : 'PROJECT',
+        },
+        select: { metadata: true },
+      });
+
+      const hasChildren = possibleChildren.some((child) => {
+        const metadata = jsonRecord(child.metadata);
+        return current.objectTypeKey === 'PORTFOLIO'
+          ? metadata.portfolioId === current.id
+          : metadata.programId === current.id;
+      });
+
+      return hasChildren ? { kind: 'has_children' as const } : { kind: 'ok' as const };
+    });
+
+    if (result.kind === 'has_children') {
+      await reply.code(409).send({ error: 'hierarchy_has_children', message: 'Move or remove linked hierarchy children before deleting this object.' });
+    }
   }
 }
 
@@ -250,8 +283,8 @@ export function registerHierarchyWriteGuards(app: FastifyInstance): void {
   app.addHook('onRoute', (routeOptions) => {
     const methods = Array.isArray(routeOptions.method) ? routeOptions.method : [routeOptions.method];
     const isCreate = routeOptions.url === '/api/v1/objects' && methods.includes('POST');
-    const isPatch = routeOptions.url === '/api/v1/objects/:id' && methods.includes('PATCH');
-    if (!isCreate && !isPatch) return;
+    const isMutation = routeOptions.url === '/api/v1/objects/:id' && (methods.includes('PATCH') || methods.includes('DELETE'));
+    if (!isCreate && !isMutation) return;
 
     const existing = routeOptions.preHandler;
     routeOptions.preHandler = existing
