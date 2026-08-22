@@ -13,17 +13,17 @@ Bridata Project uses separate identities for separate trust boundaries:
 
 The GitHub deployment identity is never reused as the runtime application identity.
 
-## GitHub repository variables
+## GitHub Azure identifiers
 
-The Azure workflows expect these **Repository Variables** under GitHub Actions:
+Azure workflows accept these Repository Variables and, for compatibility with the original bootstrap, the equivalent Actions Secrets for the three identity IDs:
 
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
-- `AZURE_RESOURCE_GROUP`
-- `AZURE_LOCATION`
+- `AZURE_RESOURCE_GROUP` (defaults to `rg-nexus-dev` in the guarded deploy workflow)
+- `AZURE_LOCATION` (defaults to `brazilsouth` in the guarded deploy workflow)
 
-These values are identifiers, not client secrets. No `AZURE_CLIENT_SECRET` is required or expected.
+These are identifiers, not an Azure client secret. No `AZURE_CLIENT_SECRET` is required or expected.
 
 ## Azure workflows
 
@@ -33,19 +33,29 @@ Validates that GitHub can exchange its OIDC token for Azure credentials and can 
 
 ### `Azure DEV Preflight`
 
-Manual (`workflow_dispatch`) and intentionally non-deploying. It:
+Manual (`workflow_dispatch`) and intentionally non-deploying. It compiles the Bicep templates, validates the Azure target/providers and runs both foundation and private-PostgreSQL `what-if` plans. It never runs `az deployment group create`.
 
-1. validates required GitHub variables,
-2. signs in using OIDC,
-3. verifies the target resource group,
-4. verifies required Azure resource providers without registering anything,
-5. compiles `main.bicep` and `dev.bicepparam`,
-6. runs a **Foundation** `what-if` with PostgreSQL disabled,
-7. runs a **Full Database Runtime** `what-if` with private PostgreSQL enabled,
-8. generates a PostgreSQL password only in runner memory for the second `what-if`,
-9. never executes `az deployment group create`.
+### `Azure DEV Foundation Deploy`
 
-The ephemeral what-if password is not a deployment credential and is never persisted to git, GitHub Variables, GitHub Secrets or workflow artifacts.
+This is the first workflow allowed to create paid DEV resources. It remains manual and requires the operator to type exactly:
+
+`DEPLOY-BRIDATA-DEV`
+
+The workflow then:
+
+1. validates OIDC identifiers, resource group and required providers,
+2. compiles all Bicep used by the deployment,
+3. generates independent strong PostgreSQL admin/runtime passwords only in runner memory,
+4. masks both values immediately,
+5. executes an Azure `what-if` immediately before deployment,
+6. deploys the private DEV foundation plus PostgreSQL 16 `Standard_B1ms` / 32 GiB,
+7. keeps `deployApiRuntime=false`,
+8. creates `admin-database-url` and `runtime-database-url` as Key Vault secret resources from secure Bicep parameters,
+9. verifies PostgreSQL `publicNetworkAccess=Disabled`,
+10. verifies the secret resources exist without reading or printing their values,
+11. writes only non-secret resource names to the GitHub job summary.
+
+No database password or connection string is written to git, GitHub Variables, GitHub Secrets, workflow artifacts, outputs or summaries. Re-running the workflow updates the same deterministic DEV resources rather than creating a second environment.
 
 ## Azure DEV foundation
 
@@ -65,12 +75,12 @@ The ephemeral what-if password is not a deployment credential and is never persi
 - optional PostgreSQL Flexible Server + application database
 - optional API Container App + manual migration Container Apps Job via `api-runtime.bicep`
 
-Two independent deployment guards are false by default:
+Two deployment guards remain false in `dev.bicepparam`:
 
 - `deployPostgres = false`
 - `deployApiRuntime = false`
 
-Compiling, testing, merging or reusing `dev.bicepparam` therefore does not request PostgreSQL, the API Container App or the migration job.
+The guarded foundation workflow overrides only `deployPostgres` and database-secret storage at runtime. API deployment remains a separate future approval boundary.
 
 ## PostgreSQL DEV profile
 
@@ -105,34 +115,26 @@ The module requires an immutable API image reference and a separate immutable mi
 
 ## Migration job contract
 
-`Dockerfile.api` now has two distinct targets:
+`Dockerfile.api` has two distinct targets:
 
-- `runtime`: pruned production dependencies only; Prisma CLI and `tsx` are intentionally absent.
+- `runtime`: production API dependencies only; Prisma CLI and `tsx` are absent and CI verifies this.
 - `migrate`: retains Prisma tooling and `prisma/provision-runtime-role.ts` for the manual Azure migration job.
 
-The migration job has no ingress and runs manually inside the same Container Apps Environment/VNet. It receives two Key Vault-backed values:
+The migration job has no ingress and runs manually inside the same Container Apps Environment/VNet. It receives:
 
-- `ADMIN_DATABASE_URL`: privileged, migration-only connection used by `prisma migrate deploy` and role provisioning.
-- `RUNTIME_DATABASE_URL`: restricted application connection. Its username/password are parsed by the provisioner; the secret is also the exact value later exposed to the API as `DATABASE_URL`.
+- `ADMIN_DATABASE_URL`: privileged migration-only connection.
+- `RUNTIME_DATABASE_URL`: restricted application connection later exposed to the API as `DATABASE_URL`.
 
-`provision-runtime-role.ts` is idempotent. It creates or rotates the runtime login and enforces:
+`provision-runtime-role.ts` is idempotent and enforces `NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`, `NOINHERIT` and `NOBYPASSRLS`, with only the application permissions needed under FORCE RLS.
 
-- `NOSUPERUSER`
-- `NOCREATEDB`
-- `NOCREATEROLE`
-- `NOINHERIT`
-- `NOBYPASSRLS`
+## DEV Key Vault database secrets
 
-It grants only connect/schema/table/sequence permissions required by the application and configures matching default privileges for objects created by later migrations. CI executes the provisioner twice and then runs the existing FORCE RLS isolation tests.
-
-## Required Key Vault secrets before API deployment
-
-The names are an operational convention; Bicep receives versionless secret URIs as parameters:
+The guarded foundation deployment creates these resources:
 
 - `admin-database-url`
 - `runtime-database-url`
 
-Do not put either connection string in Bicep parameter files, repository variables, source code or Container App plaintext environment values.
+The administrator/runtime passwords are generated only for the deployment run. The connection strings are assembled inside Bicep from secure parameters and stored directly as Key Vault secret child resources.
 
 ## DEV target
 
@@ -152,37 +154,34 @@ Do not put either connection string in Bicep parameter files, repository variabl
 - GitHub deployment identity is never the runtime application identity.
 - PostgreSQL runtime roles must not be SUPERUSER and must not have BYPASSRLS.
 - Multi-tenant data access remains fail-closed under PostgreSQL FORCE RLS.
-- `AUTH_MODE=dev` remains forbidden in the production API image; Azure runtime uses Microsoft Entra authentication.
+- `AUTH_MODE=dev` remains forbidden in the Azure API runtime; Azure runtime uses Microsoft Entra authentication.
 
 ## RBAC prerequisite for API delivery
 
-The GitHub OIDC deployment service principal has resource-group deployment access but should not silently gain authorization-management rights.
-
 After the foundation exists and before private images/secrets are consumed:
 
-1. grant the GitHub CI/CD identity only `AcrPush` on the DEV registry,
-2. grant `nexus-dev-api-mi` only `AcrPull` on that registry,
+1. grant the GitHub CI/CD identity only the registry permission needed to publish/build approved images if required,
+2. grant `nexus-dev-api-mi` `AcrPull` on the DEV registry,
 3. grant `nexus-dev-api-mi` **Key Vault Secrets User** on the DEV vault,
 4. do not grant the API managed identity PostgreSQL administrator privileges.
 
-These assignments remain explicit Owner-controlled actions.
+These assignments remain explicit Owner-controlled actions because the current GitHub deployment identity has Resource Group Contributor and should not be elevated to authorization-management rights.
 
 ## Controlled deployment sequence
 
-1. Configure/verify the five GitHub Repository Variables.
-2. Verify GitHub → Azure OIDC.
-3. Run **Azure DEV Preflight** and review both what-if plans.
-4. Add/confirm an Azure budget and alert before approving paid DEV resources.
-5. Configure separate Microsoft Entra API and Web App Registrations.
-6. With explicit approval, deploy shared foundation and private PostgreSQL DEV.
-7. Create `admin-database-url` and `runtime-database-url` in Key Vault without exposing them to git.
-8. Assign least-privilege ACR and Key Vault roles.
-9. Build/push immutable `runtime` and `migrate` images from `Dockerfile.api`.
-10. Review an API-runtime what-if with `deployApiRuntime=true` and immutable image references.
-11. Deploy the migration job + API resources only after explicit approval.
-12. Start the migration job manually and require successful completion.
-13. Require `/health/ready` and `/health/live` before connecting the web.
-14. Deploy the React web with `VITE_DATA_MODE=api` and Entra PKCE.
-15. Add Service Bus, Redis, Front Door/WAF or other paid services only when a concrete feature needs them.
+1. Verify GitHub → Azure OIDC.
+2. Run **Azure DEV Preflight** when infrastructure changes materially.
+3. Review Azure Cost Management and keep the DEV spend target near USD 40 for the credit period.
+4. Run **Azure DEV Foundation Deploy**, typing `DEPLOY-BRIDATA-DEV` exactly.
+5. Require the workflow to verify private PostgreSQL and both Key Vault secret resources.
+6. Configure separate Microsoft Entra API and Web App Registrations.
+7. Assign least-privilege ACR and Key Vault roles.
+8. Build/publish immutable `runtime` and `migrate` images.
+9. Review an API-runtime what-if with `deployApiRuntime=true` and immutable image references.
+10. Deploy migration job + API only after the second explicit approval boundary.
+11. Start the migration job manually and require successful completion.
+12. Require `/health/ready` and `/health/live` before connecting the web.
+13. Deploy React with `VITE_DATA_MODE=api` and Entra PKCE.
+14. Add Service Bus, Redis, Front Door/WAF or other paid services only when a concrete feature needs them.
 
-No current workflow automatically performs steps 6–15.
+At this stage only step 4 is capable of creating paid resources, and it deliberately does **not** deploy the API runtime.
