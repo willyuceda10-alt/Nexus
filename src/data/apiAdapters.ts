@@ -17,6 +17,8 @@ import type {
 } from '../types/nexus';
 
 const objectTypes = new Set<ObjectType>([
+  'PORTFOLIO',
+  'PROGRAM',
   'PROJECT',
   'TASK',
   'RISK',
@@ -200,6 +202,9 @@ export function apiObjectToNexusObject(
     progress: value.progress,
     ...(stringValue(metadata, 'projectId') ? { projectId: stringValue(metadata, 'projectId') } : {}),
     ...(stringValue(metadata, 'portfolioId') ? { portfolioId: stringValue(metadata, 'portfolioId') } : {}),
+    ...(stringValue(metadata, 'programId') ? { programId: stringValue(metadata, 'programId') } : {}),
+    ...(stringValue(metadata, 'code') ? { code: stringValue(metadata, 'code') } : {}),
+    ...(stringValue(metadata, 'strategicObjective') ? { strategicObjective: stringValue(metadata, 'strategicObjective') } : {}),
     ...(numberValue(metadata, 'healthScore') !== undefined ? { healthScore: numberValue(metadata, 'healthScore') } : {}),
     ...(numberValue(metadata, 'budgetTotal') !== undefined ? { budgetTotal: numberValue(metadata, 'budgetTotal') } : {}),
     ...(numberValue(metadata, 'budgetSpent') !== undefined ? { budgetSpent: numberValue(metadata, 'budgetSpent') } : {}),
@@ -233,6 +238,9 @@ export function apiObjectToNexusObject(
 const metadataKeys = [
   'projectId',
   'portfolioId',
+  'programId',
+  'code',
+  'strategicObjective',
   'healthScore',
   'budgetTotal',
   'budgetSpent',
