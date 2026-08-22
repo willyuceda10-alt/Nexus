@@ -1,4 +1,6 @@
 import React from 'react';
+import { RuntimeAuthGate } from './auth/RuntimeAuthGate';
+import { RuntimeAuthProvider } from './auth/RuntimeAuthContext';
 import { ApiBootstrapProvider } from './context/ApiBootstrapContext';
 import { NexusProvider, useNexus } from './context/NexusContext';
 import { Header } from './components/layout/Header';
@@ -47,27 +49,35 @@ const MainContentRouter: React.FC = () => {
   }
 };
 
+const AuthenticatedApplication: React.FC = () => (
+  <ApiBootstrapProvider>
+    <NexusProvider>
+      <div className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] text-slate-900 font-sans selection:bg-indigo-500 selection:text-white">
+        <Sidebar />
+
+        <div className="flex flex-1 flex-col min-w-0 overflow-hidden bg-[#F8FAFC]">
+          <Header />
+
+          <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">
+            <MainContentRouter />
+          </main>
+        </div>
+
+        <UniversalObjectDrawer />
+        <CreateObjectModal />
+        <CommandPalette />
+      </div>
+    </NexusProvider>
+  </ApiBootstrapProvider>
+);
+
 export function App() {
   return (
-    <ApiBootstrapProvider>
-      <NexusProvider>
-        <div className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] text-slate-900 font-sans selection:bg-indigo-500 selection:text-white">
-          <Sidebar />
-
-          <div className="flex flex-1 flex-col min-w-0 overflow-hidden bg-[#F8FAFC]">
-            <Header />
-
-            <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">
-              <MainContentRouter />
-            </main>
-          </div>
-
-          <UniversalObjectDrawer />
-          <CreateObjectModal />
-          <CommandPalette />
-        </div>
-      </NexusProvider>
-    </ApiBootstrapProvider>
+    <RuntimeAuthProvider>
+      <RuntimeAuthGate>
+        <AuthenticatedApplication />
+      </RuntimeAuthGate>
+    </RuntimeAuthProvider>
   );
 }
 
