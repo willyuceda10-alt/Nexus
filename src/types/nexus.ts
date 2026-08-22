@@ -12,6 +12,7 @@ export type ObjectType =
 
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type DependencyType = 'FS' | 'SS' | 'FF' | 'SF';
+export type ScheduleCalendarMode = 'CALENDAR_DAYS_V1' | 'WORKING_DAYS_V1';
 
 export type ObjectStatus =
   | 'DRAFT'
@@ -148,6 +149,9 @@ export interface NexusObject {
   budgetSpent?: number;
   baselineStartDate?: string;
   baselineEndDate?: string;
+  scheduleCalendarMode?: ScheduleCalendarMode;
+  scheduleWorkingWeekdays?: number[];
+  scheduleHolidays?: string[];
 
   probability?: number;
   impact?: number;

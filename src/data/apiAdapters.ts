@@ -9,6 +9,7 @@ import type {
   ObjectStatus,
   ObjectType,
   Priority,
+  ScheduleCalendarMode,
   Tenant,
   User,
   UserRoleKey,
@@ -74,6 +75,14 @@ function stringArrayValue(record: Record<string, unknown>, key: string): string[
   return value;
 }
 
+function numberArrayValue(record: Record<string, unknown>, key: string): number[] | undefined {
+  const value = record[key];
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'number' && Number.isFinite(item))) {
+    return undefined;
+  }
+  return value;
+}
+
 function dateOnly(value: string | null): string | undefined {
   return value ? value.slice(0, 10) : undefined;
 }
@@ -88,6 +97,10 @@ function objectStatus(value: string): ObjectStatus {
 
 function priority(value: string): Priority {
   return priorities.has(value as Priority) ? (value as Priority) : 'MEDIUM';
+}
+
+function scheduleCalendarMode(value: string | undefined): ScheduleCalendarMode | undefined {
+  return value === 'CALENDAR_DAYS_V1' || value === 'WORKING_DAYS_V1' ? value : undefined;
 }
 
 function tenantPlan(plan: ApiTenant['plan']): Tenant['plan'] {
@@ -161,6 +174,7 @@ export function apiObjectToNexusObject(
   const assigneeName = value.assignee?.fullName ?? fallback?.assigneeName;
   const assigneeAvatar = value.assignee?.avatarUrl ?? fallback?.assigneeAvatar;
   const customFields = asRecord(metadata.customFields);
+  const calendarMode = scheduleCalendarMode(stringValue(metadata, 'scheduleCalendarMode'));
 
   return {
     id: value.id,
@@ -191,6 +205,9 @@ export function apiObjectToNexusObject(
     ...(numberValue(metadata, 'budgetSpent') !== undefined ? { budgetSpent: numberValue(metadata, 'budgetSpent') } : {}),
     ...(stringValue(metadata, 'baselineStartDate') ? { baselineStartDate: stringValue(metadata, 'baselineStartDate') } : {}),
     ...(stringValue(metadata, 'baselineEndDate') ? { baselineEndDate: stringValue(metadata, 'baselineEndDate') } : {}),
+    ...(calendarMode ? { scheduleCalendarMode: calendarMode } : {}),
+    ...(numberArrayValue(metadata, 'scheduleWorkingWeekdays') ? { scheduleWorkingWeekdays: numberArrayValue(metadata, 'scheduleWorkingWeekdays') } : {}),
+    ...(stringArrayValue(metadata, 'scheduleHolidays') ? { scheduleHolidays: stringArrayValue(metadata, 'scheduleHolidays') } : {}),
     ...(numberValue(metadata, 'probability') !== undefined ? { probability: numberValue(metadata, 'probability') } : {}),
     ...(numberValue(metadata, 'impact') !== undefined ? { impact: numberValue(metadata, 'impact') } : {}),
     ...(numberValue(metadata, 'riskScore') !== undefined ? { riskScore: numberValue(metadata, 'riskScore') } : {}),
@@ -221,6 +238,9 @@ const metadataKeys = [
   'budgetSpent',
   'baselineStartDate',
   'baselineEndDate',
+  'scheduleCalendarMode',
+  'scheduleWorkingWeekdays',
+  'scheduleHolidays',
   'probability',
   'impact',
   'riskScore',

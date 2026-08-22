@@ -11,13 +11,24 @@ import {
   Plus,
   Save,
   Trash2,
+  X,
 } from 'lucide-react';
 import type { ApiScheduleAnalysis } from '../../api/contracts';
 import { useScheduling } from '../../context/SchedulingContext';
 import { useNexus } from '../../context/NexusContext';
-import type { DependencyType } from '../../types/nexus';
+import { calendarFromProject, signedScheduleDistance } from '../../domain/workCalendar';
+import type { DependencyType, ScheduleCalendarMode } from '../../types/nexus';
 
 const DAY_MS = 86_400_000;
+const WEEKDAYS = [
+  { value: 1, label: 'Lun' },
+  { value: 2, label: 'Mar' },
+  { value: 3, label: 'Mié' },
+  { value: 4, label: 'Jue' },
+  { value: 5, label: 'Vie' },
+  { value: 6, label: 'Sáb' },
+  { value: 0, label: 'Dom' },
+] as const;
 
 function parseDate(value?: string): Date | null {
   if (!value) return null;
@@ -68,13 +79,18 @@ function dependencyLabel(type: DependencyType): string {
   }
 }
 
-function varianceLabel(days: number): string {
+function varianceLabel(days: number, workingMode: boolean): string {
   if (days === 0) return 'En línea base';
-  return `${days > 0 ? '+' : ''}${days}d vs base`;
+  return `${days > 0 ? '+' : ''}${days}d${workingMode ? ' háb.' : ''} vs base`;
 }
 
 export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
-  const { objects, openObjectDrawer } = useNexus();
+  const {
+    objects,
+    openObjectDrawer,
+    updateNexusObject,
+    isObjectMutationPending,
+  } = useNexus();
   const {
     dependencies,
     status: dependencyStatus,
@@ -90,6 +106,10 @@ export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
     () => objects.find((object) => object.id === projectId && object.type === 'PROJECT') ?? null,
     [objects, projectId],
   );
+  const calendarConfig = useMemo(() => calendarFromProject(project), [project]);
+  const isWorkingCalendar = calendarConfig.mode === 'WORKING_DAYS_V1';
+  const scheduleUnitLabel = isWorkingCalendar ? 'd hábiles' : 'd calendario';
+
   const items = useMemo(
     () => objects.filter(
       (object) =>
@@ -118,6 +138,8 @@ export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
   const [lagDays, setLagDays] = useState(0);
   const [showDependencies, setShowDependencies] = useState(true);
   const [baselineFeedback, setBaselineFeedback] = useState<string | null>(null);
+  const [holidayInput, setHolidayInput] = useState('');
+  const [calendarFeedback, setCalendarFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -221,6 +243,158 @@ export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
     }
   };
 
+  const updateCalendarMode = async (mode: ScheduleCalendarMode) => {
+    if (!project) return;
+    setCalendarFeedback(null);
+    try {
+      await updateNexusObject(project.id, {
+        scheduleCalendarMode: mode,
+        ...(mode === 'WORKING_DAYS_V1' && !project.scheduleWorkingWeekdays
+          ? { scheduleWorkingWeekdays: [1, 2, 3, 4, 5] }
+          : {}),
+      });
+      setCalendarFeedback(mode === 'WORKING_DAYS_V1' ? 'Calendario laboral activado.' : 'Días calendario activados.');
+    } catch (cause) {
+      setCalendarFeedback(cause instanceof Error ? cause.message : 'No se pudo actualizar el calendario.');
+    }
+  };
+
+  const toggleWorkingDay = async (weekday: number) => {
+    if (!project) return;
+    const current = calendarConfig.workingWeekdays;
+    const next = current.includes(weekday)
+      ? current.filter((day) => day !== weekday)
+      : [...current, weekday].sort((a, b) => a - b);
+    if (next.length === 0) {
+      setCalendarFeedback('El calendario laboral debe conservar al menos un día hábil.');
+      return;
+    }
+
+    setCalendarFeedback(null);
+    try {
+      await updateNexusObject(project.id, { scheduleWorkingWeekdays: next });
+    } catch (cause) {
+      setCalendarFeedback(cause instanceof Error ? cause.message : 'No se pudieron actualizar los días laborables.');
+    }
+  };
+
+  const addHoliday = async () => {
+    if (!project || !holidayInput) return;
+    const next = [...new Set([...calendarConfig.holidays, holidayInput])].sort();
+    setCalendarFeedback(null);
+    try {
+      await updateNexusObject(project.id, { scheduleHolidays: next });
+      setHolidayInput('');
+    } catch (cause) {
+      setCalendarFeedback(cause instanceof Error ? cause.message : 'No se pudo agregar el feriado.');
+    }
+  };
+
+  const removeHoliday = async (holiday: string) => {
+    if (!project) return;
+    setCalendarFeedback(null);
+    try {
+      await updateNexusObject(project.id, {
+        scheduleHolidays: calendarConfig.holidays.filter((item) => item !== holiday),
+      });
+    } catch (cause) {
+      setCalendarFeedback(cause instanceof Error ? cause.message : 'No se pudo eliminar el feriado.');
+    }
+  };
+
+  const renderCalendarEditor = () => (
+    <section className="border-b border-slate-100 bg-white px-4 py-3">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex items-start gap-2">
+          <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl bg-sky-50 text-sky-700 ring-1 ring-sky-100">
+            <CalendarDays className="h-3.5 w-3.5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-800">Calendario del proyecto</p>
+            <p className="mt-0.5 text-[8px] leading-4 text-slate-400">
+              Define cómo CPM interpreta duración, lag/lead, holgura y variación contra la línea base.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-1 flex-wrap items-center justify-start gap-2 xl:justify-end">
+          <select
+            value={calendarConfig.mode}
+            disabled={isObjectMutationPending}
+            onChange={(event) => void updateCalendarMode(event.target.value as ScheduleCalendarMode)}
+            className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-[9px] font-bold text-slate-600 outline-none focus:border-sky-400 disabled:opacity-50"
+          >
+            <option value="CALENDAR_DAYS_V1">Días calendario</option>
+            <option value="WORKING_DAYS_V1">Calendario laboral</option>
+          </select>
+
+          {isWorkingCalendar && (
+            <>
+              <div className="flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                {WEEKDAYS.map((day) => {
+                  const selected = calendarConfig.workingWeekdays.includes(day.value);
+                  return (
+                    <button
+                      key={day.value}
+                      type="button"
+                      disabled={isObjectMutationPending}
+                      onClick={() => void toggleWorkingDay(day.value)}
+                      className={`h-6 rounded-md px-2 text-[8px] font-bold transition ${selected ? 'bg-green-700 text-white shadow-sm' : 'text-slate-400 hover:bg-white hover:text-slate-700'}`}
+                    >
+                      {day.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex h-8 items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <input
+                  type="date"
+                  value={holidayInput}
+                  onChange={(event) => setHolidayInput(event.target.value)}
+                  className="h-full border-0 bg-transparent px-2 text-[8px] font-semibold text-slate-600 outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={!holidayInput || isObjectMutationPending}
+                  onClick={() => void addHoliday()}
+                  className="flex h-full items-center gap-1 border-l border-slate-200 px-2 text-[8px] font-bold text-sky-700 transition hover:bg-sky-50 disabled:opacity-40"
+                >
+                  <Plus className="h-2.5 w-2.5" /> Feriado
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {isWorkingCalendar && calendarConfig.holidays.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5 xl:justify-end">
+          {calendarConfig.holidays.map((holiday) => (
+            <span key={holiday} className="flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1 text-[8px] font-semibold text-sky-700 ring-1 ring-sky-100">
+              {holiday}
+              <button
+                type="button"
+                disabled={isObjectMutationPending}
+                onClick={() => void removeHoliday(holiday)}
+                className="text-sky-400 transition hover:text-rose-600"
+                title="Eliminar feriado"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {calendarFeedback && (
+        <div className={`mt-2 text-[8px] font-semibold ${calendarFeedback.startsWith('No se') || calendarFeedback.startsWith('El calendario') ? 'text-rose-600' : 'text-green-700'}`}>
+          {calendarFeedback}
+        </div>
+      )}
+    </section>
+  );
+
   if (items.length === 0) {
     return (
       <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-8 text-center">
@@ -293,6 +467,7 @@ export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
   if (timelineItems.length === 0) {
     return (
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        {renderCalendarEditor()}
         {renderDependencyEditor()}
         <div className="bg-amber-50/50 p-6">
           <div className="flex items-start gap-3">
@@ -332,7 +507,6 @@ export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
   const today = new Date(Date.UTC(todayLocal.getFullYear(), todayLocal.getMonth(), todayLocal.getDate()));
   const todayInRange = today.getTime() >= rangeStart.getTime() && today.getTime() <= rangeEnd.getTime();
   const todayLeft = (daysBetween(rangeStart, today) / totalDays) * 100;
-  const completedCount = items.filter((item) => ['COMPLETED', 'APPROVED'].includes(item.status)).length;
   const blockedCount = items.filter((item) => item.status === 'BLOCKED').length;
 
   return (
@@ -340,13 +514,13 @@ export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
       <div className="flex flex-col gap-4 border-b border-slate-100 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-green-700" /><h3 className="text-[12px] font-bold text-slate-900">Cronograma CPM · Baseline vs Actual</h3></div>
-          <p className="mt-1 text-[9px] text-slate-400">Ruta crítica por CPM, línea base congelada y desviación calculada contra las fechas actuales.</p>
+          <p className="mt-1 text-[9px] text-slate-400">Ruta crítica, holgura y variación calculadas con el calendario configurado del proyecto.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[9px] font-semibold">
           <span className="rounded-full bg-slate-50 px-2.5 py-1 text-slate-500 ring-1 ring-slate-200">{actualScheduledCount} programados</span>
           <span className="rounded-full bg-green-50 px-2.5 py-1 text-green-800 ring-1 ring-green-200">{projectDependencies.length} dependencias</span>
           <span className="rounded-full bg-rose-50 px-2.5 py-1 text-rose-700 ring-1 ring-rose-200">{criticalIds.size} ruta crítica</span>
-          {schedule && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-sky-700 ring-1 ring-sky-200">{schedule.projectDurationDays}d red CPM</span>}
+          {schedule && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-sky-700 ring-1 ring-sky-200">{schedule.projectDurationDays} {schedule?.calendar === 'WORKING_DAYS_V1' ? 'd hábiles' : 'd calendario'} CPM</span>}
           {baselineExists && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600 ring-1 ring-slate-200">{baselineItemCount} con baseline</span>}
           {blockedCount > 0 && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-700 ring-1 ring-amber-200">{blockedCount} bloqueados</span>}
           <button
@@ -367,6 +541,7 @@ export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
         </div>
       )}
 
+      {renderCalendarEditor()}
       {renderDependencyEditor()}
 
       <div className="flex items-center justify-between border-b border-slate-100 bg-white px-4 py-2.5">
@@ -414,7 +589,7 @@ export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
               const actualFinish = actualEnd ?? actualStart;
               const baselineFinish = baselineEnd ?? baselineStart;
               const varianceDays = actualFinish && baselineFinish
-                ? daysBetween(baselineFinish, actualFinish)
+                ? signedScheduleDistance(baselineFinish, actualFinish, calendarConfig)
                 : null;
 
               const trackClass = isCritical
@@ -443,7 +618,7 @@ export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
                         <span>{item.type}</span><span>•</span><span>{item.progress}%</span>
                         {actualStart && actualEnd ? <><span>•</span><span>{formatShortDate(actualStart)} → {formatShortDate(actualEnd)}</span></> : <><span>•</span><span className="text-amber-600">Sin fecha actual</span></>}
                         {scheduleTask && <><span>•</span><span className={scheduleTask.totalFloat === 0 ? 'font-bold text-rose-600' : 'text-sky-600'}>Holgura {scheduleTask.totalFloat}d</span></>}
-                        {varianceDays !== null && <><span>•</span><span className={varianceClass}>{varianceLabel(varianceDays)}</span></>}
+                        {varianceDays !== null && <><span>•</span><span className={varianceClass}>{varianceLabel(varianceDays, isWorkingCalendar)}</span></>}
                         {predecessorCount > 0 && <><span>•</span><span>{predecessorCount} pred.</span></>}
                       </span>
                     </span>
@@ -473,7 +648,7 @@ export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
                       isMilestone ? (
                         <span className={`absolute top-[42px] z-20 h-3.5 w-3.5 -translate-y-1/2 rotate-45 rounded-[2px] shadow-sm ${isCritical ? 'bg-rose-600' : isCompleted ? 'bg-emerald-700' : 'bg-amber-500'}`} style={{ left: `calc(${actualLeft}% - 7px)` }} title={`${item.title}: ${formatShortDate(actualStart)}`} />
                       ) : (
-                        <span className={`absolute top-[40px] z-20 h-4 -translate-y-1/2 overflow-hidden rounded-md ring-1 ${trackClass}`} style={{ left: `${actualLeft}%`, width: `${actualWidth}%` }} title={`${item.title}: ${formatShortDate(actualStart)} – ${formatShortDate(actualEnd)}${scheduleTask ? ` · Holgura ${scheduleTask.totalFloat}d` : ''}${varianceDays !== null ? ` · ${varianceLabel(varianceDays)}` : ''}`}>
+                        <span className={`absolute top-[40px] z-20 h-4 -translate-y-1/2 overflow-hidden rounded-md ring-1 ${trackClass}`} style={{ left: `${actualLeft}%`, width: `${actualWidth}%` }} title={`${item.title}: ${formatShortDate(actualStart)} – ${formatShortDate(actualEnd)}${scheduleTask ? ` · Holgura ${scheduleTask.totalFloat}d` : ''}${varianceDays !== null ? ` · ${varianceLabel(varianceDays, isWorkingCalendar)}` : ''}`}>
                           {!isCompleted && <span className={`block h-full ${fillClass}`} style={{ width: `${Math.max(0, Math.min(100, item.progress))}%` }} />}
                         </span>
                       )
@@ -494,8 +669,8 @@ export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-2.5 text-[8px] font-medium text-slate-400">
         <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Ruta crítica = holgura total 0; desviación positiva = retraso frente a baseline</span>
-        <span className="flex items-center gap-1.5"><Milestone className="h-3 w-3 text-green-700" /> CPM V1 usa días calendario · siguiente: calendarios laborales y forecast</span>
-        <span className="text-slate-300">{dependencyStatus === 'loading' ? 'Sincronizando dependencias…' : dependencyStatus === 'ready' ? 'Dependencias sincronizadas' : 'Preview local'}</span>
+        <span className="flex items-center gap-1.5"><Milestone className="h-3 w-3 text-green-700" /> Calendario activo: {isWorkingCalendar ? `laboral (${calendarConfig.workingWeekdays.length} días/semana, ${calendarConfig.holidays.length} feriados)` : 'días calendario'} · siguiente: Forecast V1</span>
+        <span className="text-slate-300">{dependencyStatus === 'loading' ? 'Sincronizando dependencias…' : dependencyStatus === 'ready' ? `Dependencias sincronizadas · ${scheduleUnitLabel}` : `Preview local · ${scheduleUnitLabel}`}</span>
       </div>
     </div>
   );

@@ -1,7 +1,6 @@
 import type { ApiDependencyType, ApiScheduleAnalysis } from '../api/contracts';
 import type { NexusObject, ObjectRelation } from '../types/nexus';
-
-const DAY_MS = 86_400_000;
+import { calendarFromProject, durationUnits } from './workCalendar';
 
 interface LocalTask {
   object: NexusObject;
@@ -24,13 +23,12 @@ function dateOnly(value?: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function durationDays(object: NexusObject): number | null {
+function durationDays(object: NexusObject, project: NexusObject | undefined): number | null {
   const start = dateOnly(object.startDate) ?? dateOnly(object.endDate);
   const endCandidate = dateOnly(object.endDate) ?? start;
   if (!start || !endCandidate) return null;
   if (object.type === 'MILESTONE') return 0;
-  const end = endCandidate.getTime() < start.getTime() ? start : endCandidate;
-  return Math.max(1, Math.round((end.getTime() - start.getTime()) / DAY_MS) + 1);
+  return durationUnits(start, endCandidate, calendarFromProject(project));
 }
 
 function dependencyWeight(
@@ -52,6 +50,8 @@ export function calculateLocalSchedule(
   objects: NexusObject[],
   relations: ObjectRelation[],
 ): ApiScheduleAnalysis {
+  const project = objects.find((object) => object.id === projectId && object.type === 'PROJECT');
+  const calendar = calendarFromProject(project);
   const projectObjects = objects.filter(
     (object) =>
       object.projectId === projectId &&
@@ -59,7 +59,7 @@ export function calculateLocalSchedule(
   );
 
   const scheduled: LocalTask[] = projectObjects
-    .map((object) => ({ object, durationDays: durationDays(object) }))
+    .map((object) => ({ object, durationDays: durationDays(object, project) }))
     .filter((entry): entry is { object: NexusObject; durationDays: number } => entry.durationDays !== null);
   const taskById = new Map(scheduled.map((entry) => [entry.object.id, entry]));
 
@@ -114,7 +114,9 @@ export function calculateLocalSchedule(
     return {
       projectId,
       workspaceId,
-      calendar: 'CALENDAR_DAYS_V1',
+      calendar: calendar.mode,
+      workingWeekdays: calendar.workingWeekdays,
+      holidays: calendar.holidays,
       projectDurationDays: 0,
       criticalTaskIds: [],
       topologicalOrder: [],
@@ -207,7 +209,9 @@ export function calculateLocalSchedule(
   return {
     projectId,
     workspaceId,
-    calendar: 'CALENDAR_DAYS_V1',
+    calendar: calendar.mode,
+    workingWeekdays: calendar.workingWeekdays,
+    holidays: calendar.holidays,
     projectDurationDays,
     criticalTaskIds: tasks.filter((task) => task.critical).map((task) => task.id),
     topologicalOrder,
