@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import { bridataApi, BridataApiError } from '../api/client';
 import type {
+  ApiBaselineSummary,
   ApiDependency,
   ApiScheduleAnalysis,
   CreateApiDependencyInput,
@@ -45,6 +46,7 @@ interface SchedulingContextType {
   updateDependency: (id: string, input: UpdateDependencyInput) => Promise<ObjectRelation>;
   deleteDependency: (id: string) => Promise<void>;
   analyzeProject: (projectId: string) => Promise<ApiScheduleAnalysis>;
+  saveProjectBaseline: (projectId: string, overwrite?: boolean) => Promise<ApiBaselineSummary>;
 }
 
 const SchedulingContext = createContext<SchedulingContextType | undefined>(undefined);
@@ -96,7 +98,12 @@ function wouldCreateLocalCycle(
 
 export const SchedulingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const apiBootstrap = useApiBootstrap();
-  const { currentWorkspace, objects } = useNexus();
+  const {
+    currentWorkspace,
+    objects,
+    reloadObjects,
+    updateNexusObject,
+  } = useNexus();
   const isApiMode = apiBootstrap.dataMode === 'api';
   const apiReady = isApiMode && apiBootstrap.status === 'ready';
 
@@ -251,6 +258,73 @@ export const SchedulingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return calculateLocalSchedule(projectId, workspaceId, objects, dependencies);
   }, [currentWorkspace?.id, dependencies, isApiMode, objects]);
 
+  const saveProjectBaseline = useCallback(async (
+    projectId: string,
+    overwrite = false,
+  ): Promise<ApiBaselineSummary> => {
+    setMutationCount((count) => count + 1);
+    setError(null);
+
+    try {
+      if (isApiMode) {
+        const summary = await bridataApi.saveProjectBaseline(projectId, overwrite);
+        await reloadObjects();
+        return summary;
+      }
+
+      const project = objects.find((object) => object.id === projectId && object.type === 'PROJECT');
+      if (!project) throw new Error('El proyecto ya no existe en la vista actual.');
+
+      const children = objects.filter(
+        (object) =>
+          object.projectId === projectId &&
+          ['TASK', 'DELIVERABLE', 'MILESTONE'].includes(object.type),
+      );
+      const snapshotObjects = [project, ...children];
+      const existingBaselineCount = snapshotObjects.filter(
+        (object) => object.baselineStartDate || object.baselineEndDate,
+      ).length;
+
+      if (existingBaselineCount > 0 && !overwrite) {
+        throw new Error('El proyecto ya tiene una línea base. Confirma el reemplazo para continuar.');
+      }
+
+      const capturedAt = new Date().toISOString();
+      let scheduledCount = 0;
+      let skippedUnscheduledCount = 0;
+
+      for (const object of snapshotObjects) {
+        const baselineUpdates = {
+          ...(object.startDate ? { baselineStartDate: object.startDate } : {}),
+          ...(object.endDate ? { baselineEndDate: object.endDate } : {}),
+        };
+
+        if (Object.keys(baselineUpdates).length > 0) {
+          scheduledCount += 1;
+          await updateNexusObject(object.id, baselineUpdates);
+        } else {
+          skippedUnscheduledCount += 1;
+        }
+      }
+
+      return {
+        projectId,
+        workspaceId: project.workspaceId,
+        baselineVersion: existingBaselineCount > 0 ? 2 : 1,
+        capturedAt,
+        updatedCount: scheduledCount,
+        scheduledCount,
+        skippedUnscheduledCount,
+        overwritten: existingBaselineCount > 0,
+      };
+    } catch (cause) {
+      setError(messageOf(cause));
+      throw cause;
+    } finally {
+      setMutationCount((count) => Math.max(0, count - 1));
+    }
+  }, [isApiMode, objects, reloadObjects, updateNexusObject]);
+
   return (
     <SchedulingContext.Provider
       value={{
@@ -263,6 +337,7 @@ export const SchedulingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         updateDependency,
         deleteDependency,
         analyzeProject,
+        saveProjectBaseline,
       }}
     >
       {children}
