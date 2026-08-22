@@ -32,6 +32,16 @@ param postgresSkuName string = environment == 'prod' ? 'Standard_D2s_v5' : 'Stan
 @minValue(32)
 param postgresStorageSizeGb int = environment == 'prod' ? 128 : 32
 
+@description('Stores the admin and restricted runtime database URLs in Key Vault. Kept false for normal validation and what-if runs.')
+param storeDatabaseSecrets bool = false
+
+@description('Restricted PostgreSQL login later provisioned by the migration job.')
+param postgresRuntimeRole string = 'nexus_runtime'
+
+@secure()
+@description('Password for the restricted PostgreSQL runtime login. Required only when storeDatabaseSecrets=true. Never version this value.')
+param postgresRuntimePassword string = ''
+
 @description('Creates the API Container App and manual migration job. Kept false until images, Entra registrations, Key Vault secrets and RBAC prerequisites exist.')
 param deployApiRuntime bool = false
 
@@ -70,6 +80,9 @@ var acrName = toLower('${namePrefix}${environment}${suffix}')
 var keyVaultName = '${baseName}-${suffix}'
 var postgresServerResourceName = take(toLower('${baseName}-${suffix}-pg'), 63)
 var postgresPrivateDnsZoneName = '${baseName}.postgres.database.azure.com'
+var postgresFqdnValue = '${postgresServerResourceName}.postgres.database.azure.com'
+var adminDatabaseConnectionString = 'postgresql://${postgresAdministratorLogin}:${postgresAdministratorPassword}@${postgresFqdnValue}:5432/${postgresDatabaseName}?sslmode=require'
+var runtimeDatabaseConnectionString = 'postgresql://${postgresRuntimeRole}:${postgresRuntimePassword}@${postgresFqdnValue}:5432/${postgresDatabaseName}?sslmode=require'
 
 // Private address plan kept intentionally simple for the first environment.
 // Container Apps consumption-only VNet integration requires a dedicated /23.
@@ -291,6 +304,30 @@ resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2
   }
 }
 
+resource adminDatabaseSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (deployPostgres && storeDatabaseSecrets) {
+  parent: keyVault
+  name: 'admin-database-url'
+  properties: {
+    contentType: 'PostgreSQL connection string for Bridata migration job'
+    value: adminDatabaseConnectionString
+  }
+  dependsOn: [
+    postgresDatabase
+  ]
+}
+
+resource runtimeDatabaseSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (deployPostgres && storeDatabaseSecrets) {
+  parent: keyVault
+  name: 'runtime-database-url'
+  properties: {
+    contentType: 'Restricted PostgreSQL connection string for Bridata API'
+    value: runtimeDatabaseConnectionString
+  }
+  dependsOn: [
+    postgresDatabase
+  ]
+}
+
 module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
   name: '${baseName}-api-runtime'
   params: {
@@ -327,6 +364,7 @@ output apiManagedIdentityPrincipalId string = apiIdentity.properties.principalId
 output containerAppsEnvironmentName string = containerEnvironment.name
 output postgresDeployed bool = deployPostgres
 output deployedPostgresServerName string = deployPostgres ? postgresServerResourceName : ''
-output postgresFqdn string = deployPostgres ? '${postgresServerResourceName}.postgres.database.azure.com' : ''
+output postgresFqdn string = deployPostgres ? postgresFqdnValue : ''
 output applicationDatabaseName string = deployPostgres ? postgresDatabaseName : ''
+output databaseSecretsStored bool = deployPostgres && storeDatabaseSecrets
 output apiRuntimeDeployed bool = deployApiRuntime
