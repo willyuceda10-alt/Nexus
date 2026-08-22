@@ -47,7 +47,7 @@ RUN useradd --create-home --uid 10001 nexus \
 
 USER nexus
 
-# DATABASE_URL and ADMIN_DATABASE_URL intentionally point to the privileged
-# migration connection only inside the manual Azure migration job.
-# RUNTIME_DB_PASSWORD is consumed by provision-runtime-role.ts and never logged.
+# DATABASE_URL and ADMIN_DATABASE_URL point to the privileged migration connection
+# only inside the manual Azure migration job. RUNTIME_DATABASE_URL is the exact
+# restricted connection string later injected into the API and is never logged.
 CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && ./node_modules/.bin/tsx prisma/provision-runtime-role.ts"]
