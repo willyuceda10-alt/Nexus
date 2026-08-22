@@ -1,22 +1,21 @@
-name: Azure OIDC Check
+name: Azure DEV Preflight
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/azure-oidc-check.yml'
 
 permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: bridata-azure-dev-preflight
+  cancel-in-progress: false
+
 jobs:
-  verify-azure-oidc:
-    name: Verify GitHub to Azure trust
+  preflight:
+    name: Validate Azure DEV without deployment
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -50,26 +49,27 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Verify Azure subscription
-        run: az account show --query '{name:name,id:id,tenantId:tenantId,state:state}' --output table
-
-      - name: Verify DEV resource group
+      - name: Verify target scope
         shell: bash
         run: |
           set -euo pipefail
-          az group show \
-            --name "$AZURE_RESOURCE_GROUP" \
-            --query '{name:name,location:location,provisioningState:properties.provisioningState}' \
-            --output table
+          az group show --name "$AZURE_RESOURCE_GROUP" --output none
+          echo "Target resource group exists and is accessible."
 
-      - name: Verify expected region
+      - name: Validate Bicep compilation
+        run: az bicep build --file infra/azure/main.bicep --stdout > /dev/null
+
+      - name: Run Azure what-if
         shell: bash
         run: |
           set -euo pipefail
-          actual="$(az group show --name "$AZURE_RESOURCE_GROUP" --query location -o tsv)"
-          expected="$(printf '%s' "$AZURE_LOCATION" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
-          normalized_actual="$(printf '%s' "$actual" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
-          if [ "$normalized_actual" != "$expected" ]; then
-            echo "::error title=Azure location mismatch::Resource group is in '$actual' but AZURE_LOCATION expects '$AZURE_LOCATION'."
-            exit 1
-          fi
+          az deployment group what-if \
+            --name bridata-dev-preflight \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/main.bicep \
+            --parameters namePrefix=nexus environment=dev \
+            --no-pretty-print
+
+      - name: Confirm no deployment was executed
+        run: |
+          echo "Preflight completed. This workflow performs validation/what-if only and does not run 'az deployment group create'."
