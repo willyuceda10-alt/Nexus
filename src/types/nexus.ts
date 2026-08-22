@@ -11,6 +11,7 @@ export type ObjectType =
   | 'INCIDENT';
 
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type DependencyType = 'FS' | 'SS' | 'FF' | 'SF';
 
 export type ObjectStatus =
   | 'DRAFT'
@@ -79,6 +80,8 @@ export interface ObjectRelation {
   targetObjectId: string;
   relationType: 'BLOCKS' | 'DEPENDS_ON' | 'DERIVED_FROM' | 'RELATES_TO' | 'MITIGATES' | 'REQUIRES_APPROVAL';
   notes?: string;
+  dependencyType?: DependencyType;
+  lagDays?: number;
 }
 
 export interface ActivityLog {
