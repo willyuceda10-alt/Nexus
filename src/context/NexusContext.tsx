@@ -354,12 +354,29 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const existing = objects.find((object) => object.id === id);
     if (!existing) throw new Error('El objeto ya no existe en la vista actual.');
 
+    // The UI is optimistic. ApiObjectRepository buffers rapid calls and serializes
+    // each object by the latest confirmed server version.
+    setObjects((previous) =>
+      previous.map((object) =>
+        object.id === id ? { ...object, ...updates } : object,
+      ),
+    );
     setObjectMutationCount((count) => count + 1);
     setObjectDataError(null);
+
     try {
       const updated = await repository.update(existing, updates, repositoryContext());
       setObjects((previous) =>
-        previous.map((object) => (object.id === id ? updated : object)),
+        previous.map((object) =>
+          object.id === id
+            ? {
+                ...updated,
+                ...object,
+                version: updated.version,
+                updatedAt: updated.updatedAt,
+              }
+            : object,
+        ),
       );
 
       if (updates.status && updates.status !== existing.status) {
@@ -380,6 +397,13 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return updated;
     } catch (cause) {
       setObjectDataError(dataErrorMessage(cause));
+      if (isApiMode) {
+        await reloadObjects();
+      } else {
+        setObjects((previous) =>
+          previous.map((object) => (object.id === id ? existing : object)),
+        );
+      }
       throw cause;
     } finally {
       setObjectMutationCount((count) => Math.max(0, count - 1));
