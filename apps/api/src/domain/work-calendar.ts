@@ -101,3 +101,27 @@ export function signedScheduleDistance(
 
   return distance;
 }
+
+export function addScheduleUnits(
+  from: Date,
+  units: number,
+  calendar: ScheduleCalendarConfig,
+): Date {
+  const wholeUnits = Math.trunc(units);
+  if (wholeUnits === 0) return new Date(from.getTime());
+  if (calendar.mode === 'CALENDAR_DAYS_V1') {
+    return new Date(from.getTime() + wholeUnits * DAY_MS);
+  }
+
+  const direction = wholeUnits > 0 ? 1 : -1;
+  const target = Math.abs(wholeUnits);
+  let counted = 0;
+  let cursor = new Date(from.getTime());
+
+  while (counted < target) {
+    cursor = new Date(cursor.getTime() + direction * DAY_MS);
+    if (isWorkingDate(cursor, calendar)) counted += 1;
+  }
+
+  return cursor;
+}
