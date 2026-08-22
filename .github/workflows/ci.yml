@@ -1,4 +1,4 @@
-name: Nexus CI
+name: Bridata Project CI
 
 on:
   pull_request:
@@ -14,8 +14,24 @@ jobs:
     name: Typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: nexus_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d nexus_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     env:
-      DATABASE_URL: postgresql://nexus:nexus@localhost:5432/nexus_ci
+      DATABASE_URL: postgresql://nexus_runtime:nexus@localhost:5432/nexus_ci
+      ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nexus_ci
+      NODE_ENV: test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,7 +55,31 @@ jobs:
         run: npm run prisma:generate
 
       - name: Verify Prisma can generate baseline SQL
-        run: npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > /tmp/nexus-baseline.sql
+        run: npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > /tmp/bridata-project-baseline.sql
+
+      - name: Apply migrations to PostgreSQL 16
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: npm run prisma:migrate:deploy
+
+      - name: Provision non-bypass runtime database role
+        run: npx tsx prisma/provision-ci-runtime.ts
+
+      - name: Seed DEV fixture through FORCE RLS
+        env:
+          NODE_ENV: test
+        run: npm run prisma:seed:dev
+
+      - name: Verify tenant RLS isolation
+        run: npx tsx prisma/rls-smoke.ts
+
+      - name: Verify API bootstrap through auth and RLS
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
+        run: npx tsx apps/api/test/bootstrap-smoke.ts
 
       - name: Validate Azure Bicep
         run: az bicep build --file infra/azure/main.bicep --stdout > /dev/null

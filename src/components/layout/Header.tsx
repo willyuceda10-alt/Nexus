@@ -8,6 +8,7 @@ import {
   Shield,
   Check,
 } from 'lucide-react';
+import { ApiStatusBadge } from '../system/ApiStatusBadge';
 import { useNexus } from '../../context/NexusContext';
 import { BRAND } from '../../config/brand';
 
@@ -109,6 +110,8 @@ export const Header: React.FC = () => {
           />
           <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-2.5" />
         </div>
+
+        <ApiStatusBadge />
 
         <div className="relative">
           <button

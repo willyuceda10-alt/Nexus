@@ -1,4 +1,5 @@
 import React from 'react';
+import { ApiBootstrapProvider } from './context/ApiBootstrapContext';
 import { NexusProvider, useNexus } from './context/NexusContext';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
@@ -48,28 +49,25 @@ const MainContentRouter: React.FC = () => {
 
 export function App() {
   return (
-    <NexusProvider>
-      <div className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] text-slate-900 font-sans selection:bg-indigo-500 selection:text-white">
-        {/* Main Sidebar */}
-        <Sidebar />
+    <ApiBootstrapProvider>
+      <NexusProvider>
+        <div className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] text-slate-900 font-sans selection:bg-indigo-500 selection:text-white">
+          <Sidebar />
 
-        {/* Main App Container */}
-        <div className="flex flex-1 flex-col min-w-0 overflow-hidden bg-[#F8FAFC]">
-          {/* Sticky Header */}
-          <Header />
+          <div className="flex flex-1 flex-col min-w-0 overflow-hidden bg-[#F8FAFC]">
+            <Header />
 
-          {/* View Container */}
-          <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">
-            <MainContentRouter />
-          </main>
+            <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">
+              <MainContentRouter />
+            </main>
+          </div>
+
+          <UniversalObjectDrawer />
+          <CreateObjectModal />
+          <CommandPalette />
         </div>
-
-        {/* Global Overlays */}
-        <UniversalObjectDrawer />
-        <CreateObjectModal />
-        <CommandPalette />
-      </div>
-    </NexusProvider>
+      </NexusProvider>
+    </ApiBootstrapProvider>
   );
 }
 

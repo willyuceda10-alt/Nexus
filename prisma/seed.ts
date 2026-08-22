@@ -34,109 +34,132 @@ async function main() {
     throw new Error('The DEV seed must never run with NODE_ENV=production.');
   }
 
-  const tenant = await prisma.tenant.upsert({
-    where: { id: DEV_TENANT_ID },
-    update: { status: 'ACTIVE' },
-    create: {
-      id: DEV_TENANT_ID,
-      name: 'Nexus Development',
-      slug: 'nexus-dev',
-      plan: 'ENTERPRISE',
-      status: 'ACTIVE',
-    },
-  });
-
+  // User is global and intentionally not tenant-scoped by RLS.
   const user = await prisma.user.upsert({
     where: { id: DEV_USER_ID },
-    update: { isActive: true },
+    update: {
+      email: 'owner@bridata.local',
+      fullName: 'Bridata DEV Owner',
+      isActive: true,
+    },
     create: {
       id: DEV_USER_ID,
-      email: 'owner@nexus.local',
-      fullName: 'Nexus DEV Owner',
+      email: 'owner@bridata.local',
+      fullName: 'Bridata DEV Owner',
       isActive: true,
     },
   });
 
-  await prisma.tenantMembership.upsert({
-    where: {
-      tenantId_userId: {
-        tenantId: tenant.id,
-        userId: user.id,
-      },
-    },
-    update: { role: 'OWNER', status: 'ACTIVE' },
-    create: {
-      tenantId: tenant.id,
-      userId: user.id,
-      role: 'OWNER',
-      status: 'ACTIVE',
-    },
-  });
+  const result = await prisma.$transaction(async (tx) => {
+    // FORCE RLS requires the tenant context before touching any tenant-scoped row,
+    // including the tenant row itself.
+    await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${DEV_TENANT_ID}, true)`;
 
-  const workspace = await prisma.workspace.upsert({
-    where: {
-      tenantId_code: {
-        tenantId: tenant.id,
-        code: 'CORE',
+    const tenant = await tx.tenant.upsert({
+      where: { id: DEV_TENANT_ID },
+      update: {
+        name: 'Bridata Project Development',
+        slug: 'bridata-project-dev',
+        status: 'ACTIVE',
       },
-    },
-    update: { name: 'Nexus Core Development' },
-    create: {
-      id: DEV_WORKSPACE_ID,
-      tenantId: tenant.id,
-      code: 'CORE',
-      name: 'Nexus Core Development',
-      description: 'Workspace bootstrap for local and Azure DEV validation.',
-    },
-  });
-
-  await prisma.workspaceMember.upsert({
-    where: {
-      workspaceId_userId: {
-        workspaceId: workspace.id,
-        userId: user.id,
+      create: {
+        id: DEV_TENANT_ID,
+        name: 'Bridata Project Development',
+        slug: 'bridata-project-dev',
+        plan: 'ENTERPRISE',
+        status: 'ACTIVE',
       },
-    },
-    update: { role: 'OWNER', tenantId: tenant.id },
-    create: {
-      tenantId: tenant.id,
-      workspaceId: workspace.id,
-      userId: user.id,
-      role: 'OWNER',
-    },
-  });
+    });
 
-  for (const definition of systemDefinitions) {
-    await prisma.objectDefinition.upsert({
+    await tx.tenantMembership.upsert({
       where: {
-        tenantId_key: {
+        tenantId_userId: {
           tenantId: tenant.id,
-          key: definition.key,
+          userId: user.id,
+        },
+      },
+      update: { role: 'OWNER', status: 'ACTIVE' },
+      create: {
+        tenantId: tenant.id,
+        userId: user.id,
+        role: 'OWNER',
+        status: 'ACTIVE',
+      },
+    });
+
+    const workspace = await tx.workspace.upsert({
+      where: {
+        tenantId_code: {
+          tenantId: tenant.id,
+          code: 'CORE',
         },
       },
       update: {
-        name: definition.name,
-        icon: definition.icon,
-        isSystem: true,
+        name: 'Bridata Project Core Development',
+        description: 'Workspace bootstrap for Bridata Project local and Azure DEV validation.',
       },
       create: {
+        id: DEV_WORKSPACE_ID,
         tenantId: tenant.id,
-        key: definition.key,
-        name: definition.name,
-        icon: definition.icon,
-        schema: baseSchema(definition.key),
-        isSystem: true,
+        code: 'CORE',
+        name: 'Bridata Project Core Development',
+        description: 'Workspace bootstrap for Bridata Project local and Azure DEV validation.',
       },
     });
-  }
+
+    await tx.workspaceMember.upsert({
+      where: {
+        workspaceId_userId: {
+          workspaceId: workspace.id,
+          userId: user.id,
+        },
+      },
+      update: { role: 'OWNER', tenantId: tenant.id },
+      create: {
+        tenantId: tenant.id,
+        workspaceId: workspace.id,
+        userId: user.id,
+        role: 'OWNER',
+      },
+    });
+
+    for (const definition of systemDefinitions) {
+      await tx.objectDefinition.upsert({
+        where: {
+          tenantId_key: {
+            tenantId: tenant.id,
+            key: definition.key,
+          },
+        },
+        update: {
+          name: definition.name,
+          icon: definition.icon,
+          isSystem: true,
+        },
+        create: {
+          tenantId: tenant.id,
+          key: definition.key,
+          name: definition.name,
+          icon: definition.icon,
+          schema: baseSchema(definition.key),
+          isSystem: true,
+        },
+      });
+    }
+
+    return {
+      tenantId: tenant.id,
+      userId: user.id,
+      workspaceId: workspace.id,
+    };
+  });
 
   console.info(
     JSON.stringify(
       {
         seeded: true,
-        tenantId: tenant.id,
-        userId: user.id,
-        workspaceId: workspace.id,
+        product: 'Bridata Project',
+        ...result,
         objectDefinitions: systemDefinitions.length,
       },
       null,
