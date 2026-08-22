@@ -21,7 +21,7 @@ env:
   AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
   AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
   AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-nexus-dev' }}
-  AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'brazilsouth' }}
+  STATIC_WEB_APP_LOCATION: eastus2
   STATIC_WEB_APP_NAME: bridata-project-dev
 
 jobs:
@@ -71,7 +71,7 @@ jobs:
             az staticwebapp create \
               --name "$STATIC_WEB_APP_NAME" \
               --resource-group "$AZURE_RESOURCE_GROUP" \
-              --location "$AZURE_LOCATION" \
+              --location "$STATIC_WEB_APP_LOCATION" \
               --sku Free \
               --tags product="Bridata Project" environment=dev managedBy=GitHubActions \
               --output none
