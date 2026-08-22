@@ -3,6 +3,10 @@ FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 ENV CI=true
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates openssl \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/package.json
 RUN npm ci
@@ -15,8 +19,22 @@ RUN npm run prisma:generate
 COPY apps/api ./apps/api
 RUN npm run build:api
 
-FROM build AS production-deps
-RUN npm prune --omit=dev
+# Install production dependencies from a clean filesystem rather than pruning the
+# build tree. Prisma is an optional peer of @prisma/client and can otherwise leave
+# CLI tooling behind even after `npm prune --omit=dev`.
+FROM node:22-bookworm-slim AS runtime-deps
+
+WORKDIR /app
+ENV CI=true
+ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
+
+COPY package.json package-lock.json ./
+COPY apps/api/package.json ./apps/api/package.json
+RUN npm ci --omit=dev \
+  && rm -rf node_modules/prisma node_modules/tsx node_modules/.bin/prisma node_modules/.bin/tsx
+
+# Keep only the generated Prisma client/engine artifacts from the build stage.
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 
 FROM node:22-bookworm-slim AS runtime
 
@@ -25,12 +43,15 @@ ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=8080
 
-RUN useradd --create-home --uid 10001 nexus
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates openssl \
+  && rm -rf /var/lib/apt/lists/* \
+  && useradd --create-home --uid 10001 nexus
 
-COPY --from=production-deps /app/package.json ./package.json
-COPY --from=production-deps /app/apps/api/package.json ./apps/api/package.json
-COPY --from=production-deps /app/apps/api/dist ./apps/api/dist
-COPY --from=production-deps /app/node_modules ./node_modules
+COPY --from=runtime-deps /app/package.json ./package.json
+COPY --from=runtime-deps /app/apps/api/package.json ./apps/api/package.json
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=runtime-deps /app/node_modules ./node_modules
 
 USER nexus
 EXPOSE 8080
