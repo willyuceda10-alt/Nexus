@@ -48,7 +48,7 @@ export async function authenticate(
   if (config.AUTH_MODE === 'dev') {
     request.authPrincipal = {
       provider: 'DEV',
-      issuer: 'nexus://dev',
+      issuer: 'bridata://dev',
       subject: config.DEV_USER_ID!,
       devUserId: config.DEV_USER_ID!,
       devTenantId: config.DEV_TENANT_ID!,
@@ -113,9 +113,16 @@ export async function authenticate(
   }
 }
 
-function getTenantHeader(request: FastifyRequest): string | undefined {
-  const raw = request.headers['x-nexus-tenant-id'];
+function readHeader(request: FastifyRequest, name: string): string | undefined {
+  const raw = request.headers[name];
   return Array.isArray(raw) ? raw[0] : raw;
+}
+
+function getTenantHeader(request: FastifyRequest): string | undefined {
+  return (
+    readHeader(request, 'x-bridata-tenant-id') ||
+    readHeader(request, 'x-nexus-tenant-id')
+  );
 }
 
 export async function resolveActor(
@@ -159,7 +166,7 @@ export async function resolveActor(
   if (!tenantId) {
     await reply.code(400).send({
       error: 'tenant_required',
-      message: 'x-nexus-tenant-id is required for tenant-scoped requests.',
+      message: 'x-bridata-tenant-id is required for tenant-scoped requests.',
     });
     return;
   }
@@ -178,7 +185,7 @@ export async function resolveActor(
   if (!identity || !identity.user.isActive) {
     await reply.code(403).send({
       error: 'identity_not_provisioned',
-      message: 'This Microsoft identity is not provisioned in Nexus.',
+      message: 'This Microsoft identity is not provisioned in Bridata Project.',
     });
     return;
   }
@@ -195,7 +202,7 @@ export async function resolveActor(
   if (!membership || membership.status !== 'ACTIVE') {
     await reply.code(403).send({
       error: 'tenant_access_denied',
-      message: 'The authenticated user is not an active member of this Nexus tenant.',
+      message: 'The authenticated user is not an active member of this Bridata Project tenant.',
     });
     return;
   }
