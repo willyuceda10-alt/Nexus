@@ -164,14 +164,13 @@ export async function resourceCapacityRoutes(app: FastifyInstance): Promise<void
         const assignments: ResourceCapacityAssignment[] = taskRows.map((row) => {
           const metadata = asRecord(row.metadata);
           const projectId = stringValue(metadata, 'projectId');
+          const effortHours = numberValue(metadata, 'effortHours');
           return {
             objectId: row.id,
             title: row.title,
             ...(row.assigneeId ? { assigneeId: row.assigneeId } : {}),
             ...(projectId ? { projectId } : {}),
-            ...(numberValue(metadata, 'effortHours') !== undefined
-              ? { effortHours: numberValue(metadata, 'effortHours') }
-              : {}),
+            ...(effortHours !== undefined ? { effortHours } : {}),
             ...(row.startDate ? { startDate: row.startDate } : {}),
             ...(row.dueDate ? { dueDate: row.dueDate } : {}),
             projectCalendar: projectId && projectCalendar.has(projectId)
