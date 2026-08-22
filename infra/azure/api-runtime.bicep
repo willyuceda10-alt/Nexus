@@ -13,10 +13,12 @@ param adminDatabaseSecretUri string
 param entraApiClientId string
 param entraTenantId string
 param corsOrigins string
+param deployApi bool = true
+param deployMigrationJob bool = true
 
 var baseName = 'nexus-${environment}'
 
-resource api 'Microsoft.App/containerApps@2024-03-01' = {
+resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
   name: '${baseName}-api'
   location: location
   tags: tags
@@ -155,7 +157,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-resource migrations 'Microsoft.App/jobs@2024-03-01' = {
+resource migrations 'Microsoft.App/jobs@2024-03-01' = if (deployMigrationJob) {
   name: '${baseName}-migrate'
   location: location
   tags: tags
@@ -223,6 +225,6 @@ resource migrations 'Microsoft.App/jobs@2024-03-01' = {
   }
 }
 
-output apiName string = api.name
-output apiFqdn string = api.properties.configuration.ingress.fqdn
-output migrationJobName string = migrations.name
+output apiName string = deployApi ? api.name : ''
+output apiFqdn string = deployApi ? api.properties.configuration.ingress.fqdn : ''
+output migrationJobName string = deployMigrationJob ? migrations.name : ''

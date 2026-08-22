@@ -1,0 +1,353 @@
+name: Azure DEV Runtime Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type DEPLOY-BRIDATA-RUNTIME-DEV to migrate the DEV database and deploy the Entra-protected API.'
+        required: true
+        type: string
+      entra_api_client_id:
+        description: 'Client ID of the bridata-api-dev Entra application.'
+        required: true
+        type: string
+      cors_origins:
+        description: 'Comma-separated allowed web origins. A placeholder is safe until the web is connected.'
+        required: false
+        default: 'https://not-configured.invalid'
+        type: string
+      image_tag:
+        description: 'Optional exact published image tag. Empty selects the newest bridata-api tag and requires the same migration tag.'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: bridata-azure-dev-runtime-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Migrate and deploy Bridata DEV API
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-nexus-dev' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate explicit runtime confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          ENTRA_API_CLIENT_ID_INPUT: ${{ inputs.entra_api_client_id }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error title=Main branch required::Azure DEV runtime may only deploy from main."
+            exit 1
+          fi
+          if [ "$CONFIRMATION" != "DEPLOY-BRIDATA-RUNTIME-DEV" ]; then
+            echo "::error title=Runtime deployment not confirmed::Type DEPLOY-BRIDATA-RUNTIME-DEV exactly."
+            exit 1
+          fi
+          if ! [[ "$ENTRA_API_CLIENT_ID_INPUT" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "::error title=Invalid Entra client ID::Expected a GUID client/application ID."
+            exit 1
+          fi
+
+      - name: Validate Azure identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error title=Missing Azure identifier::$name is not configured."
+              exit 1
+            fi
+          done
+
+      - name: Login to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve existing DEV runtime foundation and immutable images
+        id: runtime
+        shell: bash
+        env:
+          REQUESTED_IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+
+          active_subscription_id="$(az account show --query id --output tsv)"
+          configured_subscription_id="$(printf '%s' "$AZURE_SUBSCRIPTION_ID" | tr -d '[:space:]')"
+          if [ "$active_subscription_id" != "$configured_subscription_id" ]; then
+            echo "::error title=Azure subscription mismatch::OIDC selected a different subscription."
+            exit 1
+          fi
+
+          location="$(az group show --name "$AZURE_RESOURCE_GROUP" --query location --output tsv)"
+          acr_name="$(az acr list --resource-group "$AZURE_RESOURCE_GROUP" --query '[0].name' --output tsv)"
+          key_vault_name="$(az keyvault list --resource-group "$AZURE_RESOURCE_GROUP" --query '[0].name' --output tsv)"
+          api_identity_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-api-mi --query id --output tsv)"
+          managed_environment_id="$(az resource list --resource-group "$AZURE_RESOURCE_GROUP" --resource-type Microsoft.App/managedEnvironments --query '[0].id' --output tsv)"
+
+          for value_name in location acr_name key_vault_name api_identity_id managed_environment_id; do
+            if [ -z "${!value_name:-}" ]; then
+              echo "::error title=DEV foundation incomplete::Could not resolve $value_name."
+              exit 1
+            fi
+          done
+
+          login_server="$(az acr show --resource-group "$AZURE_RESOURCE_GROUP" --name "$acr_name" --query loginServer --output tsv)"
+          image_tag="$(printf '%s' "$REQUESTED_IMAGE_TAG" | tr -d '[:space:]')"
+          if [ -z "$image_tag" ]; then
+            image_tag="$(az acr repository show-tags --name "$acr_name" --repository bridata-api --orderby time_desc --top 1 --output tsv)"
+          fi
+          if [ -z "$image_tag" ]; then
+            echo "::error title=Published image unavailable::Run Azure DEV Images Publish first."
+            exit 1
+          fi
+
+          api_digest="$(az acr repository show --name "$acr_name" --image "bridata-api:$image_tag" --query digest --output tsv)"
+          migration_digest="$(az acr repository show --name "$acr_name" --image "bridata-migrate:$image_tag" --query digest --output tsv 2>/dev/null || true)"
+          if [[ "$api_digest" != sha256:* ]] || [[ "$migration_digest" != sha256:* ]]; then
+            echo "::error title=Image pair incomplete::API and migration images must exist with the same tag."
+            exit 1
+          fi
+
+          echo "location=$location" >> "$GITHUB_OUTPUT"
+          echo "acr_name=$acr_name" >> "$GITHUB_OUTPUT"
+          echo "login_server=$login_server" >> "$GITHUB_OUTPUT"
+          echo "key_vault_name=$key_vault_name" >> "$GITHUB_OUTPUT"
+          echo "api_identity_id=$api_identity_id" >> "$GITHUB_OUTPUT"
+          echo "managed_environment_id=$managed_environment_id" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+          echo "api_image=$login_server/bridata-api@$api_digest" >> "$GITHUB_OUTPUT"
+          echo "migration_image=$login_server/bridata-migrate@$migration_digest" >> "$GITHUB_OUTPUT"
+          echo "runtime_database_secret_uri=https://$key_vault_name.vault.azure.net/secrets/runtime-database-url" >> "$GITHUB_OUTPUT"
+          echo "admin_database_secret_uri=https://$key_vault_name.vault.azure.net/secrets/admin-database-url" >> "$GITHUB_OUTPUT"
+
+          echo "Using published image pair: $image_tag"
+
+      - name: Validate runtime Bicep
+        shell: bash
+        run: |
+          set -euo pipefail
+          az bicep build --file infra/azure/api-runtime.bicep --stdout > /dev/null
+
+      - name: Build non-secret runtime parameter file
+        shell: bash
+        env:
+          LOCATION: ${{ steps.runtime.outputs.location }}
+          MANAGED_ENVIRONMENT_ID: ${{ steps.runtime.outputs.managed_environment_id }}
+          LOGIN_SERVER: ${{ steps.runtime.outputs.login_server }}
+          API_IDENTITY_ID: ${{ steps.runtime.outputs.api_identity_id }}
+          API_IMAGE: ${{ steps.runtime.outputs.api_image }}
+          MIGRATION_IMAGE: ${{ steps.runtime.outputs.migration_image }}
+          RUNTIME_DATABASE_SECRET_URI: ${{ steps.runtime.outputs.runtime_database_secret_uri }}
+          ADMIN_DATABASE_SECRET_URI: ${{ steps.runtime.outputs.admin_database_secret_uri }}
+          ENTRA_API_CLIENT_ID_INPUT: ${{ inputs.entra_api_client_id }}
+          CORS_ORIGINS_INPUT: ${{ inputs.cors_origins }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg location "$LOCATION" \
+            --arg managedEnvironmentId "$MANAGED_ENVIRONMENT_ID" \
+            --arg registryServer "$LOGIN_SERVER" \
+            --arg apiIdentityResourceId "$API_IDENTITY_ID" \
+            --arg apiImage "$API_IMAGE" \
+            --arg migrationImage "$MIGRATION_IMAGE" \
+            --arg runtimeDatabaseSecretUri "$RUNTIME_DATABASE_SECRET_URI" \
+            --arg adminDatabaseSecretUri "$ADMIN_DATABASE_SECRET_URI" \
+            --arg entraApiClientId "$ENTRA_API_CLIENT_ID_INPUT" \
+            --arg entraTenantId "$AZURE_TENANT_ID" \
+            --arg corsOrigins "$CORS_ORIGINS_INPUT" \
+            '{
+              "$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+              "contentVersion":"1.0.0.0",
+              "parameters":{
+                "location":{"value":$location},
+                "environment":{"value":"dev"},
+                "tags":{"value":{"product":"Bridata Project","technicalPlatform":"Nexus Core","environment":"dev","managedBy":"Bicep"}},
+                "managedEnvironmentId":{"value":$managedEnvironmentId},
+                "registryServer":{"value":$registryServer},
+                "apiIdentityResourceId":{"value":$apiIdentityResourceId},
+                "apiImage":{"value":$apiImage},
+                "migrationImage":{"value":$migrationImage},
+                "runtimeDatabaseSecretUri":{"value":$runtimeDatabaseSecretUri},
+                "adminDatabaseSecretUri":{"value":$adminDatabaseSecretUri},
+                "entraApiClientId":{"value":$entraApiClientId},
+                "entraTenantId":{"value":$entraTenantId},
+                "corsOrigins":{"value":$corsOrigins}
+              }
+            }' > /tmp/bridata-runtime-params.json
+
+      - name: Review migration-job what-if
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment group what-if \
+            --name "bridata-dev-migrate-preflight-${GITHUB_RUN_NUMBER}" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/api-runtime.bicep \
+            --parameters @/tmp/bridata-runtime-params.json deployApi=false deployMigrationJob=true \
+            --no-pretty-print
+
+      - name: Deploy migration job only
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment group create \
+            --name "bridata-dev-migrate-${GITHUB_RUN_NUMBER}" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/api-runtime.bicep \
+            --parameters @/tmp/bridata-runtime-params.json deployApi=false deployMigrationJob=true \
+            --output none
+
+      - name: Run database migrations and provision restricted runtime role
+        id: migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          execution_name="$(az containerapp job start --name nexus-dev-migrate --resource-group "$AZURE_RESOURCE_GROUP" --query name --output tsv)"
+          if [ -z "$execution_name" ]; then
+            echo "::error title=Migration execution unavailable::Container Apps did not return an execution name."
+            exit 1
+          fi
+          echo "Migration execution: $execution_name"
+
+          final_status=''
+          for attempt in $(seq 1 90); do
+            status="$(az containerapp job execution show \
+              --name nexus-dev-migrate \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --job-execution-name "$execution_name" \
+              --query properties.status \
+              --output tsv 2>/dev/null || true)"
+
+            if [ "$status" != "$final_status" ]; then
+              echo "Migration status: ${status:-pending}"
+              final_status="$status"
+            fi
+
+            case "$status" in
+              Succeeded)
+                echo "execution_name=$execution_name" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+              Failed|Stopped)
+                echo "::error title=Migration failed::Container Apps job execution ended with status $status."
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+
+          echo "::error title=Migration timeout::Migration job did not complete within 15 minutes."
+          exit 1
+
+      - name: Review API runtime what-if
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment group what-if \
+            --name "bridata-dev-api-preflight-${GITHUB_RUN_NUMBER}" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/api-runtime.bicep \
+            --parameters @/tmp/bridata-runtime-params.json deployApi=true deployMigrationJob=false \
+            --no-pretty-print
+
+      - name: Deploy Entra-protected API runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment group create \
+            --name "bridata-dev-api-${GITHUB_RUN_NUMBER}" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/api-runtime.bicep \
+            --parameters @/tmp/bridata-runtime-params.json deployApi=true deployMigrationJob=false \
+            --output none
+
+      - name: Verify API health and fail-closed authentication
+        id: health
+        shell: bash
+        run: |
+          set -euo pipefail
+          fqdn="$(az resource show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --resource-type Microsoft.App/containerApps \
+            --name nexus-dev-api \
+            --api-version 2024-03-01 \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)"
+
+          if [ -z "$fqdn" ]; then
+            echo "::error title=API endpoint unavailable::Container Apps did not expose an HTTPS FQDN."
+            exit 1
+          fi
+
+          base_url="https://$fqdn"
+          echo "Waiting for API readiness: $base_url"
+          ready=0
+          for attempt in $(seq 1 36); do
+            live_code="$(curl --silent --output /dev/null --write-out '%{http_code}' "$base_url/health/live" || true)"
+            ready_code="$(curl --silent --output /dev/null --write-out '%{http_code}' "$base_url/health/ready" || true)"
+            echo "Health attempt $attempt: live=$live_code ready=$ready_code"
+            if [ "$live_code" = '200' ] && [ "$ready_code" = '200' ]; then
+              ready=1
+              break
+            fi
+            sleep 10
+          done
+
+          if [ "$ready" -ne 1 ]; then
+            echo "::error title=API not ready::Liveness/readiness did not both return HTTP 200."
+            exit 1
+          fi
+
+          session_code="$(curl --silent --output /dev/null --write-out '%{http_code}' "$base_url/api/v1/session" || true)"
+          if [ "$session_code" != '401' ]; then
+            echo "::error title=Authentication guard unexpected::Unauthenticated /api/v1/session returned HTTP $session_code instead of 401."
+            exit 1
+          fi
+
+          echo "api_url=$base_url" >> "$GITHUB_OUTPUT"
+
+      - name: Publish runtime summary
+        shell: bash
+        env:
+          API_URL: ${{ steps.health.outputs.api_url }}
+          IMAGE_TAG: ${{ steps.runtime.outputs.image_tag }}
+          API_IMAGE: ${{ steps.runtime.outputs.api_image }}
+          MIGRATION_IMAGE: ${{ steps.runtime.outputs.migration_image }}
+          MIGRATION_EXECUTION: ${{ steps.migration.outputs.execution_name }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Bridata Project Azure DEV runtime deployed
+
+          - API URL: \`$API_URL\`
+          - Authentication: **Microsoft Entra / access_as_user**
+          - Image source tag: \`$IMAGE_TAG\`
+          - API image: \`$API_IMAGE\`
+          - Migration image: \`$MIGRATION_IMAGE\`
+          - Migration execution: \`$MIGRATION_EXECUTION\` — **Succeeded**
+          - Liveness: **PASS**
+          - Database readiness: **PASS**
+          - Unauthenticated session request: **401 PASS**
+          - DEV API scaling: **minReplicas=0 / maxReplicas=2**
+
+          Next phase: provision the first Entra identity, configure Bridata Web PKCE and connect the web to this API endpoint.
+          EOF
