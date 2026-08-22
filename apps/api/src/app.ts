@@ -5,6 +5,7 @@ import helmet from '@fastify/helmet';
 import { config } from './config.js';
 import { registerRequestContext } from './auth.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
+import { dependencyRoutes } from './routes/dependencies.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { objectRoutes } from './routes/objects.js';
@@ -70,6 +71,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(meRoutes);
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
+  await app.register(dependencyRoutes);
 
   return app;
 }
