@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { config } from './config.js';
 import { registerRequestContext } from './auth.js';
+import { registerHierarchyWriteGuards } from './hierarchy-guard.js';
 import { baselineRoutes } from './routes/baselines.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
 import { dependencyRoutes } from './routes/dependencies.js';
@@ -68,6 +69,10 @@ export async function buildApp(): Promise<FastifyInstance> {
       correlationId: request.id,
     });
   });
+
+  // Inject hierarchy-specific policy after the normal authenticate/resolveActor
+  // preHandlers of generic object writes, without forking the Object Engine CRUD.
+  registerHierarchyWriteGuards(app);
 
   await app.register(healthRoutes);
   await app.register(sessionRoutes);
