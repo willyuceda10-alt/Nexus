@@ -8,6 +8,7 @@ import { bootstrapRoutes } from './routes/bootstrap.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { objectRoutes } from './routes/objects.js';
+import { sessionRoutes } from './routes/session.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -65,6 +66,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await app.register(healthRoutes);
+  await app.register(sessionRoutes);
   await app.register(meRoutes);
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
