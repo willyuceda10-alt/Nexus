@@ -13,7 +13,6 @@ export type ObjectType =
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export type ObjectStatus =
-  // Project & Task statuses
   | 'DRAFT'
   | 'PLANNING'
   | 'IN_PROGRESS'
@@ -21,12 +20,10 @@ export type ObjectStatus =
   | 'BLOCKED'
   | 'COMPLETED'
   | 'CANCELLED'
-  // Risk statuses
   | 'IDENTIFIED'
   | 'MITIGATING'
   | 'REALIZED'
   | 'CLOSED'
-  // Approval / Document / Change statuses
   | 'PENDING_APPROVAL'
   | 'APPROVED'
   | 'REJECTED';
@@ -122,7 +119,9 @@ export interface NexusObject {
   id: string;
   tenantId: string;
   workspaceId: string;
-  projectId?: string; // Optional if this object is itself a project or portfolio-level
+  objectDefinitionId?: string;
+  version?: number;
+  projectId?: string;
   type: ObjectType;
   title: string;
   description: string;
@@ -138,46 +137,38 @@ export interface NexusObject {
   endDate?: string;
   createdAt: string;
   updatedAt: string;
-  progress: number; // 0 - 100
+  progress: number;
 
-  // Specialized extensions (stored dynamically depending on type)
-  // Project specific
   portfolioId?: string;
-  healthScore?: number; // 0 - 100
+  healthScore?: number;
   budgetTotal?: number;
   budgetSpent?: number;
   baselineStartDate?: string;
   baselineEndDate?: string;
-  
-  // Risk specific
-  probability?: number; // 1-5
-  impact?: number; // 1-5
-  riskScore?: number; // prob * impact (1-25)
+
+  probability?: number;
+  impact?: number;
+  riskScore?: number;
   mitigationPlan?: string;
   isRealized?: boolean;
 
-  // Meeting specific
   meetingDate?: string;
   meetingAgenda?: string;
   meetingMinutes?: string;
   participants?: string[];
 
-  // Decision specific
   decisionJustification?: string;
   decisionAuthorizerId?: string;
   meetingId?: string;
 
-  // Change Request specific
   costImpact?: number;
   timeImpactDays?: number;
   changeReason?: string;
 
-  // Document specific
   fileVersion?: string;
   fileSizeMb?: number;
   fileCategory?: string;
 
-  // Custom metadata fields
   customFields?: Record<string, any>;
 }
 
