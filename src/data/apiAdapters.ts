@@ -9,6 +9,7 @@ import type {
   ObjectStatus,
   ObjectType,
   Priority,
+  ResourceKind,
   ScheduleCalendarMode,
   Tenant,
   User,
@@ -20,6 +21,7 @@ const objectTypes = new Set<ObjectType>([
   'PORTFOLIO',
   'PROGRAM',
   'PROJECT',
+  'RESOURCE',
   'TASK',
   'RISK',
   'DOCUMENT',
@@ -105,6 +107,10 @@ function scheduleCalendarMode(value: string | undefined): ScheduleCalendarMode |
   return value === 'CALENDAR_DAYS_V1' || value === 'WORKING_DAYS_V1' ? value : undefined;
 }
 
+function resourceKind(value: string | undefined): ResourceKind | undefined {
+  return value === 'PERSON' || value === 'EQUIPMENT' || value === 'VENDOR' ? value : undefined;
+}
+
 function tenantPlan(plan: ApiTenant['plan']): Tenant['plan'] {
   if (plan === 'ENTERPRISE' || plan === 'CUSTOM') return 'Enterprise';
   if (plan === 'PROFESSIONAL') return 'Business';
@@ -177,6 +183,7 @@ export function apiObjectToNexusObject(
   const assigneeAvatar = value.assignee?.avatarUrl ?? fallback?.assigneeAvatar;
   const customFields = asRecord(metadata.customFields);
   const calendarMode = scheduleCalendarMode(stringValue(metadata, 'scheduleCalendarMode'));
+  const kind = resourceKind(stringValue(metadata, 'resourceKind'));
 
   return {
     id: value.id,
@@ -213,6 +220,13 @@ export function apiObjectToNexusObject(
     ...(calendarMode ? { scheduleCalendarMode: calendarMode } : {}),
     ...(numberArrayValue(metadata, 'scheduleWorkingWeekdays') ? { scheduleWorkingWeekdays: numberArrayValue(metadata, 'scheduleWorkingWeekdays') } : {}),
     ...(stringArrayValue(metadata, 'scheduleHolidays') ? { scheduleHolidays: stringArrayValue(metadata, 'scheduleHolidays') } : {}),
+    ...(numberValue(metadata, 'effortHours') !== undefined ? { effortHours: numberValue(metadata, 'effortHours') } : {}),
+    ...(stringValue(metadata, 'linkedUserId') ? { linkedUserId: stringValue(metadata, 'linkedUserId') } : {}),
+    ...(kind ? { resourceKind: kind } : {}),
+    ...(numberValue(metadata, 'capacityHoursPerDay') !== undefined ? { capacityHoursPerDay: numberValue(metadata, 'capacityHoursPerDay') } : {}),
+    ...(numberArrayValue(metadata, 'resourceWorkingWeekdays') ? { resourceWorkingWeekdays: numberArrayValue(metadata, 'resourceWorkingWeekdays') } : {}),
+    ...(stringArrayValue(metadata, 'resourceHolidays') ? { resourceHolidays: stringArrayValue(metadata, 'resourceHolidays') } : {}),
+    ...(stringArrayValue(metadata, 'skills') ? { skills: stringArrayValue(metadata, 'skills') } : {}),
     ...(numberValue(metadata, 'probability') !== undefined ? { probability: numberValue(metadata, 'probability') } : {}),
     ...(numberValue(metadata, 'impact') !== undefined ? { impact: numberValue(metadata, 'impact') } : {}),
     ...(numberValue(metadata, 'riskScore') !== undefined ? { riskScore: numberValue(metadata, 'riskScore') } : {}),
@@ -249,6 +263,13 @@ const metadataKeys = [
   'scheduleCalendarMode',
   'scheduleWorkingWeekdays',
   'scheduleHolidays',
+  'effortHours',
+  'linkedUserId',
+  'resourceKind',
+  'capacityHoursPerDay',
+  'resourceWorkingWeekdays',
+  'resourceHolidays',
+  'skills',
   'probability',
   'impact',
   'riskScore',
