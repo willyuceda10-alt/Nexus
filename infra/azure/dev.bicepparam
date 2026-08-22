@@ -10,3 +10,7 @@ param postgresAdministratorLogin = 'bridata_admin'
 param postgresDatabaseName = 'bridata'
 param postgresSkuName = 'Standard_B1ms'
 param postgresStorageSizeGb = 32
+
+// Delivery guard: API + migration job stay disabled until ACR images, Key Vault
+// secrets, Entra registrations and the explicit Owner-controlled RBAC grants exist.
+param deployApiRuntime = false
