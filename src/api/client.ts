@@ -16,6 +16,7 @@ import type {
   UpdateApiDependencyInput,
   UpdateApiObjectInput,
 } from './contracts';
+import type { ApiResourceCapacityResponse } from './resourceCapacityContracts';
 
 export type AccessTokenProvider = () => Promise<string | null>;
 export type TenantIdProvider = () => string | null;
@@ -124,6 +125,17 @@ export const bridataApi = {
     const query = new URLSearchParams({ projectId });
     if (asOf) query.set('asOf', asOf);
     return request<ApiProjectForecast>(`/api/v1/forecast?${query.toString()}`, { signal });
+  },
+  resourceCapacity(
+    workspaceId: string,
+    from?: string,
+    to?: string,
+    signal?: AbortSignal,
+  ): Promise<ApiResourceCapacityResponse> {
+    const query = new URLSearchParams({ workspaceId });
+    if (from) query.set('from', from);
+    if (to) query.set('to', to);
+    return request<ApiResourceCapacityResponse>(`/api/v1/resource-capacity?${query.toString()}`, { signal });
   },
   saveProjectBaseline(projectId: string, overwrite = false): Promise<ApiBaselineSummary> {
     return request<ApiBaselineSummary>(`/api/v1/projects/${encodeURIComponent(projectId)}/baseline`, {
