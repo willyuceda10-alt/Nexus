@@ -1,0 +1,251 @@
+name: Azure DEV Foundation Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type DEPLOY-BRIDATA-DEV to create/update the paid DEV foundation and PostgreSQL.'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: bridata-azure-dev-foundation-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Bridata DEV foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-nexus-dev' }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'brazilsouth' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate explicit deployment confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRMATION" != "DEPLOY-BRIDATA-DEV" ]; then
+            echo "::error title=Deployment not confirmed::Type DEPLOY-BRIDATA-DEV exactly to authorize the paid DEV deployment."
+            exit 1
+          fi
+
+      - name: Validate Azure identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP AZURE_LOCATION; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error title=Missing Azure identifier::${name} is not configured."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Login to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify target scope and providers
+        shell: bash
+        run: |
+          set -euo pipefail
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          actual_location="$(az group show --name "$AZURE_RESOURCE_GROUP" --query location --output tsv)"
+          echo "Resource group: $AZURE_RESOURCE_GROUP"
+          echo "Resource group location: $actual_location"
+          echo "Configured location: $AZURE_LOCATION"
+
+          missing=0
+          for namespace in \
+            Microsoft.App \
+            Microsoft.ContainerRegistry \
+            Microsoft.DBforPostgreSQL \
+            Microsoft.Insights \
+            Microsoft.KeyVault \
+            Microsoft.ManagedIdentity \
+            Microsoft.Network \
+            Microsoft.OperationalInsights \
+            Microsoft.Storage; do
+            state="$(az provider show --namespace "$namespace" --query registrationState --output tsv)"
+            echo "$namespace: $state"
+            if [ "$state" != "Registered" ]; then
+              echo "::error title=Azure provider not registered::$namespace is $state. Register it before deployment."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Validate deployment templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          az bicep build --file infra/azure/main.bicep --stdout > /dev/null
+          az bicep build --file infra/azure/api-runtime.bicep --stdout > /dev/null
+          az bicep build-params --file infra/azure/dev.bicepparam --stdout > /dev/null
+
+      - name: Generate ephemeral database credentials
+        id: credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADMIN_PASSWORD="BridataAdminAa1$(openssl rand -hex 20)"
+          RUNTIME_PASSWORD="BridataRuntimeAa1$(openssl rand -hex 20)"
+
+          echo "::add-mask::$ADMIN_PASSWORD"
+          echo "::add-mask::$RUNTIME_PASSWORD"
+
+          printf 'BRIDATA_PG_ADMIN_PASSWORD=%s\n' "$ADMIN_PASSWORD" >> "$GITHUB_ENV"
+          printf 'BRIDATA_PG_RUNTIME_PASSWORD=%s\n' "$RUNTIME_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Review Azure what-if immediately before deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment group what-if \
+            --name "bridata-dev-deploy-preflight-${GITHUB_RUN_NUMBER}" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/main.bicep \
+            --parameters \
+              namePrefix=nexus \
+              environment=dev \
+              deployPostgres=true \
+              postgresAdministratorLogin=bridata_admin \
+              postgresAdministratorPassword="$BRIDATA_PG_ADMIN_PASSWORD" \
+              postgresDatabaseName=bridata \
+              postgresSkuName=Standard_B1ms \
+              postgresStorageSizeGb=32 \
+              storeDatabaseSecrets=true \
+              postgresRuntimeRole=nexus_runtime \
+              postgresRuntimePassword="$BRIDATA_PG_RUNTIME_PASSWORD" \
+              deployApiRuntime=false \
+            --no-pretty-print
+
+      - name: Deploy private DEV foundation and PostgreSQL
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployment_name="bridata-dev-foundation-${GITHUB_RUN_NUMBER}"
+
+          az deployment group create \
+            --name "$deployment_name" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/main.bicep \
+            --parameters \
+              namePrefix=nexus \
+              environment=dev \
+              deployPostgres=true \
+              postgresAdministratorLogin=bridata_admin \
+              postgresAdministratorPassword="$BRIDATA_PG_ADMIN_PASSWORD" \
+              postgresDatabaseName=bridata \
+              postgresSkuName=Standard_B1ms \
+              postgresStorageSizeGb=32 \
+              storeDatabaseSecrets=true \
+              postgresRuntimeRole=nexus_runtime \
+              postgresRuntimePassword="$BRIDATA_PG_RUNTIME_PASSWORD" \
+              deployApiRuntime=false \
+            --query properties.outputs \
+            --output json > /tmp/bridata-dev-outputs.json
+
+          echo "deployment_name=$deployment_name" >> "$GITHUB_OUTPUT"
+          echo "postgres_name=$(jq -r '.deployedPostgresServerName.value' /tmp/bridata-dev-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "key_vault_name=$(jq -r '.keyVaultName.value' /tmp/bridata-dev-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "acr_name=$(jq -r '.containerRegistryName.value' /tmp/bridata-dev-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "api_identity_name=$(jq -r '.apiManagedIdentityName.value' /tmp/bridata-dev-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "container_environment_name=$(jq -r '.containerAppsEnvironmentName.value' /tmp/bridata-dev-outputs.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Verify private PostgreSQL and stored secret resources
+        shell: bash
+        env:
+          POSTGRES_NAME: ${{ steps.deploy.outputs.postgres_name }}
+          KEY_VAULT_NAME: ${{ steps.deploy.outputs.key_vault_name }}
+        run: |
+          set -euo pipefail
+
+          public_access="$(az postgres flexible-server show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$POSTGRES_NAME" \
+            --query 'network.publicNetworkAccess' \
+            --output tsv)"
+
+          state="$(az postgres flexible-server show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$POSTGRES_NAME" \
+            --query 'state' \
+            --output tsv)"
+
+          echo "PostgreSQL state: $state"
+          echo "PostgreSQL public network access: $public_access"
+
+          if [ "$public_access" != "Disabled" ]; then
+            echo "::error title=PostgreSQL exposure detected::Expected publicNetworkAccess=Disabled."
+            exit 1
+          fi
+
+          for secret_name in admin-database-url runtime-database-url; do
+            az resource show \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --resource-type 'Microsoft.KeyVault/vaults/secrets' \
+              --name "$KEY_VAULT_NAME/$secret_name" \
+              --api-version '2023-07-01' \
+              --query name \
+              --output tsv > /dev/null
+            echo "Secret resource present: $secret_name"
+          done
+
+      - name: Publish deployment summary
+        shell: bash
+        env:
+          DEPLOYMENT_NAME: ${{ steps.deploy.outputs.deployment_name }}
+          POSTGRES_NAME: ${{ steps.deploy.outputs.postgres_name }}
+          KEY_VAULT_NAME: ${{ steps.deploy.outputs.key_vault_name }}
+          ACR_NAME: ${{ steps.deploy.outputs.acr_name }}
+          API_IDENTITY_NAME: ${{ steps.deploy.outputs.api_identity_name }}
+          CONTAINER_ENVIRONMENT_NAME: ${{ steps.deploy.outputs.container_environment_name }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Bridata Project DEV foundation deployed
+
+          - Deployment: \`$DEPLOYMENT_NAME\`
+          - Resource group: \`$AZURE_RESOURCE_GROUP\`
+          - PostgreSQL: \`$POSTGRES_NAME\` — private network only
+          - PostgreSQL profile: \`Standard_B1ms\`, PostgreSQL 16, 32 GiB, no HA
+          - Key Vault: \`$KEY_VAULT_NAME\`
+          - ACR: \`$ACR_NAME\`
+          - API managed identity: \`$API_IDENTITY_NAME\`
+          - Container Apps Environment: \`$CONTAINER_ENVIRONMENT_NAME\`
+          - API runtime: **not deployed yet**
+
+          Database credentials were generated only in runner memory, masked, and persisted as Key Vault secret resources. They are not written to git, workflow artifacts, outputs, or the summary.
+
+          Next controlled step: Owner RBAC + Entra App Registrations, then ACR build, migration job, API runtime and web API mode.
+          EOF
+
+      - name: Clear generated credentials
+        if: always()
+        shell: bash
+        run: |
+          unset BRIDATA_PG_ADMIN_PASSWORD || true
+          unset BRIDATA_PG_RUNTIME_PASSWORD || true
