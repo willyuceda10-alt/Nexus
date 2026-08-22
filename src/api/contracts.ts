@@ -16,6 +16,30 @@ export interface ApiTenant {
   metadata: unknown;
 }
 
+export interface SessionTenant extends ApiTenant {
+  membershipId: string;
+  role: string;
+}
+
+export interface SessionResponse {
+  product: {
+    name: string;
+    apiVersion: string;
+  };
+  identity: {
+    provider: 'ENTRA_ID' | 'DEV';
+    providerTenantId: string | null;
+  };
+  user: {
+    id: string;
+    email: string;
+    fullName: string;
+    avatarUrl: string | null;
+  };
+  tenants: SessionTenant[];
+  preferredTenantId: string | null;
+}
+
 export interface ApiWorkspace {
   id: string;
   name: string;

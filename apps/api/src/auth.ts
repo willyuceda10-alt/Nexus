@@ -17,6 +17,14 @@ export interface AuthPrincipal {
   devTenantId?: string;
 }
 
+export interface AuthenticatedUser {
+  id: string;
+  email: string;
+  fullName: string;
+  avatarUrl: string | null;
+  isActive: boolean;
+}
+
 export interface ActorContext {
   tenantId: string;
   userId: string;
@@ -33,8 +41,9 @@ declare module 'fastify' {
   }
 }
 
+const jwksTenant = config.ENTRA_TENANT_ID ?? 'common';
 const entraJwks = createRemoteJWKSet(
-  new URL('https://login.microsoftonline.com/common/discovery/v2.0/keys'),
+  new URL(`https://login.microsoftonline.com/${jwksTenant}/discovery/v2.0/keys`),
 );
 
 export function registerRequestContext(app: FastifyInstance): void {
@@ -74,13 +83,24 @@ export async function authenticate(
     if (!entraTenantId) {
       throw new Error('Token does not contain an Entra tenant id (tid).');
     }
+    if (entraTenantId !== config.ENTRA_TENANT_ID) {
+      throw new Error('Token was issued by an unexpected Entra tenant.');
+    }
 
-    const issuer = `https://login.microsoftonline.com/${entraTenantId}/v2.0`;
+    const issuer = `https://login.microsoftonline.com/${config.ENTRA_TENANT_ID}/v2.0`;
     const { payload } = await jwtVerify(token, entraJwks, {
-      audience: config.ENTRA_CLIENT_ID!,
+      audience: config.ENTRA_API_CLIENT_ID!,
       issuer,
       clockTolerance: 5,
     });
+
+    const delegatedScopes =
+      typeof payload.scp === 'string'
+        ? payload.scp.split(' ').map((scope) => scope.trim()).filter(Boolean)
+        : [];
+    if (!delegatedScopes.includes(config.ENTRA_REQUIRED_SCOPE)) {
+      throw new Error('Token does not contain the required delegated API scope.');
+    }
 
     const subject =
       typeof payload.oid === 'string'
@@ -109,9 +129,49 @@ export async function authenticate(
     request.log.warn({ err: error }, 'Entra token validation failed');
     await reply.code(401).send({
       error: 'unauthorized',
-      message: 'The access token is invalid or expired.',
+      message: 'The access token is invalid, expired, or not authorized for this API.',
     });
   }
+}
+
+export async function resolveAuthenticatedUser(
+  principal: AuthPrincipal,
+): Promise<AuthenticatedUser | null> {
+  if (principal.provider === 'DEV') {
+    return prisma.user.findUnique({
+      where: { id: principal.devUserId! },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        avatarUrl: true,
+        isActive: true,
+      },
+    });
+  }
+
+  const identity = await prisma.userIdentity.findUnique({
+    where: {
+      provider_issuer_subject: {
+        provider: 'ENTRA_ID',
+        issuer: principal.issuer,
+        subject: principal.subject,
+      },
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          fullName: true,
+          avatarUrl: true,
+          isActive: true,
+        },
+      },
+    },
+  });
+
+  return identity?.user ?? null;
 }
 
 function readHeader(request: FastifyRequest, name: string): string | undefined {
@@ -174,18 +234,8 @@ export async function resolveActor(
     return;
   }
 
-  const identity = await prisma.userIdentity.findUnique({
-    where: {
-      provider_issuer_subject: {
-        provider: 'ENTRA_ID',
-        issuer: principal.issuer,
-        subject: principal.subject,
-      },
-    },
-    include: { user: true },
-  });
-
-  if (!identity || !identity.user.isActive) {
+  const user = await resolveAuthenticatedUser(principal);
+  if (!user || !user.isActive) {
     await reply.code(403).send({
       error: 'identity_not_provisioned',
       message: 'This Microsoft identity is not provisioned in Bridata Project.',
@@ -198,7 +248,7 @@ export async function resolveActor(
       where: {
         tenantId_userId: {
           tenantId,
-          userId: identity.userId,
+          userId: user.id,
         },
       },
     }),
@@ -214,11 +264,11 @@ export async function resolveActor(
 
   request.actor = {
     tenantId,
-    userId: identity.userId,
+    userId: user.id,
     membershipId: membership.id,
     role: membership.role,
-    email: identity.user.email,
-    name: identity.user.fullName,
+    email: user.email,
+    name: user.fullName,
   };
 }
 

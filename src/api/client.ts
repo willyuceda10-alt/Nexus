@@ -6,6 +6,7 @@ import type {
   BootstrapResponse,
   CreateApiObjectInput,
   ListObjectsParams,
+  SessionResponse,
   UpdateApiObjectInput,
 } from './contracts';
 
@@ -94,6 +95,10 @@ function objectListPath(params: ListObjectsParams = {}): string {
 }
 
 export const bridataApi = {
+  session(signal?: AbortSignal): Promise<SessionResponse> {
+    return request<SessionResponse>('/api/v1/session', { signal });
+  },
+
   bootstrap(signal?: AbortSignal): Promise<BootstrapResponse> {
     return request<BootstrapResponse>('/api/v1/bootstrap', { signal });
   },

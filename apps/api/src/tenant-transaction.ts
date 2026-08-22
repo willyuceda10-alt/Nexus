@@ -10,3 +10,13 @@ export async function withTenant<T>(
     return operation(tx);
   });
 }
+
+export async function withAuthenticatedUser<T>(
+  userId: string,
+  operation: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.current_user_id', ${userId}, true)`;
+    return operation(tx);
+  });
+}

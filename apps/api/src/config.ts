@@ -13,18 +13,29 @@ const envSchema = z
     DATABASE_URL: z.string().min(1),
     CORS_ORIGINS: z.string().default('http://localhost:3000'),
     AUTH_MODE: z.enum(['entra', 'dev']).default('entra'),
-    ENTRA_CLIENT_ID: z.string().uuid().optional(),
+    ENTRA_API_CLIENT_ID: z.string().uuid().optional(),
+    ENTRA_TENANT_ID: z.string().uuid().optional(),
+    ENTRA_REQUIRED_SCOPE: z.string().trim().min(1).default('access_as_user'),
     DEV_AUTH_ENABLED: booleanFromEnv.default('false'),
     DEV_USER_ID: z.string().uuid().optional(),
     DEV_TENANT_ID: z.string().uuid().optional(),
   })
   .superRefine((env, ctx) => {
-    if (env.AUTH_MODE === 'entra' && !env.ENTRA_CLIENT_ID) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['ENTRA_CLIENT_ID'],
-        message: 'ENTRA_CLIENT_ID is required when AUTH_MODE=entra',
-      });
+    if (env.AUTH_MODE === 'entra') {
+      if (!env.ENTRA_API_CLIENT_ID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['ENTRA_API_CLIENT_ID'],
+          message: 'ENTRA_API_CLIENT_ID is required when AUTH_MODE=entra',
+        });
+      }
+      if (!env.ENTRA_TENANT_ID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['ENTRA_TENANT_ID'],
+          message: 'ENTRA_TENANT_ID is required when AUTH_MODE=entra',
+        });
+      }
     }
 
     if (env.AUTH_MODE === 'dev') {
@@ -49,7 +60,7 @@ const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
   const details = parsed.error.flatten().fieldErrors;
-  throw new Error(`Invalid Nexus API configuration: ${JSON.stringify(details)}`);
+  throw new Error(`Invalid Bridata Project API configuration: ${JSON.stringify(details)}`);
 }
 
 export const config = {
@@ -59,4 +70,4 @@ export const config = {
     .filter(Boolean),
 };
 
-export type NexusConfig = typeof config;
+export type BridataConfig = typeof config;
