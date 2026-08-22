@@ -1,98 +1,313 @@
 import React from 'react';
-import { Calendar, AlertTriangle, Layers, Clock } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, Diamond, Milestone } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
+
+const DAY_MS = 86_400_000;
+
+function parseDate(value?: string): Date | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return null;
+
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function addDays(date: Date, amount: number): Date {
+  return new Date(date.getTime() + amount * DAY_MS);
+}
+
+function daysBetween(from: Date, to: Date): number {
+  return Math.round((to.getTime() - from.getTime()) / DAY_MS);
+}
+
+function startOfMonth(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
+
+function endOfMonth(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
+}
+
+function formatShortDate(date: Date): string {
+  return new Intl.DateTimeFormat('es-PE', {
+    day: '2-digit',
+    month: 'short',
+    timeZone: 'UTC',
+  }).format(date);
+}
+
+function formatMonth(date: Date): string {
+  return new Intl.DateTimeFormat('es-PE', {
+    month: 'short',
+    year: '2-digit',
+    timeZone: 'UTC',
+  }).format(date).replace('.', '');
+}
 
 export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
   const { objects, openObjectDrawer } = useNexus();
 
   const items = objects.filter(
-    (o) => (o.projectId === projectId || o.id === projectId) && (o.type === 'TASK' || o.type === 'DELIVERABLE' || o.type === 'MILESTONE')
+    (object) =>
+      object.projectId === projectId &&
+      ['TASK', 'DELIVERABLE', 'MILESTONE'].includes(object.type),
   );
 
-  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  const scheduledItems = items
+    .map((item) => {
+      const start = parseDate(item.startDate) ?? parseDate(item.endDate);
+      const rawEnd = parseDate(item.endDate) ?? start;
+      if (!start || !rawEnd) return null;
+
+      const end = rawEnd.getTime() < start.getTime() ? start : rawEnd;
+      return { item, start, end };
+    })
+    .filter((value): value is NonNullable<typeof value> => value !== null)
+    .sort((a, b) => a.start.getTime() - b.start.getTime() || a.end.getTime() - b.end.getTime());
+
+  const unscheduledItems = items.filter((item) => !parseDate(item.startDate) && !parseDate(item.endDate));
+
+  if (items.length === 0) {
+    return (
+      <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-8 text-center">
+        <div className="grid h-11 w-11 place-items-center rounded-2xl bg-green-50 text-green-700">
+          <CalendarDays className="h-5 w-5" />
+        </div>
+        <p className="mt-4 text-[12px] font-bold text-slate-800">Todavía no hay actividades para el cronograma</p>
+        <p className="mt-1 max-w-md text-[10px] leading-5 text-slate-400">
+          Agrega tareas, entregables o hitos al proyecto para construir el Gantt.
+        </p>
+      </div>
+    );
+  }
+
+  if (scheduledItems.length === 0) {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-6">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700">
+            <Clock3 className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-[12px] font-bold text-slate-900">El proyecto aún no tiene fechas suficientes para dibujar el Gantt</p>
+            <p className="mt-1 text-[10px] leading-5 text-slate-500">
+              Define fecha de inicio o fecha fin en al menos una tarea, entregable o hito. Bridata Project no inventará posiciones en el cronograma.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const earliestStart = new Date(Math.min(...scheduledItems.map(({ start }) => start.getTime())));
+  const latestEnd = new Date(Math.max(...scheduledItems.map(({ end }) => end.getTime())));
+  const rangeStart = startOfMonth(earliestStart);
+  const rangeEnd = endOfMonth(latestEnd);
+  const totalDays = Math.max(1, daysBetween(rangeStart, rangeEnd) + 1);
+
+  const monthSegments: Array<{ date: Date; left: number; width: number }> = [];
+  let monthCursor = startOfMonth(rangeStart);
+  while (monthCursor.getTime() <= rangeEnd.getTime()) {
+    const nextMonth = new Date(Date.UTC(monthCursor.getUTCFullYear(), monthCursor.getUTCMonth() + 1, 1));
+    const segmentStart = monthCursor.getTime() < rangeStart.getTime() ? rangeStart : monthCursor;
+    const naturalEnd = addDays(nextMonth, -1);
+    const segmentEnd = naturalEnd.getTime() > rangeEnd.getTime() ? rangeEnd : naturalEnd;
+
+    monthSegments.push({
+      date: monthCursor,
+      left: (daysBetween(rangeStart, segmentStart) / totalDays) * 100,
+      width: ((daysBetween(segmentStart, segmentEnd) + 1) / totalDays) * 100,
+    });
+
+    monthCursor = nextMonth;
+  }
+
+  const todayLocal = new Date();
+  const today = new Date(Date.UTC(todayLocal.getFullYear(), todayLocal.getMonth(), todayLocal.getDate()));
+  const todayInRange = today.getTime() >= rangeStart.getTime() && today.getTime() <= rangeEnd.getTime();
+  const todayLeft = (daysBetween(rangeStart, today) / totalDays) * 100;
+
+  const completedCount = items.filter((item) => item.status === 'COMPLETED').length;
+  const criticalCount = items.filter((item) => item.status === 'BLOCKED' || item.priority === 'CRITICAL').length;
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-        <div className="flex items-center space-x-2">
-          <Calendar className="h-4 w-4 text-indigo-600" />
-          <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100">
-            Cronograma Gantt de Entregables y Hitos (Ruta Crítica)
-          </h3>
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div className="flex flex-col gap-4 border-b border-slate-100 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-green-700" />
+            <h3 className="text-[12px] font-bold text-slate-900">Cronograma del proyecto</h3>
+          </div>
+          <p className="mt-1 text-[9px] text-slate-400">
+            Posición y duración calculadas desde las fechas registradas; sin barras simuladas.
+          </p>
         </div>
-        <div className="flex items-center space-x-3 text-[11px]">
-          <span className="flex items-center space-x-1">
-            <span className="h-2.5 w-2.5 rounded bg-indigo-600"></span>
-            <span className="text-slate-500">En Progreso</span>
+
+        <div className="flex flex-wrap items-center gap-2 text-[9px] font-semibold">
+          <span className="rounded-full bg-slate-50 px-2.5 py-1 text-slate-500 ring-1 ring-slate-200">
+            {scheduledItems.length} programados
           </span>
-          <span className="flex items-center space-x-1">
-            <span className="h-2.5 w-2.5 rounded bg-rose-600"></span>
-            <span className="text-slate-500">Ruta Crítica / Bloqueado</span>
+          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700 ring-1 ring-emerald-200">
+            {completedCount} completados
           </span>
-          <span className="flex items-center space-x-1">
-            <span className="h-2.5 w-2.5 rounded bg-emerald-600"></span>
-            <span className="text-slate-500">Completado</span>
-          </span>
+          {criticalCount > 0 && (
+            <span className="rounded-full bg-rose-50 px-2.5 py-1 text-rose-700 ring-1 ring-rose-200">
+              {criticalCount} críticos/bloqueados
+            </span>
+          )}
+          {unscheduledItems.length > 0 && (
+            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-700 ring-1 ring-amber-200">
+              {unscheduledItems.length} sin fecha
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Gantt Timeline Grid */}
-      <div className="mt-4 overflow-x-auto">
-        <div className="min-w-[800px]">
-          {/* Month Header Row */}
-          <div className="grid grid-cols-12 border-b border-slate-200 py-2 text-center text-[10px] font-bold uppercase text-slate-400 dark:border-slate-800">
-            <div className="col-span-3 text-left pl-2">Entregable / Objeto</div>
-            {months.slice(0, 9).map((m, idx) => (
-              <div key={idx} className="col-span-1 border-l border-slate-100 dark:border-slate-800">
-                {m} 2026
-              </div>
-            ))}
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-4 py-2.5">
+        <div className="flex items-center gap-4 text-[9px] font-medium text-slate-500">
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-green-600" /> En ejecución</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-700" /> Completado</span>
+          <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" /> Crítico / bloqueado</span>
+          <span className="flex items-center gap-1.5"><Diamond className="h-2.5 w-2.5 fill-amber-500 text-amber-500" /> Hito</span>
+        </div>
+        <p className="hidden text-[9px] font-medium text-slate-400 sm:block">
+          {formatShortDate(rangeStart)} — {formatShortDate(rangeEnd)}
+        </p>
+      </div>
+
+      <div className="overflow-x-auto">
+        <div className="min-w-[1040px]">
+          <div className="grid grid-cols-[290px_minmax(750px,1fr)] border-b border-slate-100 bg-white">
+            <div className="border-r border-slate-100 px-4 py-3">
+              <p className="text-[9px] font-bold uppercase tracking-[0.11em] text-slate-400">Actividad / objeto</p>
+            </div>
+            <div className="relative h-10">
+              {monthSegments.map((segment) => (
+                <div
+                  key={`${segment.date.getUTCFullYear()}-${segment.date.getUTCMonth()}`}
+                  className="absolute inset-y-0 flex items-center justify-center border-l border-slate-100 text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400"
+                  style={{ left: `${segment.left}%`, width: `${segment.width}%` }}
+                >
+                  {formatMonth(segment.date)}
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Gantt Bars */}
-          <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
-            {items.map((item, idx) => {
-              // Calculate horizontal position demo mock
-              const startCol = (idx % 6) + 1;
-              const spanCol = (idx % 3) + 2;
-              const isCritical = item.priority === 'CRITICAL' || item.status === 'BLOCKED';
+          <div className="divide-y divide-slate-100">
+            {scheduledItems.map(({ item, start, end }) => {
+              const isCritical = item.status === 'BLOCKED' || item.priority === 'CRITICAL';
               const isCompleted = item.status === 'COMPLETED';
+              const isMilestone = item.type === 'MILESTONE';
+              const left = Math.max(0, Math.min(100, (daysBetween(rangeStart, start) / totalDays) * 100));
+              const rawWidth = ((daysBetween(start, end) + 1) / totalDays) * 100;
+              const width = Math.max(0.8, Math.min(100 - left, rawWidth));
+
+              const trackClass = isCritical
+                ? 'bg-rose-100 ring-rose-200'
+                : isCompleted
+                  ? 'bg-emerald-700 ring-emerald-700'
+                  : 'bg-green-100 ring-green-200';
+              const fillClass = isCritical ? 'bg-rose-500' : 'bg-green-700';
 
               return (
-                <div
+                <button
                   key={item.id}
                   onClick={() => openObjectDrawer(item.id)}
-                  className="grid cursor-pointer grid-cols-12 items-center py-3 transition hover:bg-indigo-50/30 dark:hover:bg-slate-800/50"
+                  className="grid w-full grid-cols-[290px_minmax(750px,1fr)] text-left transition hover:bg-green-50/30"
                 >
-                  {/* Title Col */}
-                  <div className="col-span-3 pl-2 pr-2 truncate">
-                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{item.title}</div>
-                    <div className="text-[10px] text-slate-400">{item.type} | #{item.id}</div>
+                  <div className="flex min-w-0 items-center gap-3 border-r border-slate-100 px-4 py-3">
+                    <span
+                      className={`h-2 w-2 flex-shrink-0 rounded-full ${
+                        isCritical ? 'bg-rose-500' : isCompleted ? 'bg-emerald-600' : 'bg-green-500'
+                      }`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[10px] font-semibold text-slate-800">{item.title}</span>
+                      <span className="mt-1 flex items-center gap-2 text-[8px] font-medium text-slate-400">
+                        <span>{item.type}</span>
+                        <span>•</span>
+                        <span>{item.progress}%</span>
+                        <span>•</span>
+                        <span>{formatShortDate(start)} → {formatShortDate(end)}</span>
+                      </span>
+                    </span>
                   </div>
 
-                  {/* Timeline Bar Area */}
-                  <div className="col-span-9 relative h-7 flex items-center">
-                    <div
-                      className={`absolute h-5 rounded-lg text-[10px] font-bold text-white flex items-center px-2 shadow-xs transition hover:scale-102 ${
-                        isCompleted
-                          ? 'bg-emerald-600'
-                          : isCritical
-                          ? 'bg-rose-600 animate-pulse'
-                          : 'bg-indigo-600'
-                      }`}
-                      style={{
-                        left: `${(startCol / 9) * 100}%`,
-                        width: `${(spanCol / 9) * 100}%`,
-                      }}
-                    >
-                      <span className="truncate">{item.progress}% - {item.title}</span>
-                    </div>
+                  <div className="relative h-[52px] overflow-hidden">
+                    {monthSegments.map((segment) => (
+                      <span
+                        key={`grid-${item.id}-${segment.date.getTime()}`}
+                        className="absolute inset-y-0 border-l border-slate-100/80"
+                        style={{ left: `${segment.left}%` }}
+                      />
+                    ))}
+
+                    {todayInRange && (
+                      <span
+                        className="absolute inset-y-0 z-10 w-px bg-sky-500/60"
+                        style={{ left: `${todayLeft}%` }}
+                        title="Hoy"
+                      />
+                    )}
+
+                    {isMilestone ? (
+                      <span
+                        className={`absolute top-1/2 z-20 h-3.5 w-3.5 -translate-y-1/2 rotate-45 rounded-[2px] shadow-sm ${isCritical ? 'bg-rose-500' : isCompleted ? 'bg-emerald-700' : 'bg-amber-500'}`}
+                        style={{ left: `calc(${left}% - 7px)` }}
+                        title={`${item.title}: ${formatShortDate(start)}`}
+                      />
+                    ) : (
+                      <span
+                        className={`absolute top-1/2 z-20 h-4 -translate-y-1/2 overflow-hidden rounded-md ring-1 ${trackClass}`}
+                        style={{ left: `${left}%`, width: `${width}%` }}
+                        title={`${item.title}: ${formatShortDate(start)} – ${formatShortDate(end)}`}
+                      >
+                        {!isCompleted && (
+                          <span
+                            className={`block h-full ${fillClass}`}
+                            style={{ width: `${Math.max(0, Math.min(100, item.progress))}%` }}
+                          />
+                        )}
+                      </span>
+                    )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
         </div>
+      </div>
+
+      {unscheduledItems.length > 0 && (
+        <div className="border-t border-amber-100 bg-amber-50/40 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-600" />
+            <div className="min-w-0">
+              <p className="text-[9px] font-bold text-amber-800">Objetos fuera del Gantt por falta de fecha</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {unscheduledItems.slice(0, 6).map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => openObjectDrawer(item.id)}
+                    className="rounded-lg bg-white px-2 py-1 text-[8px] font-semibold text-slate-600 ring-1 ring-amber-200 transition hover:text-green-800"
+                  >
+                    {item.title}
+                  </button>
+                ))}
+                {unscheduledItems.length > 6 && (
+                  <span className="px-1 py-1 text-[8px] font-semibold text-amber-700">+{unscheduledItems.length - 6} más</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2.5 text-[8px] font-medium text-slate-400">
+        <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Fechas provenientes de los objetos del proyecto</span>
+        <span className="flex items-center gap-1.5"><Milestone className="h-3 w-3 text-amber-500" /> CPM y dependencias se incorporarán sobre relaciones reales</span>
       </div>
     </div>
   );
