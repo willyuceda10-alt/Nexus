@@ -1,5 +1,5 @@
 import { bridataApi } from '../api/client';
-import type { BootstrapResponse, ListObjectsParams } from '../api/contracts';
+import type { ApiObjectDefinition, ListObjectsParams } from '../api/contracts';
 import type { NexusObject, User } from '../types/nexus';
 import {
   apiObjectToNexusObject,
@@ -8,9 +8,10 @@ import {
 } from './apiAdapters';
 
 export interface ObjectRepositoryContext {
-  bootstrap: BootstrapResponse;
+  tenantId: string;
   workspaceId: string;
   currentUser: User;
+  objectDefinitions?: ApiObjectDefinition[];
 }
 
 export interface ObjectListResult {
@@ -36,7 +37,7 @@ function localCreate(
   const now = new Date().toISOString();
   return {
     id: `${data.type?.toLowerCase().slice(0, 3) || 'obj'}-${crypto.randomUUID()}`,
-    tenantId: context.bootstrap.tenant.id,
+    tenantId: context.tenantId,
     workspaceId: data.workspaceId || context.workspaceId,
     type: data.type || 'TASK',
     title: data.title || 'Nuevo Objeto sin Título',
@@ -115,7 +116,7 @@ export class ApiObjectRepository implements ObjectRepository {
 
   async create(data: Partial<NexusObject>, context: ObjectRepositoryContext): Promise<NexusObject> {
     const type = data.type ?? 'TASK';
-    const definition = context.bootstrap.objectDefinitions.find((item) => item.key === type);
+    const definition = context.objectDefinitions?.find((item) => item.key === type);
     if (!definition) {
       throw new Error(`No existe una definición de objeto para ${type}.`);
     }
