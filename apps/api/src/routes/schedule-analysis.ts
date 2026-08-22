@@ -8,6 +8,11 @@ import {
   ScheduleValidationError,
   type DependencyType,
 } from '../domain/scheduling.js';
+import {
+  calendarFromMetadata,
+  durationUnits,
+  type ScheduleCalendarConfig,
+} from '../domain/work-calendar.js';
 import { withTenant } from '../tenant-transaction.js';
 
 const querySchema = z.object({
@@ -15,7 +20,6 @@ const querySchema = z.object({
 });
 
 const dependencyTypeSchema = z.enum(['FS', 'SS', 'FF', 'SF']);
-const DAY_MS = 86_400_000;
 
 function isTenantAdmin(actor: ActorContext): boolean {
   return actor.role === 'OWNER' || actor.role === 'TENANT_ADMIN';
@@ -58,18 +62,18 @@ function projectIdFromMetadata(value: Prisma.JsonValue | null): string | null {
   return typeof metadata.projectId === 'string' ? metadata.projectId : null;
 }
 
-function durationDays(
+function durationForObject(
   objectTypeKey: string,
   startDate: Date | null,
   dueDate: Date | null,
+  calendar: ScheduleCalendarConfig,
 ): number | null {
   if (!startDate && !dueDate) return null;
   if (objectTypeKey === 'MILESTONE') return 0;
 
   const start = startDate ?? dueDate!;
   const endCandidate = dueDate ?? start;
-  const end = endCandidate.getTime() < start.getTime() ? start : endCandidate;
-  return Math.max(1, Math.round((end.getTime() - start.getTime()) / DAY_MS) + 1);
+  return durationUnits(start, endCandidate, calendar);
 }
 
 export async function scheduleAnalysisRoutes(app: FastifyInstance): Promise<void> {
@@ -91,12 +95,14 @@ export async function scheduleAnalysisRoutes(app: FastifyInstance): Promise<void
             objectTypeKey: 'PROJECT',
             deletedAt: null,
           },
-          select: { id: true, workspaceId: true },
+          select: { id: true, workspaceId: true, metadata: true },
         });
         if (!project) return { kind: 'not_found' as const };
         if (!(await canAccessWorkspace(tx, actor, project.workspaceId))) {
           return { kind: 'forbidden' as const };
         }
+
+        const calendar = calendarFromMetadata(project.metadata);
 
         const candidateObjects = await tx.nexusObject.findMany({
           where: {
@@ -123,7 +129,12 @@ export async function scheduleAnalysisRoutes(app: FastifyInstance): Promise<void
         const scheduled = projectObjects
           .map((object) => ({
             object,
-            durationDays: durationDays(object.objectTypeKey, object.startDate, object.dueDate),
+            durationDays: durationForObject(
+              object.objectTypeKey,
+              object.startDate,
+              object.dueDate,
+              calendar,
+            ),
           }))
           .filter(
             (entry): entry is typeof entry & { durationDays: number } =>
@@ -183,7 +194,9 @@ export async function scheduleAnalysisRoutes(app: FastifyInstance): Promise<void
             analysis: {
               projectId: project.id,
               workspaceId: project.workspaceId,
-              calendar: 'CALENDAR_DAYS_V1' as const,
+              calendar: calendar.mode,
+              workingWeekdays: calendar.workingWeekdays,
+              holidays: calendar.holidays,
               projectDurationDays: analysis.projectDurationDays,
               criticalTaskIds: analysis.criticalTaskIds,
               topologicalOrder: analysis.topologicalOrder,
