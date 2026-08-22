@@ -97,6 +97,14 @@ jobs:
           DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/objects-crud-smoke.ts
 
+      - name: Verify persistent portfolio hierarchy
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
+        run: npx tsx apps/api/test/portfolio-hierarchy-smoke.ts
+
       - name: Verify dependency graph and cycle protection
         env:
           AUTH_MODE: dev
