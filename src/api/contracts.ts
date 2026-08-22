@@ -132,6 +132,7 @@ export interface UpdateApiObjectInput {
 }
 
 export type ApiDependencyType = 'FS' | 'SS' | 'FF' | 'SF';
+export type ApiScheduleCalendarMode = 'CALENDAR_DAYS_V1' | 'WORKING_DAYS_V1';
 
 export interface ApiDependency {
   id: string;
@@ -186,7 +187,9 @@ export interface ApiScheduleDependency {
 export interface ApiScheduleAnalysis {
   projectId: string;
   workspaceId: string;
-  calendar: 'CALENDAR_DAYS_V1';
+  calendar: ApiScheduleCalendarMode;
+  workingWeekdays: number[];
+  holidays: string[];
   projectDurationDays: number;
   criticalTaskIds: string[];
   topologicalOrder: string[];
