@@ -1,4 +1,6 @@
 export type ObjectType =
+  | 'PORTFOLIO'
+  | 'PROGRAM'
   | 'PROJECT'
   | 'TASK'
   | 'RISK'
@@ -73,6 +75,7 @@ export interface Portfolio {
   budgetAllocated: number;
   budgetSpent: number;
   projectIds: string[];
+  programIds?: string[];
 }
 
 export interface ObjectRelation {
@@ -144,6 +147,9 @@ export interface NexusObject {
   progress: number;
 
   portfolioId?: string;
+  programId?: string;
+  code?: string;
+  strategicObjective?: string;
   healthScore?: number;
   budgetTotal?: number;
   budgetSpent?: number;
