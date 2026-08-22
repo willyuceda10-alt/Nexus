@@ -36,11 +36,15 @@ async function main() {
 
   const tenant = await prisma.tenant.upsert({
     where: { id: DEV_TENANT_ID },
-    update: { status: 'ACTIVE' },
+    update: {
+      name: 'Bridata Project Development',
+      slug: 'bridata-project-dev',
+      status: 'ACTIVE',
+    },
     create: {
       id: DEV_TENANT_ID,
-      name: 'Nexus Development',
-      slug: 'nexus-dev',
+      name: 'Bridata Project Development',
+      slug: 'bridata-project-dev',
       plan: 'ENTERPRISE',
       status: 'ACTIVE',
     },
@@ -48,11 +52,15 @@ async function main() {
 
   const user = await prisma.user.upsert({
     where: { id: DEV_USER_ID },
-    update: { isActive: true },
+    update: {
+      email: 'owner@bridata.local',
+      fullName: 'Bridata DEV Owner',
+      isActive: true,
+    },
     create: {
       id: DEV_USER_ID,
-      email: 'owner@nexus.local',
-      fullName: 'Nexus DEV Owner',
+      email: 'owner@bridata.local',
+      fullName: 'Bridata DEV Owner',
       isActive: true,
     },
   });
@@ -80,13 +88,16 @@ async function main() {
         code: 'CORE',
       },
     },
-    update: { name: 'Nexus Core Development' },
+    update: {
+      name: 'Bridata Project Core Development',
+      description: 'Workspace bootstrap for Bridata Project local and Azure DEV validation.',
+    },
     create: {
       id: DEV_WORKSPACE_ID,
       tenantId: tenant.id,
       code: 'CORE',
-      name: 'Nexus Core Development',
-      description: 'Workspace bootstrap for local and Azure DEV validation.',
+      name: 'Bridata Project Core Development',
+      description: 'Workspace bootstrap for Bridata Project local and Azure DEV validation.',
     },
   });
 
@@ -134,6 +145,7 @@ async function main() {
     JSON.stringify(
       {
         seeded: true,
+        product: 'Bridata Project',
         tenantId: tenant.id,
         userId: user.id,
         workspaceId: workspace.id,
