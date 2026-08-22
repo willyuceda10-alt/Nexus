@@ -41,37 +41,21 @@ export function isWorkingDate(date: Date, calendar: ScheduleCalendarConfig): boo
   return !calendar.holidays.includes(date.toISOString().slice(0, 10));
 }
 
-export function durationUnits(
-  start: Date,
-  end: Date,
-  calendar: ScheduleCalendarConfig,
-): number {
+export function durationUnits(start: Date, end: Date, calendar: ScheduleCalendarConfig): number {
   const safeEnd = end.getTime() < start.getTime() ? start : end;
   if (calendar.mode === 'CALENDAR_DAYS_V1') {
     return Math.max(1, Math.round((safeEnd.getTime() - start.getTime()) / DAY_MS) + 1);
   }
-
   let count = 0;
-  for (
-    let cursor = new Date(start.getTime());
-    cursor.getTime() <= safeEnd.getTime();
-    cursor = new Date(cursor.getTime() + DAY_MS)
-  ) {
+  for (let cursor = new Date(start.getTime()); cursor.getTime() <= safeEnd.getTime(); cursor = new Date(cursor.getTime() + DAY_MS)) {
     if (isWorkingDate(cursor, calendar)) count += 1;
   }
   return Math.max(1, count);
 }
 
-export function signedScheduleDistance(
-  from: Date,
-  to: Date,
-  calendar: ScheduleCalendarConfig,
-): number {
+export function signedScheduleDistance(from: Date, to: Date, calendar: ScheduleCalendarConfig): number {
   if (from.getTime() === to.getTime()) return 0;
-  if (calendar.mode === 'CALENDAR_DAYS_V1') {
-    return Math.round((to.getTime() - from.getTime()) / DAY_MS);
-  }
-
+  if (calendar.mode === 'CALENDAR_DAYS_V1') return Math.round((to.getTime() - from.getTime()) / DAY_MS);
   const direction = to.getTime() > from.getTime() ? 1 : -1;
   let cursor = new Date(from.getTime());
   let distance = 0;
@@ -80,4 +64,19 @@ export function signedScheduleDistance(
     if (isWorkingDate(cursor, calendar)) distance += direction;
   }
   return distance;
+}
+
+export function addScheduleUnits(from: Date, units: number, calendar: ScheduleCalendarConfig): Date {
+  const wholeUnits = Math.trunc(units);
+  if (wholeUnits === 0) return new Date(from.getTime());
+  if (calendar.mode === 'CALENDAR_DAYS_V1') return new Date(from.getTime() + wholeUnits * DAY_MS);
+  const direction = wholeUnits > 0 ? 1 : -1;
+  const target = Math.abs(wholeUnits);
+  let counted = 0;
+  let cursor = new Date(from.getTime());
+  while (counted < target) {
+    cursor = new Date(cursor.getTime() + direction * DAY_MS);
+    if (isWorkingDate(cursor, calendar)) counted += 1;
+  }
+  return cursor;
 }

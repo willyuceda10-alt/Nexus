@@ -22,20 +22,9 @@ export interface SessionTenant extends ApiTenant {
 }
 
 export interface SessionResponse {
-  product: {
-    name: string;
-    apiVersion: string;
-  };
-  identity: {
-    provider: 'ENTRA_ID' | 'DEV';
-    providerTenantId: string | null;
-  };
-  user: {
-    id: string;
-    email: string;
-    fullName: string;
-    avatarUrl: string | null;
-  };
+  product: { name: string; apiVersion: string };
+  identity: { provider: 'ENTRA_ID' | 'DEV'; providerTenantId: string | null };
+  user: { id: string; email: string; fullName: string; avatarUrl: string | null };
   tenants: SessionTenant[];
   preferredTenantId: string | null;
 }
@@ -144,9 +133,7 @@ export interface ApiDependency {
   createdAt: string;
 }
 
-export interface ApiDependencyListResponse {
-  items: ApiDependency[];
-}
+export interface ApiDependencyListResponse { items: ApiDependency[] }
 
 export interface CreateApiDependencyInput {
   predecessorId: string;
@@ -198,6 +185,46 @@ export interface ApiScheduleAnalysis {
   unscheduledObjectIds: string[];
 }
 
+export type ApiForecastBasis =
+  | 'PROGRESS_VELOCITY'
+  | 'NOT_STARTED_PLAN'
+  | 'NO_PROGRESS_SIGNAL'
+  | 'INSUFFICIENT_HISTORY'
+  | 'COMPLETED_CURRENT_FINISH';
+export type ApiForecastConfidence = 'LOW' | 'MEDIUM';
+
+export interface ApiForecastTask {
+  id: string;
+  title: string;
+  objectTypeKey: string;
+  status: string;
+  progress: number;
+  plannedFinish: string | null;
+  forecastFinish: string | null;
+  forecastVarianceDays: number | null;
+  basis: ApiForecastBasis;
+  confidence: ApiForecastConfidence;
+  elapsedUnits: number | null;
+  remainingUnits: number | null;
+  observedProgressPerUnit: number | null;
+}
+
+export interface ApiProjectForecast {
+  projectId: string;
+  workspaceId: string;
+  method: 'PROGRESS_VELOCITY_V1';
+  asOfDate: string;
+  calendar: ApiScheduleCalendarMode;
+  workingWeekdays: number[];
+  holidays: string[];
+  plannedFinish: string | null;
+  forecastFinish: string | null;
+  forecastVarianceDays: number | null;
+  projectedTaskCount: number;
+  lowConfidenceTaskCount: number;
+  tasks: ApiForecastTask[];
+}
+
 export interface ApiBaselineSummary {
   projectId: string;
   workspaceId: string;
@@ -210,10 +237,7 @@ export interface ApiBaselineSummary {
 }
 
 export interface BootstrapResponse {
-  product: {
-    name: string;
-    apiVersion: string;
-  };
+  product: { name: string; apiVersion: string };
   actor: ApiActor;
   tenant: ApiTenant;
   workspaces: ApiWorkspace[];

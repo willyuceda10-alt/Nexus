@@ -7,6 +7,7 @@ import { registerRequestContext } from './auth.js';
 import { baselineRoutes } from './routes/baselines.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
 import { dependencyRoutes } from './routes/dependencies.js';
+import { forecastRoutes } from './routes/forecast.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { objectRoutes } from './routes/objects.js';
@@ -75,6 +76,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(objectRoutes);
   await app.register(dependencyRoutes);
   await app.register(scheduleAnalysisRoutes);
+  await app.register(forecastRoutes);
   await app.register(baselineRoutes);
 
   return app;
