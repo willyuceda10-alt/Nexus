@@ -70,9 +70,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # azure/login already selected and validated the target subscription.
-          # Do not call `az account set` again with a repository value because
-          # GitHub identifiers may contain accidental CR/LF whitespace.
           active_subscription_id="$(az account show --query id --output tsv)"
           configured_subscription_id="$(printf '%s' "$AZURE_SUBSCRIPTION_ID" | tr -d '[:space:]')"
 
@@ -123,7 +120,6 @@ jobs:
           az bicep build-params --file infra/azure/dev.bicepparam --stdout > /dev/null
 
       - name: Generate ephemeral database credentials
-        id: credentials
         shell: bash
         run: |
           set -euo pipefail
@@ -196,6 +192,7 @@ jobs:
       - name: Verify private PostgreSQL and stored secret resources
         shell: bash
         env:
+          DEPLOYMENT_NAME: ${{ steps.deploy.outputs.deployment_name }}
           POSTGRES_NAME: ${{ steps.deploy.outputs.postgres_name }}
           KEY_VAULT_NAME: ${{ steps.deploy.outputs.key_vault_name }}
         run: |
@@ -216,20 +213,34 @@ jobs:
           echo "PostgreSQL state: $state"
           echo "PostgreSQL public network access: $public_access"
 
+          if [ "$state" != "Ready" ]; then
+            echo "::error title=PostgreSQL not ready::Expected PostgreSQL state=Ready."
+            exit 1
+          fi
+
           if [ "$public_access" != "Disabled" ]; then
             echo "::error title=PostgreSQL exposure detected::Expected publicNetworkAccess=Disabled."
             exit 1
           fi
 
+          az keyvault show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$KEY_VAULT_NAME" \
+            --query name \
+            --output tsv > /dev/null
+
+          successful_resource_ids="$(az deployment operation group list \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$DEPLOYMENT_NAME" \
+            --query "[?properties.provisioningState=='Succeeded'].properties.targetResource.id" \
+            --output tsv)"
+
           for secret_name in admin-database-url runtime-database-url; do
-            az resource show \
-              --resource-group "$AZURE_RESOURCE_GROUP" \
-              --resource-type 'Microsoft.KeyVault/vaults/secrets' \
-              --name "$KEY_VAULT_NAME/$secret_name" \
-              --api-version '2023-07-01' \
-              --query name \
-              --output tsv > /dev/null
-            echo "Secret resource present: $secret_name"
+            if ! printf '%s\n' "$successful_resource_ids" | grep -Fq "/secrets/$secret_name"; then
+              echo "::error title=Key Vault secret deployment not verified::ARM deployment operations did not record a succeeded resource for $secret_name."
+              exit 1
+            fi
+            echo "Secret ARM deployment succeeded: $secret_name"
           done
 
       - name: Publish deployment summary
