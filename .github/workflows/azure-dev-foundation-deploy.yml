@@ -69,8 +69,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+
+          # azure/login already selected and validated the target subscription.
+          # Do not call `az account set` again with a repository value because
+          # GitHub identifiers may contain accidental CR/LF whitespace.
+          active_subscription_id="$(az account show --query id --output tsv)"
+          configured_subscription_id="$(printf '%s' "$AZURE_SUBSCRIPTION_ID" | tr -d '[:space:]')"
+
+          if [ -z "$active_subscription_id" ]; then
+            echo "::error title=Azure subscription unavailable::azure/login completed but no active subscription is available."
+            exit 1
+          fi
+
+          if [ "$active_subscription_id" != "$configured_subscription_id" ]; then
+            echo "::error title=Azure subscription mismatch::The subscription selected by azure/login does not match the configured subscription identifier."
+            exit 1
+          fi
+
           actual_location="$(az group show --name "$AZURE_RESOURCE_GROUP" --query location --output tsv)"
+          echo "Azure OIDC subscription verified."
           echo "Resource group: $AZURE_RESOURCE_GROUP"
           echo "Resource group location: $actual_location"
           echo "Configured location: $AZURE_LOCATION"
