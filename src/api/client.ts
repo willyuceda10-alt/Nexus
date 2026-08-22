@@ -1,12 +1,17 @@
 import { runtimeConfig } from '../config/runtime';
 import type {
+  ApiDependency,
+  ApiDependencyListResponse,
   ApiErrorPayload,
   ApiNexusObject,
   ApiObjectListResponse,
+  ApiScheduleAnalysis,
   BootstrapResponse,
+  CreateApiDependencyInput,
   CreateApiObjectInput,
   ListObjectsParams,
   SessionResponse,
+  UpdateApiDependencyInput,
   UpdateApiObjectInput,
 } from './contracts';
 
@@ -125,5 +130,35 @@ export const bridataApi = {
     return request<void>(`/api/v1/objects/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
+  },
+
+  listDependencies(workspaceId: string, signal?: AbortSignal): Promise<ApiDependencyListResponse> {
+    const query = new URLSearchParams({ workspaceId });
+    return request<ApiDependencyListResponse>(`/api/v1/dependencies?${query.toString()}`, { signal });
+  },
+
+  createDependency(input: CreateApiDependencyInput): Promise<ApiDependency> {
+    return request<ApiDependency>('/api/v1/dependencies', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+
+  updateDependency(id: string, input: UpdateApiDependencyInput): Promise<ApiDependency> {
+    return request<ApiDependency>(`/api/v1/dependencies/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  },
+
+  deleteDependency(id: string): Promise<void> {
+    return request<void>(`/api/v1/dependencies/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  scheduleAnalysis(projectId: string, signal?: AbortSignal): Promise<ApiScheduleAnalysis> {
+    const query = new URLSearchParams({ projectId });
+    return request<ApiScheduleAnalysis>(`/api/v1/schedule-analysis?${query.toString()}`, { signal });
   },
 };
