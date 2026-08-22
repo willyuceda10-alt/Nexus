@@ -13,7 +13,7 @@ jobs:
   quality:
     name: Typecheck, test, build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -62,8 +62,12 @@ jobs:
           DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
         run: npm run prisma:migrate:deploy
 
-      - name: Provision non-bypass runtime database role
-        run: npx tsx prisma/provision-ci-runtime.ts
+      - name: Provision idempotent non-bypass runtime database role
+        env:
+          RUNTIME_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: |
+          npx tsx prisma/provision-runtime-role.ts
+          npx tsx prisma/provision-runtime-role.ts
 
       - name: Seed DEV fixture through FORCE RLS
         env:
@@ -173,6 +177,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          az bicep build --file infra/azure/api-runtime.bicep --stdout > /dev/null
           az bicep build --file infra/azure/main.bicep --stdout > /dev/null
           az bicep build-params --file infra/azure/dev.bicepparam --stdout > /dev/null
 
@@ -182,5 +187,20 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build
+      - name: Build application
         run: npm run build
+
+      - name: Build production API image
+        run: docker build --file Dockerfile.api --target runtime --tag bridata-api:ci .
+
+      - name: Verify production image excludes migration tooling
+        run: |
+          docker run --rm --entrypoint node bridata-api:ci --version
+          docker run --rm --entrypoint sh bridata-api:ci -c 'test ! -e ./node_modules/.bin/prisma && test ! -e ./node_modules/.bin/tsx'
+
+      - name: Build migration job image
+        run: docker build --file Dockerfile.api --target migrate --tag bridata-migrate:ci .
+
+      - name: Verify migration image contains required tooling
+        run: |
+          docker run --rm --entrypoint sh bridata-migrate:ci -c 'test -x ./node_modules/.bin/prisma && test -x ./node_modules/.bin/tsx && test -f prisma/provision-runtime-role.ts'

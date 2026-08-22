@@ -32,6 +32,30 @@ param postgresSkuName string = environment == 'prod' ? 'Standard_D2s_v5' : 'Stan
 @minValue(32)
 param postgresStorageSizeGb int = environment == 'prod' ? 128 : 32
 
+@description('Creates the API Container App and manual migration job. Kept false until images, Entra registrations, Key Vault secrets and RBAC prerequisites exist.')
+param deployApiRuntime bool = false
+
+@description('Immutable API runtime image reference, preferably ACR repo@sha256:digest.')
+param apiImage string = 'not-configured'
+
+@description('Immutable migration image reference built from Dockerfile.api target=migrate.')
+param migrationImage string = 'not-configured'
+
+@description('Key Vault secret URI containing the restricted PostgreSQL runtime connection string.')
+param runtimeDatabaseSecretUri string = 'https://not-configured.vault.azure.net/secrets/runtime-database-url'
+
+@description('Key Vault secret URI containing the privileged migration-only PostgreSQL connection string.')
+param adminDatabaseSecretUri string = 'https://not-configured.vault.azure.net/secrets/admin-database-url'
+
+@description('Microsoft Entra application/client ID of the Bridata Project API resource application.')
+param entraApiClientId string = '00000000-0000-0000-0000-000000000000'
+
+@description('Microsoft Entra tenant ID used by the Bridata Project API runtime.')
+param entraTenantId string = subscription().tenantId
+
+@description('Comma-separated allowed web origins for API CORS.')
+param apiCorsOrigins string = 'https://not-configured.invalid'
+
 param tags object = {
   product: 'Bridata Project'
   technicalPlatform: 'Nexus Core'
@@ -196,8 +220,6 @@ resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   }
 }
 
-// This identity is created with the foundation. A later API delivery phase grants it AcrPull
-// and Key Vault access before any private image is attached to a Container App.
 resource apiIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${baseName}-api-mi'
   location: location
@@ -269,6 +291,25 @@ resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2
   }
 }
 
+module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
+  name: '${baseName}-api-runtime'
+  params: {
+    location: location
+    environment: environment
+    tags: tags
+    managedEnvironmentId: containerEnvironment.id
+    registryServer: registry.properties.loginServer
+    apiIdentityResourceId: apiIdentity.id
+    apiImage: apiImage
+    migrationImage: migrationImage
+    runtimeDatabaseSecretUri: runtimeDatabaseSecretUri
+    adminDatabaseSecretUri: adminDatabaseSecretUri
+    entraApiClientId: entraApiClientId
+    entraTenantId: entraTenantId
+    corsOrigins: apiCorsOrigins
+  }
+}
+
 output resourceGroupName string = resourceGroup().name
 output location string = location
 output virtualNetworkName string = virtualNetwork.name
@@ -288,3 +329,4 @@ output postgresDeployed bool = deployPostgres
 output deployedPostgresServerName string = deployPostgres ? postgresServerResourceName : ''
 output postgresFqdn string = deployPostgres ? '${postgresServerResourceName}.postgres.database.azure.com' : ''
 output applicationDatabaseName string = deployPostgres ? postgresDatabaseName : ''
+output apiRuntimeDeployed bool = deployApiRuntime
