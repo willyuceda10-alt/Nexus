@@ -131,6 +131,70 @@ export interface UpdateApiObjectInput {
   metadata?: Record<string, unknown> | null;
 }
 
+export type ApiDependencyType = 'FS' | 'SS' | 'FF' | 'SF';
+
+export interface ApiDependency {
+  id: string;
+  predecessorId: string;
+  successorId: string;
+  dependencyType: ApiDependencyType;
+  lagDays: number;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface ApiDependencyListResponse {
+  items: ApiDependency[];
+}
+
+export interface CreateApiDependencyInput {
+  predecessorId: string;
+  successorId: string;
+  dependencyType?: ApiDependencyType;
+  lagDays?: number;
+  notes?: string;
+}
+
+export interface UpdateApiDependencyInput {
+  dependencyType?: ApiDependencyType;
+  lagDays?: number;
+  notes?: string | null;
+}
+
+export interface ApiScheduleTaskAnalysis {
+  id: string;
+  title: string;
+  objectTypeKey: string;
+  durationDays: number;
+  earlyStart: number;
+  earlyFinish: number;
+  lateStart: number;
+  lateFinish: number;
+  totalFloat: number;
+  freeFloat: number;
+  critical: boolean;
+}
+
+export interface ApiScheduleDependency {
+  id: string;
+  predecessorId: string;
+  successorId: string;
+  type: ApiDependencyType;
+  lagDays: number;
+}
+
+export interface ApiScheduleAnalysis {
+  projectId: string;
+  workspaceId: string;
+  calendar: 'CALENDAR_DAYS_V1';
+  projectDurationDays: number;
+  criticalTaskIds: string[];
+  topologicalOrder: string[];
+  tasks: ApiScheduleTaskAnalysis[];
+  dependencies: ApiScheduleDependency[];
+  unscheduledObjectIds: string[];
+}
+
 export interface BootstrapResponse {
   product: {
     name: string;
