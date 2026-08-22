@@ -85,8 +85,8 @@ var adminDatabaseConnectionString = 'postgresql://${postgresAdministratorLogin}:
 var runtimeDatabaseConnectionString = 'postgresql://${postgresRuntimeRole}:${postgresRuntimePassword}@${postgresFqdnValue}:5432/${postgresDatabaseName}?sslmode=require'
 
 // Private address plan kept intentionally simple for the first environment.
-// Container Apps consumption-only VNet integration requires a dedicated /23.
-// PostgreSQL Flexible Server private access requires its own delegated subnet; /28 is the supported minimum.
+// Container Apps uses a dedicated delegated subnet.
+// PostgreSQL Flexible Server private access requires its own delegated subnet.
 resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   name: '${baseName}-vnet'
   location: location
@@ -105,6 +105,14 @@ resource containerAppsSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-
   name: 'container-apps'
   properties: {
     addressPrefix: '10.40.0.0/23'
+    delegations: [
+      {
+        name: 'container-apps-environment'
+        properties: {
+          serviceName: 'Microsoft.App/environments'
+        }
+      }
+    ]
   }
 }
 
@@ -209,7 +217,6 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   properties: {
     tenantId: subscription().tenantId
     enableRbacAuthorization: true
-    enablePurgeProtection: environment == 'prod'
     enableSoftDelete: true
     softDeleteRetentionInDays: 90
     publicNetworkAccess: 'Enabled'
