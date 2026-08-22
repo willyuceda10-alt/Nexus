@@ -1,15 +1,17 @@
 # Bridata Project on Azure
 
-The Azure foundation is defined with Bicep and remains intentionally separated from deployment. Merging infrastructure code does **not** create Azure resources by itself.
+Bridata Project infrastructure is defined with Bicep and remains intentionally separated from deployment. Merging infrastructure code does **not** create Azure resources by itself.
 
 ## Identity separation
 
 Bridata Project uses separate identities for separate trust boundaries:
 
 - `nexus-github-deploy`: GitHub Actions → Azure CI/CD identity. OIDC only; no client secret.
-- Bridata Project Web: future Microsoft Entra SPA App Registration using Authorization Code + PKCE.
-- Bridata Project API: future Microsoft Entra API App Registration exposing delegated scopes for the web client.
-- Runtime Azure resources: managed identities where supported; never reuse the GitHub deployment identity as application runtime identity.
+- Bridata Project Web: Microsoft Entra SPA App Registration using Authorization Code + PKCE.
+- Bridata Project API: Microsoft Entra API App Registration exposing delegated scopes for the web client.
+- `nexus-dev-api-mi`: Azure managed identity for the API runtime and later migration jobs where supported.
+
+The GitHub deployment identity is never reused as the runtime application identity.
 
 ## GitHub repository variables
 
@@ -27,7 +29,7 @@ These values are identifiers, not client secrets. No `AZURE_CLIENT_SECRET` is re
 
 ### `Azure OIDC Check`
 
-Validates that GitHub can exchange its OIDC token for Azure credentials and can read the configured DEV resource group. It also checks the expected Azure region.
+Validates that GitHub can exchange its OIDC token for Azure credentials and can read the configured DEV resource group.
 
 ### `Azure DEV Preflight`
 
@@ -36,24 +38,48 @@ Manual (`workflow_dispatch`) and intentionally non-deploying. It:
 1. validates required GitHub variables,
 2. signs in using OIDC,
 3. verifies the target resource group,
-4. compiles Bicep,
-5. runs `az deployment group what-if`,
-6. never executes `az deployment group create`.
+4. verifies required Azure resource providers without registering anything,
+5. compiles `main.bicep` and `dev.bicepparam`,
+6. runs a **Foundation** `what-if` with PostgreSQL disabled,
+7. runs a **Full Runtime** `what-if` with private PostgreSQL enabled,
+8. generates a PostgreSQL password only in runner memory for the second `what-if`,
+9. never executes `az deployment group create`.
 
-This is the required gate before any DEV resources are provisioned.
+The ephemeral what-if password is not a deployment credential and is never persisted to git, GitHub Variables, GitHub Secrets or workflow artifacts.
 
-## Foundation resources in `main.bicep`
+## Azure DEV foundation
 
-The current foundation proposal contains:
+`main.bicep` now models the first complete private runtime foundation:
 
+- Virtual Network `10.40.0.0/16`
+- dedicated Container Apps consumption subnet `10.40.0.0/23`
+- dedicated PostgreSQL delegated subnet `10.40.2.0/28`
+- PostgreSQL Private DNS zone linked to the VNet
 - Log Analytics Workspace
 - Application Insights
 - Storage Account with public blob access disabled
 - Key Vault using Azure RBAC
 - Azure Container Registry with admin account disabled
-- Container Apps Environment
+- API user-assigned managed identity
+- Container Apps Environment integrated with the VNet
+- optional PostgreSQL Flexible Server + application database
 
-PostgreSQL Flexible Server, the actual API Container App, the web host, Service Bus, Redis and Front Door are intentionally not deployed by this foundation yet. This keeps the first Azure review small and avoids consuming the available DEV credit before identity and cost gates are complete.
+`deployPostgres` defaults to `false`. This is a deliberate cost guard: compiling, testing, merging or reusing the normal DEV parameter file does not request PostgreSQL. The manual preflight overrides it only during Azure `what-if`.
+
+## PostgreSQL DEV profile
+
+The planned DEV database is intentionally small:
+
+- PostgreSQL 16
+- Burstable `Standard_B1ms`
+- 32 GiB storage with autogrow
+- 7-day backup retention
+- no geo-redundant backup
+- no high availability in DEV
+- public network access disabled
+- private VNet integration only
+
+Staging and production must use separate sizing and availability decisions; the DEV profile must not be copied blindly to production.
 
 ## DEV target
 
@@ -61,28 +87,45 @@ PostgreSQL Flexible Server, the actual API Container App, the web host, Service 
 - Region: Brazil South
 - Parameter file: `dev.bicepparam`
 - Public product name: **Bridata Project**
-- Technical resource prefix currently retained as `nexus` for continuity with the existing Azure bootstrap.
+- Technical resource prefix remains `nexus` for continuity with the existing Azure bootstrap.
 
 ## Security principles
 
-- No secrets in Bicep parameter files.
+- No real secrets in Bicep parameter files.
 - No ACR admin credentials.
-- Key Vault is the secret boundary.
-- Production will enable purge protection and stricter networking.
+- PostgreSQL is not exposed to the public Internet.
+- Key Vault is the long-term secret boundary.
 - Runtime managed identities receive least-privilege role assignments.
 - GitHub deployment identity is never the runtime application identity.
 - PostgreSQL runtime roles must not be SUPERUSER and must not have BYPASSRLS.
 - Multi-tenant data access remains fail-closed under PostgreSQL FORCE RLS.
+- `AUTH_MODE=dev` remains forbidden in the production API image; Azure runtime will use Microsoft Entra authentication.
 
-## Recommended deployment sequence
+## RBAC prerequisite for API delivery
 
-1. Verify GitHub → Azure OIDC using Repository Variables.
-2. Run Azure DEV Preflight (`what-if`) and review the planned resource changes.
-3. Configure runtime Microsoft Entra identity for the web and API.
-4. Add an Azure budget/alert before creating paid DEV services.
-5. Deploy only the minimal shared foundation required for DEV.
-6. Provision PostgreSQL Flexible Server with an intentionally small DEV SKU.
-7. Apply Prisma migrations and FORCE RLS using a migration/admin path; run the API using a non-bypass runtime role.
-8. Build/push `Dockerfile.api` to ACR and deploy the API Container App with managed identity where applicable.
-9. Deploy the React web with `VITE_DATA_MODE=api` and the DEV API endpoint.
-10. Add optional services (Service Bus, Redis, Front Door/WAF) only when a concrete feature requires them.
+The current GitHub OIDC deployment service principal has resource-group deployment access but should not silently gain broad authorization-management rights.
+
+After the foundation exists and before a private API image is deployed:
+
+1. grant the GitHub CI/CD identity only the registry push permission it needs (`AcrPush` for the non-ABAC DEV registry),
+2. grant `nexus-dev-api-mi` only image pull permission (`AcrPull`) on that registry,
+3. grant runtime Key Vault permissions only when the API actually consumes Key Vault secrets.
+
+These role assignments are an explicit owner-controlled step rather than being hidden inside the first infrastructure deployment.
+
+## Controlled deployment sequence
+
+1. Configure/verify the five GitHub Repository Variables.
+2. Verify GitHub → Azure OIDC.
+3. Run **Azure DEV Preflight** and review both what-if plans.
+4. Add/confirm an Azure budget and alert before approving paid DEV resources.
+5. Configure the separate Microsoft Entra API and Web App Registrations.
+6. With explicit approval, deploy the shared foundation and private PostgreSQL DEV profile.
+7. Assign least-privilege ACR roles to the CI/CD and API managed identities.
+8. Build the API image and a separate migration target from `Dockerfile.api`.
+9. Run Prisma migrations/FORCE RLS from an Azure-side migration job inside the VNet.
+10. Deploy the API Container App with `minReplicas=0`, readiness `/health/ready` and liveness `/health/live`.
+11. Deploy the React web with `VITE_DATA_MODE=api` and Entra PKCE.
+12. Add Service Bus, Redis, Front Door/WAF or other paid services only when a concrete feature needs them.
+
+No step in the current repository automatically performs steps 6–12.
