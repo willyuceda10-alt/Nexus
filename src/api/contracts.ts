@@ -195,6 +195,17 @@ export interface ApiScheduleAnalysis {
   unscheduledObjectIds: string[];
 }
 
+export interface ApiBaselineSummary {
+  projectId: string;
+  workspaceId: string;
+  baselineVersion: number;
+  capturedAt: string;
+  updatedCount: number;
+  scheduledCount: number;
+  skippedUnscheduledCount: number;
+  overwritten: boolean;
+}
+
 export interface BootstrapResponse {
   product: {
     name: string;

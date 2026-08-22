@@ -1,5 +1,6 @@
 import { runtimeConfig } from '../config/runtime';
 import type {
+  ApiBaselineSummary,
   ApiDependency,
   ApiDependencyListResponse,
   ApiErrorPayload,
@@ -160,5 +161,12 @@ export const bridataApi = {
   scheduleAnalysis(projectId: string, signal?: AbortSignal): Promise<ApiScheduleAnalysis> {
     const query = new URLSearchParams({ projectId });
     return request<ApiScheduleAnalysis>(`/api/v1/schedule-analysis?${query.toString()}`, { signal });
+  },
+
+  saveProjectBaseline(projectId: string, overwrite = false): Promise<ApiBaselineSummary> {
+    return request<ApiBaselineSummary>(`/api/v1/projects/${encodeURIComponent(projectId)}/baseline`, {
+      method: 'POST',
+      body: JSON.stringify({ overwrite }),
+    });
   },
 };

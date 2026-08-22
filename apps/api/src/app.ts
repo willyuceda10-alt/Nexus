@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { config } from './config.js';
 import { registerRequestContext } from './auth.js';
+import { baselineRoutes } from './routes/baselines.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
 import { dependencyRoutes } from './routes/dependencies.js';
 import { healthRoutes } from './routes/health.js';
@@ -74,6 +75,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(objectRoutes);
   await app.register(dependencyRoutes);
   await app.register(scheduleAnalysisRoutes);
+  await app.register(baselineRoutes);
 
   return app;
 }
