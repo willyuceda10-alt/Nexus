@@ -69,6 +69,31 @@ function messageOf(cause: unknown): string {
   return 'No se pudo completar la operación de programación.';
 }
 
+function wouldCreateLocalCycle(
+  dependencies: ObjectRelation[],
+  predecessorId: string,
+  successorId: string,
+): boolean {
+  const adjacency = new Map<string, string[]>();
+  for (const dependency of dependencies) {
+    if (dependency.relationType !== 'DEPENDS_ON') continue;
+    const successors = adjacency.get(dependency.targetObjectId) ?? [];
+    successors.push(dependency.sourceObjectId);
+    adjacency.set(dependency.targetObjectId, successors);
+  }
+
+  const stack = [successorId];
+  const visited = new Set<string>();
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current === predecessorId) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    stack.push(...(adjacency.get(current) ?? []));
+  }
+  return false;
+}
+
 export const SchedulingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const apiBootstrap = useApiBootstrap();
   const { currentWorkspace, objects } = useNexus();
@@ -120,6 +145,10 @@ export const SchedulingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setMutationCount((count) => count + 1);
     setError(null);
     try {
+      if (input.predecessorId === input.successorId) {
+        throw new Error('Una actividad no puede depender de sí misma.');
+      }
+
       if (!isApiMode) {
         const relation: ObjectRelation = {
           id: `rel-${crypto.randomUUID()}`,
@@ -133,10 +162,14 @@ export const SchedulingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         const duplicate = dependencies.some(
           (dependency) =>
+            dependency.relationType === 'DEPENDS_ON' &&
             dependency.sourceObjectId === relation.sourceObjectId &&
             dependency.targetObjectId === relation.targetObjectId,
         );
         if (duplicate) throw new Error('Esta dependencia ya existe.');
+        if (wouldCreateLocalCycle(dependencies, input.predecessorId, input.successorId)) {
+          throw new Error('Esta dependencia crearía un ciclo en el cronograma.');
+        }
 
         setDependencies((previous) => [...previous, relation]);
         return relation;
@@ -171,16 +204,13 @@ export const SchedulingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setError(null);
     try {
       if (!isApiMode) {
-        const updated: ObjectRelation = {
-          ...existing,
-          ...(input.dependencyType !== undefined ? { dependencyType: input.dependencyType } : {}),
-          ...(input.lagDays !== undefined ? { lagDays: input.lagDays } : {}),
-          ...(input.notes !== undefined
-            ? input.notes
-              ? { notes: input.notes }
-              : { notes: undefined }
-            : {}),
-        };
+        const updated: ObjectRelation = { ...existing };
+        if (input.dependencyType !== undefined) updated.dependencyType = input.dependencyType;
+        if (input.lagDays !== undefined) updated.lagDays = input.lagDays;
+        if (input.notes !== undefined) {
+          if (input.notes) updated.notes = input.notes;
+          else delete updated.notes;
+        }
         setDependencies((previous) => previous.map((dependency) => dependency.id === id ? updated : dependency));
         return updated;
       }
