@@ -7,12 +7,15 @@ import {
   ChevronDown,
   Shield,
   Check,
+  LogOut,
 } from 'lucide-react';
 import { ApiStatusBadge } from '../system/ApiStatusBadge';
 import { useNexus } from '../../context/NexusContext';
+import { useRuntimeAuth } from '../../auth/RuntimeAuthContext';
 import { BRAND } from '../../config/brand';
 
 export const Header: React.FC = () => {
+  const auth = useRuntimeAuth();
   const {
     tenant,
     workspaces,
@@ -31,9 +34,10 @@ export const Header: React.FC = () => {
 
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isPersonaDropdownOpen, setIsPersonaDropdownOpen] = useState(false);
+  const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
-  const pendingApprovals = approvals.filter((a) => a.status === 'PENDING');
+  const pendingApprovals = approvals.filter((approval) => approval.status === 'PENDING');
 
   const getBreadcrumbTitle = () => {
     switch (activeTab) {
@@ -69,24 +73,24 @@ export const Header: React.FC = () => {
                 Organización: {tenant.name}
               </div>
               <div className="space-y-1">
-                {workspaces.map((ws) => (
+                {workspaces.map((workspace) => (
                   <button
-                    key={ws.id}
+                    key={workspace.id}
                     onClick={() => {
-                      setCurrentWorkspaceId(ws.id);
+                      setCurrentWorkspaceId(workspace.id);
                       setIsWorkspaceDropdownOpen(false);
                     }}
                     className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${
-                      currentWorkspace?.id === ws.id
+                      currentWorkspace?.id === workspace.id
                         ? 'bg-indigo-50 font-semibold text-indigo-700'
                         : 'text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     <div>
-                      <div className="font-medium">{ws.name}</div>
-                      <div className="text-[10px] text-slate-400">{ws.organizationName}</div>
+                      <div className="font-medium">{workspace.name}</div>
+                      <div className="text-[10px] text-slate-400">{workspace.organizationName}</div>
                     </div>
-                    {currentWorkspace?.id === ws.id && <Check className="h-4 w-4 text-indigo-600" />}
+                    {currentWorkspace?.id === workspace.id && <Check className="h-4 w-4 text-indigo-600" />}
                   </button>
                 ))}
               </div>
@@ -113,48 +117,110 @@ export const Header: React.FC = () => {
 
         <ApiStatusBadge />
 
-        <div className="relative">
-          <button
-            onClick={() => setIsPersonaDropdownOpen(!isPersonaDropdownOpen)}
-            className="flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
-            title="Cambiar rol para probar permisos RBAC"
-          >
-            <Shield className="h-3.5 w-3.5 text-indigo-600" />
-            <span className="hidden lg:inline">{currentUser.roleName}</span>
-            <ChevronDown className="h-3 w-3 text-indigo-500" />
-          </button>
+        {auth.mode === 'dev' ? (
+          <div className="relative">
+            <button
+              onClick={() => setIsPersonaDropdownOpen(!isPersonaDropdownOpen)}
+              className="flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+              title="Cambiar rol para pruebas DEV"
+            >
+              <Shield className="h-3.5 w-3.5 text-indigo-600" />
+              <span className="hidden lg:inline">{currentUser.roleName}</span>
+              <ChevronDown className="h-3 w-3 text-indigo-500" />
+            </button>
 
-          {isPersonaDropdownOpen && (
-            <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl z-50">
-              <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Simular Rol / Persona RBAC
+            {isPersonaDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl z-50">
+                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Simular rol · solo DEV
+                </div>
+                <div className="space-y-1">
+                  {users.map((user) => (
+                    <button
+                      key={user.id}
+                      onClick={() => {
+                        setCurrentUserId(user.id);
+                        setIsPersonaDropdownOpen(false);
+                      }}
+                      className={`flex w-full items-center gap-3 rounded-xl p-2 text-left text-xs transition-colors ${
+                        currentUser.id === user.id
+                          ? 'bg-indigo-50 text-indigo-900 font-semibold'
+                          : 'text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <img src={user.avatar} alt={user.name} className="h-7 w-7 rounded-full object-cover border border-slate-200" />
+                      <div className="flex-1 truncate">
+                        <div className="font-semibold">{user.name}</div>
+                        <div className="text-[10px] text-slate-400">{user.roleName}</div>
+                      </div>
+                      {currentUser.id === user.id && <Check className="h-4 w-4 text-indigo-600" />}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-1">
-                {users.map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => {
-                      setCurrentUserId(u.id);
-                      setIsPersonaDropdownOpen(false);
-                    }}
-                    className={`flex w-full items-center gap-3 rounded-xl p-2 text-left text-xs transition-colors ${
-                      currentUser.id === u.id
-                        ? 'bg-indigo-50 text-indigo-900 font-semibold'
-                        : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <img src={u.avatar} alt={u.name} className="h-7 w-7 rounded-full object-cover border border-slate-200" />
-                    <div className="flex-1 truncate">
-                      <div className="font-semibold">{u.name}</div>
-                      <div className="text-[10px] text-slate-400">{u.roleName}</div>
+            )}
+          </div>
+        ) : (
+          <div className="relative">
+            <button
+              onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
+              className="flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              title="Cuenta de Microsoft"
+            >
+              <img
+                src={currentUser.avatar}
+                alt={currentUser.name}
+                className="h-7 w-7 rounded-full border border-slate-200 object-cover"
+              />
+              <span className="hidden xl:inline max-w-32 truncate">{currentUser.name}</span>
+              <ChevronDown className="h-3 w-3 text-slate-400" />
+            </button>
+
+            {isAccountDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl z-50">
+                <div className="border-b border-slate-100 px-3 py-2.5">
+                  <div className="text-xs font-bold text-slate-900">{currentUser.name}</div>
+                  <div className="mt-0.5 text-[10px] text-slate-500">{currentUser.email}</div>
+                </div>
+
+                {(auth.session?.tenants.length ?? 0) > 1 && (
+                  <div className="py-2">
+                    <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Empresa activa
                     </div>
-                    {currentUser.id === u.id && <Check className="h-4 w-4 text-indigo-600" />}
+                    {auth.session?.tenants.map((sessionTenant) => (
+                      <button
+                        key={sessionTenant.id}
+                        onClick={() => {
+                          auth.selectTenant(sessionTenant.id);
+                          setIsAccountDropdownOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs ${
+                          auth.activeTenantId === sessionTenant.id
+                            ? 'bg-indigo-50 font-semibold text-indigo-700'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="truncate">{sessionTenant.name}</span>
+                        {auth.activeTenantId === sessionTenant.id && <Check className="h-4 w-4" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="border-t border-slate-100 pt-2">
+                  <button
+                    onClick={() => void auth.signOut()}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Cerrar sesión
                   </button>
-                ))}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         <div className="relative">
           <button
@@ -182,13 +248,13 @@ export const Header: React.FC = () => {
                 {pendingApprovals.length === 0 ? (
                   <div className="p-4 text-center text-xs text-slate-400">Sin aprobaciones pendientes</div>
                 ) : (
-                  pendingApprovals.map((app) => {
-                    const target = objects.find((o) => o.id === app.objectId);
+                  pendingApprovals.map((approval) => {
+                    const target = objects.find((object) => object.id === approval.objectId);
                     return (
                       <div
-                        key={app.id}
+                        key={approval.id}
                         onClick={() => {
-                          if (app.objectId) openObjectDrawer(app.objectId);
+                          if (approval.objectId) openObjectDrawer(approval.objectId);
                           setIsNotificationsOpen(false);
                         }}
                         className="cursor-pointer rounded-xl border border-slate-100 bg-slate-50 p-3 transition hover:border-indigo-200 hover:bg-indigo-50/50"
@@ -196,7 +262,7 @@ export const Header: React.FC = () => {
                         <div className="text-xs font-semibold text-slate-900">
                           {target?.title || 'Solicitud de Aprobación'}
                         </div>
-                        <div className="mt-1 text-[10px] text-slate-500">{app.comment || 'Requiere firma ejecutiva'}</div>
+                        <div className="mt-1 text-[10px] text-slate-500">{approval.comment || 'Requiere firma ejecutiva'}</div>
                       </div>
                     );
                   })
