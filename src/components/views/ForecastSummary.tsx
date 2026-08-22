@@ -1,6 +1,6 @@
 import React from 'react';
 import { Activity, AlertTriangle, CalendarClock, Gauge, TrendingUp } from 'lucide-react';
-import { useProjectForecast } from '../../hooks/useProjectForecast';
+import type { ApiProjectForecast } from '../../api/contracts';
 
 function shortDate(value: string | null): string {
   if (!value) return 'Sin fecha';
@@ -24,9 +24,13 @@ function basisLabel(value: string): string {
   }
 }
 
-export const ForecastSummary: React.FC<{ projectId: string }> = ({ projectId }) => {
-  const { forecast, loading, error } = useProjectForecast(projectId);
+interface ForecastSummaryProps {
+  forecast: ApiProjectForecast | null;
+  loading: boolean;
+  error: string | null;
+}
 
+export const ForecastSummary: React.FC<ForecastSummaryProps> = ({ forecast, loading, error }) => {
   if (loading && !forecast) {
     return (
       <div className="mb-4 rounded-2xl border border-sky-100 bg-sky-50/40 px-4 py-3 text-[9px] font-semibold text-sky-700">
