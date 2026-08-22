@@ -1,0 +1,186 @@
+name: Azure DEV Images Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type PUBLISH-BRIDATA-DEV to build and push the DEV API and migration images.'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: bridata-azure-dev-images-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish Bridata DEV images
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-nexus-dev' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate explicit publish confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error title=Main branch required::Azure DEV images may only be published from main."
+            exit 1
+          fi
+          if [ "$CONFIRMATION" != "PUBLISH-BRIDATA-DEV" ]; then
+            echo "::error title=Publish not confirmed::Type PUBLISH-BRIDATA-DEV exactly."
+            exit 1
+          fi
+
+      - name: Validate Azure identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error title=Missing Azure identifier::$name is not configured."
+              exit 1
+            fi
+          done
+
+      - name: Login to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve DEV registry
+        id: registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          active_subscription_id="$(az account show --query id --output tsv)"
+          configured_subscription_id="$(printf '%s' "$AZURE_SUBSCRIPTION_ID" | tr -d '[:space:]')"
+          if [ "$active_subscription_id" != "$configured_subscription_id" ]; then
+            echo "::error title=Azure subscription mismatch::OIDC selected a different subscription."
+            exit 1
+          fi
+
+          acr_name="$(az acr list --resource-group "$AZURE_RESOURCE_GROUP" --query '[0].name' --output tsv)"
+          if [ -z "$acr_name" ]; then
+            echo "::error title=ACR not found::Deploy the Azure DEV foundation first."
+            exit 1
+          fi
+
+          login_server="$(az acr show --resource-group "$AZURE_RESOURCE_GROUP" --name "$acr_name" --query loginServer --output tsv)"
+          echo "acr_name=$acr_name" >> "$GITHUB_OUTPUT"
+          echo "login_server=$login_server" >> "$GITHUB_OUTPUT"
+          echo "Registry: $login_server"
+
+      - name: Verify AcrPush and authenticate Docker
+        shell: bash
+        env:
+          ACR_NAME: ${{ steps.registry.outputs.acr_name }}
+        run: |
+          set -euo pipefail
+          if ! az acr login --name "$ACR_NAME"; then
+            echo "::error title=ACR push access unavailable::Run infra/azure/grant-dev-rbac.ps1 as an Azure Owner, then retry."
+            exit 1
+          fi
+
+      - name: Build production API image
+        shell: bash
+        env:
+          LOGIN_SERVER: ${{ steps.registry.outputs.login_server }}
+        run: |
+          set -euo pipefail
+          docker build \
+            --file Dockerfile.api \
+            --target runtime \
+            --tag "$LOGIN_SERVER/bridata-api:$GITHUB_SHA" \
+            .
+
+      - name: Verify production image excludes migration tooling
+        shell: bash
+        env:
+          LOGIN_SERVER: ${{ steps.registry.outputs.login_server }}
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint sh "$LOGIN_SERVER/bridata-api:$GITHUB_SHA" -c \
+            'test ! -e /app/node_modules/.bin/prisma && test ! -e /app/node_modules/.bin/tsx && test ! -d /app/node_modules/prisma && test ! -d /app/node_modules/tsx'
+
+      - name: Build migration image
+        shell: bash
+        env:
+          LOGIN_SERVER: ${{ steps.registry.outputs.login_server }}
+        run: |
+          set -euo pipefail
+          docker build \
+            --file Dockerfile.api \
+            --target migrate \
+            --tag "$LOGIN_SERVER/bridata-migrate:$GITHUB_SHA" \
+            .
+
+      - name: Verify migration image contains required tooling
+        shell: bash
+        env:
+          LOGIN_SERVER: ${{ steps.registry.outputs.login_server }}
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint sh "$LOGIN_SERVER/bridata-migrate:$GITHUB_SHA" -c \
+            'test -x /app/node_modules/.bin/prisma && test -x /app/node_modules/.bin/tsx && test -f /app/prisma/provision-runtime-role.ts'
+
+      - name: Push immutable commit-tagged images
+        shell: bash
+        env:
+          LOGIN_SERVER: ${{ steps.registry.outputs.login_server }}
+        run: |
+          set -euo pipefail
+          docker push "$LOGIN_SERVER/bridata-api:$GITHUB_SHA"
+          docker push "$LOGIN_SERVER/bridata-migrate:$GITHUB_SHA"
+
+      - name: Resolve immutable image digests
+        id: images
+        shell: bash
+        env:
+          ACR_NAME: ${{ steps.registry.outputs.acr_name }}
+          LOGIN_SERVER: ${{ steps.registry.outputs.login_server }}
+        run: |
+          set -euo pipefail
+          api_digest="$(az acr repository show --name "$ACR_NAME" --image "bridata-api:$GITHUB_SHA" --query digest --output tsv)"
+          migration_digest="$(az acr repository show --name "$ACR_NAME" --image "bridata-migrate:$GITHUB_SHA" --query digest --output tsv)"
+
+          if [[ "$api_digest" != sha256:* ]] || [[ "$migration_digest" != sha256:* ]]; then
+            echo "::error title=Image digest unavailable::ACR did not return immutable digests."
+            exit 1
+          fi
+
+          echo "api_image=$LOGIN_SERVER/bridata-api@$api_digest" >> "$GITHUB_OUTPUT"
+          echo "migration_image=$LOGIN_SERVER/bridata-migrate@$migration_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Publish image summary
+        shell: bash
+        env:
+          API_IMAGE: ${{ steps.images.outputs.api_image }}
+          MIGRATION_IMAGE: ${{ steps.images.outputs.migration_image }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Bridata Project DEV images published
+
+          - Source commit: \`$GITHUB_SHA\`
+          - API runtime: \`$API_IMAGE\`
+          - Migration job: \`$MIGRATION_IMAGE\`
+          - API runtime deployment: **not performed**
+
+          Both references are immutable digest references and are ready for the controlled migration/API deployment phase.
+          EOF
