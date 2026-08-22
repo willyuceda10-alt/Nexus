@@ -1,4 +1,4 @@
-name: Nexus CI
+name: Bridata Project CI
 
 on:
   pull_request:
@@ -39,7 +39,7 @@ jobs:
         run: npm run prisma:generate
 
       - name: Verify Prisma can generate baseline SQL
-        run: npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > /tmp/nexus-baseline.sql
+        run: npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > /tmp/bridata-project-baseline.sql
 
       - name: Validate Azure Bicep
         run: az bicep build --file infra/azure/main.bicep --stdout > /dev/null
