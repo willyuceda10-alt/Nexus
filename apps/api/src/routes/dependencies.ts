@@ -70,10 +70,14 @@ function dependencyMetadata(dependencyType: string, lagDays: number): Prisma.Inp
 function metadataOf(value: Prisma.JsonValue | null): StoredMetadata {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const metadata = value as Record<string, Prisma.JsonValue>;
-  return {
-    dependencyType: typeof metadata.dependencyType === 'string' ? metadata.dependencyType : undefined,
-    lagDays: typeof metadata.lagDays === 'number' ? metadata.lagDays : undefined,
-  };
+  const result: StoredMetadata = {};
+  if (typeof metadata.dependencyType === 'string') {
+    result.dependencyType = metadata.dependencyType;
+  }
+  if (typeof metadata.lagDays === 'number') {
+    result.lagDays = metadata.lagDays;
+  }
+  return result;
 }
 
 function serializeDependency(row: {
@@ -85,13 +89,12 @@ function serializeDependency(row: {
   createdAt: Date;
 }) {
   const metadata = metadataOf(row.metadata);
+  const dependencyType = dependencyTypeSchema.safeParse(metadata.dependencyType);
   return {
     id: row.id,
     predecessorId: row.targetObjectId,
     successorId: row.sourceObjectId,
-    dependencyType: dependencyTypeSchema.safeParse(metadata.dependencyType).success
-      ? metadata.dependencyType
-      : 'FS',
+    dependencyType: dependencyType.success ? dependencyType.data : 'FS',
     lagDays: Number.isInteger(metadata.lagDays) ? metadata.lagDays : 0,
     notes: row.notes,
     createdAt: row.createdAt,
@@ -233,7 +236,7 @@ export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
             sourceObjectId: data.successorId,
             targetObjectId: data.predecessorId,
             relationType: 'DEPENDS_ON',
-            notes: data.notes,
+            ...(data.notes !== undefined ? { notes: data.notes } : {}),
             metadata: dependencyMetadata(data.dependencyType, data.lagDays),
           },
         });
