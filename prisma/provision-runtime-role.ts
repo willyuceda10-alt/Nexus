@@ -1,20 +1,29 @@
 import { PrismaClient } from '@prisma/client';
 
 const adminUrl = process.env.ADMIN_DATABASE_URL;
-const runtimeRole = process.env.RUNTIME_DB_ROLE;
-const runtimePassword = process.env.RUNTIME_DB_PASSWORD;
+const runtimeUrl = process.env.RUNTIME_DATABASE_URL;
 
 if (!adminUrl) throw new Error('ADMIN_DATABASE_URL is required.');
-if (!runtimeRole) throw new Error('RUNTIME_DB_ROLE is required.');
-if (!runtimePassword) throw new Error('RUNTIME_DB_PASSWORD is required.');
+if (!runtimeUrl) throw new Error('RUNTIME_DATABASE_URL is required.');
 
-if (!/^[a-z_][a-z0-9_]{0,62}$/.test(runtimeRole)) {
-  throw new Error('RUNTIME_DB_ROLE must be a lowercase PostgreSQL-safe identifier (max 63 chars).');
+const adminConnection = new URL(adminUrl);
+const runtimeConnection = new URL(runtimeUrl);
+const runtimeRole = decodeURIComponent(runtimeConnection.username);
+const runtimePassword = decodeURIComponent(runtimeConnection.password);
+const adminDatabaseName = decodeURIComponent(adminConnection.pathname.replace(/^\//, ''));
+const runtimeDatabaseName = decodeURIComponent(runtimeConnection.pathname.replace(/^\//, ''));
+
+if (!runtimeRole || !/^[a-z_][a-z0-9_]{0,62}$/.test(runtimeRole)) {
+  throw new Error('RUNTIME_DATABASE_URL username must be a lowercase PostgreSQL-safe identifier (max 63 chars).');
 }
-
-const databaseName = decodeURIComponent(new URL(adminUrl).pathname.replace(/^\//, ''));
-if (!databaseName || !/^[A-Za-z0-9_.-]{1,63}$/.test(databaseName)) {
+if (!runtimePassword) {
+  throw new Error('RUNTIME_DATABASE_URL must include a non-empty password.');
+}
+if (!adminDatabaseName || !/^[A-Za-z0-9_.-]{1,63}$/.test(adminDatabaseName)) {
   throw new Error('ADMIN_DATABASE_URL must target a database with a supported identifier.');
+}
+if (runtimeDatabaseName !== adminDatabaseName) {
+  throw new Error('ADMIN_DATABASE_URL and RUNTIME_DATABASE_URL must target the same database.');
 }
 
 const admin = new PrismaClient({
@@ -31,7 +40,7 @@ async function main() {
       SELECT
         set_config('bridata.runtime_role', ${runtimeRole}, true),
         set_config('bridata.runtime_password', ${runtimePassword}, true),
-        set_config('bridata.runtime_database', ${databaseName}, true)
+        set_config('bridata.runtime_database', ${adminDatabaseName}, true)
     `;
 
     await tx.$executeRawUnsafe(`
@@ -115,7 +124,7 @@ async function main() {
 
   console.info(JSON.stringify({
     runtimeRole: role.rolname,
-    database: databaseName,
+    database: adminDatabaseName,
     login: true,
     superuser: false,
     createDb: false,
