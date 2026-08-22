@@ -105,11 +105,32 @@ export class InMemoryObjectRepository implements ObjectRepository {
   }
 }
 
+type UpdateWaiter = {
+  resolve: (value: NexusObject) => void;
+  reject: (reason?: unknown) => void;
+};
+
+type PendingUpdateBatch = {
+  baseHint: NexusObject;
+  updates: Partial<NexusObject>;
+  context: ObjectRepositoryContext;
+  waiters: UpdateWaiter[];
+  timer: ReturnType<typeof setTimeout>;
+};
+
+const UPDATE_BUFFER_MS = 300;
+
 export class ApiObjectRepository implements ObjectRepository {
+  private readonly confirmed = new Map<string, NexusObject>();
+  private readonly pending = new Map<string, PendingUpdateBatch>();
+  private readonly chains = new Map<string, Promise<NexusObject>>();
+
   async list(params: ListObjectsParams = {}, signal?: AbortSignal): Promise<ObjectListResult> {
     const response = await bridataApi.listObjects(params, signal);
+    const items = response.items.map((item) => apiObjectToNexusObject(item));
+    for (const item of items) this.confirmed.set(item.id, item);
     return {
-      items: response.items.map((item) => apiObjectToNexusObject(item)),
+      items,
       nextCursor: response.nextCursor,
     };
   }
@@ -136,10 +157,86 @@ export class ApiObjectRepository implements ObjectRepository {
       metadata: nexusObjectMetadata(data),
     });
 
-    return apiObjectToNexusObject(response, context.currentUser);
+    const created = apiObjectToNexusObject(response, context.currentUser);
+    this.confirmed.set(created.id, created);
+    return created;
   }
 
-  async update(
+  update(
+    existing: NexusObject,
+    updates: Partial<NexusObject>,
+    context: ObjectRepositoryContext,
+  ): Promise<NexusObject> {
+    return new Promise<NexusObject>((resolve, reject) => {
+      const current = this.pending.get(existing.id);
+      if (current) {
+        clearTimeout(current.timer);
+        current.updates = { ...current.updates, ...updates };
+        current.context = context;
+        current.waiters.push({ resolve, reject });
+        current.timer = setTimeout(() => {
+          this.startFlush(existing.id);
+        }, UPDATE_BUFFER_MS);
+        return;
+      }
+
+      const batch: PendingUpdateBatch = {
+        baseHint: this.confirmed.get(existing.id) ?? existing,
+        updates: { ...updates },
+        context,
+        waiters: [{ resolve, reject }],
+        timer: setTimeout(() => {
+          this.startFlush(existing.id);
+        }, UPDATE_BUFFER_MS),
+      };
+      this.pending.set(existing.id, batch);
+    });
+  }
+
+  async delete(existing: NexusObject): Promise<void> {
+    const pending = this.pending.get(existing.id);
+    if (pending) {
+      clearTimeout(pending.timer);
+      this.startFlush(existing.id);
+    }
+
+    const inFlight = this.chains.get(existing.id);
+    if (inFlight) await inFlight;
+
+    await bridataApi.deleteObject(existing.id);
+    this.confirmed.delete(existing.id);
+    this.pending.delete(existing.id);
+    this.chains.delete(existing.id);
+  }
+
+  private startFlush(id: string): void {
+    const batch = this.pending.get(id);
+    if (!batch) return;
+    this.pending.delete(id);
+    clearTimeout(batch.timer);
+
+    const previous = this.chains.get(id) ?? Promise.resolve(this.confirmed.get(id) ?? batch.baseHint);
+    const operation = previous.then((base) =>
+      this.performUpdate(base, batch.updates, batch.context),
+    );
+    this.chains.set(id, operation);
+
+    void operation
+      .then((updated) => {
+        this.confirmed.set(id, updated);
+        batch.waiters.forEach((waiter) => waiter.resolve(updated));
+      })
+      .catch((error) => {
+        batch.waiters.forEach((waiter) => waiter.reject(error));
+      })
+      .finally(() => {
+        if (this.chains.get(id) === operation) {
+          this.chains.delete(id);
+        }
+      });
+  }
+
+  private async performUpdate(
     existing: NexusObject,
     updates: Partial<NexusObject>,
     context: ObjectRepositoryContext,
@@ -163,9 +260,5 @@ export class ApiObjectRepository implements ObjectRepository {
     });
 
     return apiObjectToNexusObject(response, context.currentUser, merged);
-  }
-
-  async delete(existing: NexusObject): Promise<void> {
-    await bridataApi.deleteObject(existing.id);
   }
 }
