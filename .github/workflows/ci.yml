@@ -73,6 +73,14 @@ jobs:
       - name: Verify tenant RLS isolation
         run: npx tsx prisma/rls-smoke.ts
 
+      - name: Verify API bootstrap through auth and RLS
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
+        run: npx tsx apps/api/test/bootstrap-smoke.ts
+
       - name: Validate Azure Bicep
         run: az bicep build --file infra/azure/main.bicep --stdout > /dev/null
 
