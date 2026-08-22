@@ -2,6 +2,7 @@ export type ObjectType =
   | 'PORTFOLIO'
   | 'PROGRAM'
   | 'PROJECT'
+  | 'RESOURCE'
   | 'TASK'
   | 'RISK'
   | 'DOCUMENT'
@@ -15,6 +16,7 @@ export type ObjectType =
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type DependencyType = 'FS' | 'SS' | 'FF' | 'SF';
 export type ScheduleCalendarMode = 'CALENDAR_DAYS_V1' | 'WORKING_DAYS_V1';
+export type ResourceKind = 'PERSON' | 'EQUIPMENT' | 'VENDOR';
 
 export type ObjectStatus =
   | 'DRAFT'
@@ -158,6 +160,15 @@ export interface NexusObject {
   scheduleCalendarMode?: ScheduleCalendarMode;
   scheduleWorkingWeekdays?: number[];
   scheduleHolidays?: string[];
+
+  // Scheduling / resource planning
+  effortHours?: number;
+  linkedUserId?: string;
+  resourceKind?: ResourceKind;
+  capacityHoursPerDay?: number;
+  resourceWorkingWeekdays?: number[];
+  resourceHolidays?: string[];
+  skills?: string[];
 
   probability?: number;
   impact?: number;

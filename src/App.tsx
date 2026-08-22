@@ -11,6 +11,7 @@ import { CommandPalette } from './components/layout/CommandPalette';
 import { WorkspaceHome } from './components/views/WorkspaceHome';
 import { ProjectCenter } from './components/views/ProjectCenter';
 import { PortfoliosView } from './components/views/PortfoliosView';
+import { ResourceCapacityView } from './components/views/ResourceCapacityView';
 import { GovernanceRiskView } from './components/views/GovernanceRiskView';
 import { MeetingsDecisionsView } from './components/views/MeetingsDecisionsView';
 import { DocumentsApprovalsView } from './components/views/DocumentsApprovalsView';
@@ -29,6 +30,8 @@ const MainContentRouter: React.FC = () => {
       return <ProjectCenter />;
     case 'portfolios':
       return <PortfoliosView />;
+    case 'resources':
+      return <ResourceCapacityView />;
     case 'governance':
       return <GovernanceRiskView />;
     case 'meetings':
