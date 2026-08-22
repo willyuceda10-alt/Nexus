@@ -9,6 +9,7 @@ import { dependencyRoutes } from './routes/dependencies.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { objectRoutes } from './routes/objects.js';
+import { scheduleAnalysisRoutes } from './routes/schedule-analysis.js';
 import { sessionRoutes } from './routes/session.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -72,6 +73,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
   await app.register(dependencyRoutes);
+  await app.register(scheduleAnalysisRoutes);
 
   return app;
 }
