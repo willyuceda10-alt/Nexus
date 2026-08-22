@@ -10,6 +10,7 @@ import {
 import { bridataApi, BridataApiError } from '../api/client';
 import type { BootstrapResponse } from '../api/contracts';
 import { runtimeConfig, type DataMode } from '../config/runtime';
+import { useRuntimeAuth } from '../auth/RuntimeAuthContext';
 
 export type ApiBootstrapStatus = 'mock' | 'loading' | 'ready' | 'error';
 
@@ -25,6 +26,7 @@ interface ApiBootstrapContextValue {
 const ApiBootstrapContext = createContext<ApiBootstrapContextValue | null>(null);
 
 export function ApiBootstrapProvider({ children }: { children: ReactNode }) {
+  const auth = useRuntimeAuth();
   const [status, setStatus] = useState<ApiBootstrapStatus>(
     runtimeConfig.dataMode === 'api' ? 'loading' : 'mock',
   );
@@ -35,6 +37,14 @@ export function ApiBootstrapProvider({ children }: { children: ReactNode }) {
   const load = useCallback(async () => {
     if (runtimeConfig.dataMode !== 'api') {
       setStatus('mock');
+      setBootstrap(null);
+      setError(null);
+      setCorrelationId(null);
+      return;
+    }
+
+    if (auth.status !== 'ready' || !auth.activeTenantId) {
+      setStatus('loading');
       setBootstrap(null);
       setError(null);
       setCorrelationId(null);
@@ -61,7 +71,7 @@ export function ApiBootstrapProvider({ children }: { children: ReactNode }) {
         setError('No se pudo conectar con Bridata Project API.');
       }
     }
-  }, []);
+  }, [auth.status, auth.activeTenantId]);
 
   useEffect(() => {
     void load();
