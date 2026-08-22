@@ -11,6 +11,7 @@ import {
   Layers3,
   Settings2,
   ShieldAlert,
+  UsersRound,
 } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
 import { BRAND } from '../../config/brand';
@@ -45,6 +46,7 @@ export const Sidebar: React.FC = () => {
     { id: 'projects', label: 'Proyectos', icon: FolderKanban },
     { id: 'portfolios', label: 'Portafolios', icon: Layers3 },
     { id: 'timeline', label: 'Cronograma', icon: CalendarClock },
+    { id: 'resources', label: 'Recursos y capacidad', icon: UsersRound },
     { id: 'governance', label: 'Riesgos y cambios', icon: ShieldAlert },
   ];
 
