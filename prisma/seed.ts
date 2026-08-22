@@ -5,12 +5,16 @@ const prisma = new PrismaClient();
 const DEV_TENANT_ID = '00000000-0000-4000-8000-000000000002';
 const DEV_USER_ID = '00000000-0000-4000-8000-000000000001';
 const DEV_WORKSPACE_ID = '00000000-0000-4000-8000-000000000003';
+const DEV_PORTFOLIO_ID = '00000000-0000-4000-8000-000000000090';
+const DEV_PROGRAM_ID = '00000000-0000-4000-8000-000000000091';
 const DEV_PROJECT_ID = '00000000-0000-4000-8000-000000000101';
 const DEV_TASK_WEB_API_ID = '00000000-0000-4000-8000-000000000102';
 const DEV_TASK_AZURE_ID = '00000000-0000-4000-8000-000000000103';
 const DEV_TASK_ENTRA_ID = '00000000-0000-4000-8000-000000000104';
 
 const systemDefinitions = [
+  { key: 'PORTFOLIO', name: 'Portafolio', icon: 'layers-3' },
+  { key: 'PROGRAM', name: 'Programa', icon: 'network' },
   { key: 'PROJECT', name: 'Proyecto', icon: 'briefcase' },
   { key: 'TASK', name: 'Tarea', icon: 'check-square' },
   { key: 'DELIVERABLE', name: 'Entregable', icon: 'package-check' },
@@ -38,7 +42,6 @@ async function main() {
     throw new Error('The DEV seed must never run with NODE_ENV=production.');
   }
 
-  // User is global and intentionally not tenant-scoped by RLS.
   const user = await prisma.user.upsert({
     where: { id: DEV_USER_ID },
     update: {
@@ -55,7 +58,6 @@ async function main() {
   });
 
   const result = await prisma.$transaction(async (tx) => {
-    // FORCE RLS requires tenant context before touching any tenant-scoped row.
     await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${DEV_TENANT_ID}, true)`;
 
     const tenant = await tx.tenant.upsert({
@@ -152,11 +154,97 @@ async function main() {
       definitionIds.set(definition.key, savedDefinition.id);
     }
 
+    const portfolioDefinitionId = definitionIds.get('PORTFOLIO');
+    const programDefinitionId = definitionIds.get('PROGRAM');
     const projectDefinitionId = definitionIds.get('PROJECT');
     const taskDefinitionId = definitionIds.get('TASK');
-    if (!projectDefinitionId || !taskDefinitionId) {
-      throw new Error('Required PROJECT/TASK definitions were not created.');
+    if (!portfolioDefinitionId || !programDefinitionId || !projectDefinitionId || !taskDefinitionId) {
+      throw new Error('Required PORTFOLIO/PROGRAM/PROJECT/TASK definitions were not created.');
     }
+
+    await tx.nexusObject.upsert({
+      where: { id: DEV_PORTFOLIO_ID },
+      update: {
+        workspaceId: workspace.id,
+        objectDefinitionId: portfolioDefinitionId,
+        objectTypeKey: 'PORTFOLIO',
+        title: 'Bridata Enterprise Delivery 2026',
+        description: 'Portafolio DEV para gobernar la evolución del producto, plataforma Azure y adopción operativa.',
+        status: 'IN_PROGRESS',
+        priority: 'HIGH',
+        progress: 35,
+        ownerId: user.id,
+        assigneeId: user.id,
+        metadata: {
+          code: 'PORT-BRIDATA-26',
+          strategicObjective: 'Consolidar Bridata Project como plataforma empresarial multi-tenant con gobierno, trazabilidad y despliegue Azure.',
+          seedKey: 'BRIDATA-DEV-PORTFOLIO',
+        },
+        deletedAt: null,
+      },
+      create: {
+        id: DEV_PORTFOLIO_ID,
+        tenantId: tenant.id,
+        workspaceId: workspace.id,
+        objectDefinitionId: portfolioDefinitionId,
+        objectTypeKey: 'PORTFOLIO',
+        title: 'Bridata Enterprise Delivery 2026',
+        description: 'Portafolio DEV para gobernar la evolución del producto, plataforma Azure y adopción operativa.',
+        status: 'IN_PROGRESS',
+        priority: 'HIGH',
+        progress: 35,
+        ownerId: user.id,
+        assigneeId: user.id,
+        metadata: {
+          code: 'PORT-BRIDATA-26',
+          strategicObjective: 'Consolidar Bridata Project como plataforma empresarial multi-tenant con gobierno, trazabilidad y despliegue Azure.',
+          seedKey: 'BRIDATA-DEV-PORTFOLIO',
+        },
+      },
+    });
+
+    await tx.nexusObject.upsert({
+      where: { id: DEV_PROGRAM_ID },
+      update: {
+        workspaceId: workspace.id,
+        objectDefinitionId: programDefinitionId,
+        objectTypeKey: 'PROGRAM',
+        title: 'Programa Core Platform & Azure',
+        description: 'Programa que agrupa la estabilización del núcleo de Bridata Project y su plataforma cloud.',
+        status: 'IN_PROGRESS',
+        priority: 'HIGH',
+        progress: 35,
+        ownerId: user.id,
+        assigneeId: user.id,
+        metadata: {
+          portfolioId: DEV_PORTFOLIO_ID,
+          code: 'PRG-CORE-AZURE',
+          strategicObjective: 'Cerrar persistencia real, seguridad, planificación avanzada y despliegue DEV reproducible en Azure.',
+          seedKey: 'BRIDATA-DEV-PROGRAM',
+        },
+        deletedAt: null,
+      },
+      create: {
+        id: DEV_PROGRAM_ID,
+        tenantId: tenant.id,
+        workspaceId: workspace.id,
+        objectDefinitionId: programDefinitionId,
+        objectTypeKey: 'PROGRAM',
+        title: 'Programa Core Platform & Azure',
+        description: 'Programa que agrupa la estabilización del núcleo de Bridata Project y su plataforma cloud.',
+        status: 'IN_PROGRESS',
+        priority: 'HIGH',
+        progress: 35,
+        ownerId: user.id,
+        assigneeId: user.id,
+        metadata: {
+          portfolioId: DEV_PORTFOLIO_ID,
+          code: 'PRG-CORE-AZURE',
+          strategicObjective: 'Cerrar persistencia real, seguridad, planificación avanzada y despliegue DEV reproducible en Azure.',
+          seedKey: 'BRIDATA-DEV-PROGRAM',
+        },
+      },
+    });
 
     await tx.nexusObject.upsert({
       where: { id: DEV_PROJECT_ID },
@@ -174,6 +262,8 @@ async function main() {
         startDate: new Date('2026-08-01T00:00:00.000Z'),
         dueDate: new Date('2026-11-30T00:00:00.000Z'),
         metadata: {
+          portfolioId: DEV_PORTFOLIO_ID,
+          programId: DEV_PROGRAM_ID,
           budgetTotal: 250000,
           budgetSpent: 65000,
           baselineStartDate: '2026-08-01',
@@ -198,6 +288,8 @@ async function main() {
         startDate: new Date('2026-08-01T00:00:00.000Z'),
         dueDate: new Date('2026-11-30T00:00:00.000Z'),
         metadata: {
+          portfolioId: DEV_PORTFOLIO_ID,
+          programId: DEV_PROGRAM_ID,
           budgetTotal: 250000,
           budgetSpent: 65000,
           baselineStartDate: '2026-08-01',
@@ -289,8 +381,10 @@ async function main() {
       tenantId: tenant.id,
       userId: user.id,
       workspaceId: workspace.id,
+      portfolioId: DEV_PORTFOLIO_ID,
+      programId: DEV_PROGRAM_ID,
       projectId: DEV_PROJECT_ID,
-      seededObjects: 1 + taskFixtures.length,
+      seededObjects: 3 + taskFixtures.length,
     };
   });
 
