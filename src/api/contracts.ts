@@ -35,6 +35,78 @@ export interface ApiObjectDefinition {
   isSystem: boolean;
 }
 
+export interface ApiUserSummary {
+  id: string;
+  fullName: string;
+  email: string;
+  avatarUrl: string | null;
+}
+
+export interface ApiNexusObject {
+  id: string;
+  tenantId: string;
+  workspaceId: string;
+  objectDefinitionId: string;
+  objectTypeKey: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  progress: number;
+  ownerId: string;
+  assigneeId: string | null;
+  startDate: string | null;
+  dueDate: string | null;
+  metadata: unknown;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  owner?: ApiUserSummary;
+  assignee?: ApiUserSummary | null;
+}
+
+export interface ApiObjectListResponse {
+  items: ApiNexusObject[];
+  nextCursor: string | null;
+}
+
+export interface ListObjectsParams {
+  workspaceId?: string;
+  type?: string;
+  status?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface CreateApiObjectInput {
+  workspaceId: string;
+  objectDefinitionId: string;
+  objectTypeKey: string;
+  title: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  progress?: number;
+  assigneeId?: string;
+  startDate?: string;
+  dueDate?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateApiObjectInput {
+  version: number;
+  title?: string;
+  description?: string | null;
+  status?: string;
+  priority?: string;
+  progress?: number;
+  assigneeId?: string | null;
+  startDate?: string | null;
+  dueDate?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
 export interface BootstrapResponse {
   product: {
     name: string;
