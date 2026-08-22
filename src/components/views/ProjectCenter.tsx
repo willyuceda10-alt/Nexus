@@ -44,7 +44,7 @@ export const ProjectCenter: React.FC = () => {
     return (
       <div className="mx-auto w-full max-w-[1500px] px-6 py-8 lg:px-8">
         <div className="command-panel flex min-h-[240px] flex-col items-center justify-center text-center">
-          <RefreshCw className="h-5 w-5 animate-spin text-indigo-600" />
+          <RefreshCw className="h-5 w-5 animate-spin text-green-700" />
           <h2 className="mt-4 text-[13px] font-bold text-slate-900">Cargando el proyecto</h2>
           <p className="mt-1 text-[10px] text-slate-400">Consultando la fuente de datos activa de Bridata Project.</p>
         </div>
@@ -58,7 +58,7 @@ export const ProjectCenter: React.FC = () => {
         <div className="command-panel border-rose-200 p-8">
           <p className="text-[13px] font-bold text-rose-700">No se pudieron cargar los proyectos</p>
           <p className="mt-2 text-[11px] text-slate-500">{objectDataError || 'Error de datos no identificado.'}</p>
-          <button onClick={() => void reloadObjects()} className="mt-5 inline-flex h-9 items-center gap-2 rounded-xl bg-indigo-600 px-4 text-[11px] font-bold text-white">
+          <button onClick={() => void reloadObjects()} className="mt-5 inline-flex h-9 items-center gap-2 rounded-xl bg-green-700 px-4 text-[11px] font-bold text-white hover:bg-green-800">
             <RefreshCw className="h-3.5 w-3.5" /> Reintentar
           </button>
         </div>
@@ -74,7 +74,7 @@ export const ProjectCenter: React.FC = () => {
     return (
       <div className="mx-auto w-full max-w-[1500px] px-6 py-8 lg:px-8">
         <div className="command-panel flex min-h-[360px] flex-col items-center justify-center border-dashed text-center">
-          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-600"><ListTree className="h-5 w-5" /></div>
+          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-green-50 text-green-700"><ListTree className="h-5 w-5" /></div>
           <h2 className="mt-4 text-[15px] font-bold text-slate-900">Crea el primer proyecto del workspace</h2>
           <p className="mt-2 max-w-lg text-[11px] leading-5 text-slate-500">El proyecto será el punto de entrada para tareas, hitos, riesgos, entregables, decisiones y documentos.</p>
           <button onClick={() => openCreateModal('PROJECT')} className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-[11px] font-bold text-white">
@@ -114,7 +114,7 @@ export const ProjectCenter: React.FC = () => {
             <span>{project.status.replaceAll('_', ' ')}</span>
           </div>
           <button onClick={() => openObjectDrawer(project.id)} className="block max-w-full text-left">
-            <h1 className="truncate text-[27px] font-extrabold tracking-[-0.03em] text-slate-950 transition hover:text-indigo-700">{project.title}</h1>
+            <h1 className="truncate text-[27px] font-extrabold tracking-[-0.03em] text-slate-950 transition hover:text-green-800">{project.title}</h1>
           </button>
           <p className="mt-1 max-w-2xl text-[12px] leading-5 text-slate-500">{project.description || 'Proyecto gestionado en Bridata Project.'}</p>
         </div>
@@ -141,7 +141,7 @@ export const ProjectCenter: React.FC = () => {
         <div className="command-kpi-card !min-h-[122px] !p-4">
           <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Avance</p>
           <p className="mt-4 text-[25px] font-extrabold text-slate-950">{project.progress}%</p>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.min(100, project.progress)}%` }} /></div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-green-500" style={{ width: `${Math.min(100, project.progress)}%` }} /></div>
         </div>
 
         <div className="command-kpi-card !min-h-[122px] !p-4">
@@ -173,7 +173,7 @@ export const ProjectCenter: React.FC = () => {
                 <button
                   key={tab.id}
                   onClick={() => setProjectActiveSubTab(tab.id)}
-                  className={`flex h-9 items-center gap-2 rounded-xl px-3 text-[10px] font-bold transition ${active ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
+                  className={`flex h-9 items-center gap-2 rounded-xl px-3 text-[10px] font-bold transition ${active ? 'bg-green-700 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
                 >
                   <Icon className="h-3.5 w-3.5" /> {tab.label}
                 </button>

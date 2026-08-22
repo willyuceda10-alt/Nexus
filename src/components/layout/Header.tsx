@@ -70,7 +70,7 @@ export const Header: React.FC = () => {
             onClick={() => setWorkspaceOpen((open) => !open)}
             className="flex max-w-[250px] items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white"
           >
-            <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-indigo-600" />
+            <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-green-700" />
             <span className="truncate">{currentWorkspace?.name || 'Seleccionar workspace'}</span>
             <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
           </button>
@@ -88,14 +88,14 @@ export const Header: React.FC = () => {
                     setWorkspaceOpen(false);
                   }}
                   className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition ${
-                    currentWorkspace?.id === workspace.id ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                    currentWorkspace?.id === workspace.id ? 'bg-green-50' : 'hover:bg-slate-50'
                   }`}
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-[12px] font-semibold text-slate-900">{workspace.name}</span>
                     <span className="mt-0.5 block truncate text-[10px] text-slate-400">{workspace.organizationName}</span>
                   </span>
-                  {currentWorkspace?.id === workspace.id && <Check className="h-4 w-4 text-indigo-600" />}
+                  {currentWorkspace?.id === workspace.id && <Check className="h-4 w-4 text-green-700" />}
                 </button>
               ))}
             </div>
@@ -169,7 +169,7 @@ export const Header: React.FC = () => {
 
         <button
           onClick={() => openCreateModal('TASK')}
-          className="flex h-9 items-center gap-2 rounded-xl bg-indigo-600 px-3.5 text-[11px] font-bold text-white shadow-[0_6px_16px_rgba(79,70,229,0.22)] transition hover:bg-indigo-700 active:scale-[0.98]"
+          className="flex h-9 items-center gap-2 rounded-xl bg-green-700 px-3.5 text-[11px] font-bold text-white shadow-[0_6px_16px_rgba(22,101,52,0.22)] transition hover:bg-green-800 active:scale-[0.98]"
         >
           <Plus className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Crear</span>

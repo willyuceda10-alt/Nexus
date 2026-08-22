@@ -71,7 +71,7 @@ export const TableView: React.FC<{ projectId: string }> = ({ projectId }) => {
           </div>
         </div>
 
-        <button onClick={() => openCreateModal('TASK')} className="flex h-9 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 text-[10px] font-bold text-white transition hover:bg-indigo-700">
+        <button onClick={() => openCreateModal('TASK')} className="flex h-9 items-center justify-center gap-2 rounded-xl bg-green-700 px-3 text-[10px] font-bold text-white transition hover:bg-green-800">
           <Plus className="h-3.5 w-3.5" /> Agregar
         </button>
       </div>
@@ -100,7 +100,7 @@ export const TableView: React.FC<{ projectId: string }> = ({ projectId }) => {
                     <span className="rounded-md bg-slate-100 px-2 py-1 text-[9px] font-bold text-slate-500">{item.type}</span>
                   </td>
                   <td className="max-w-[330px] px-4 py-3.5">
-                    <button onClick={() => openObjectDrawer(item.id)} className="block w-full truncate text-left text-[11px] font-semibold text-slate-900 transition hover:text-indigo-700">
+                    <button onClick={() => openObjectDrawer(item.id)} className="block w-full truncate text-left text-[11px] font-semibold text-slate-900 transition hover:text-green-800">
                       {item.title}
                     </button>
                     {item.description && <p className="mt-1 truncate text-[9px] text-slate-400">{item.description}</p>}
@@ -125,7 +125,7 @@ export const TableView: React.FC<{ projectId: string }> = ({ projectId }) => {
                   </td>
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.min(100, item.progress)}%` }} /></div>
+                      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-green-500" style={{ width: `${Math.min(100, item.progress)}%` }} /></div>
                       <span className="w-8 text-right text-[9px] font-bold text-slate-600">{item.progress}%</span>
                     </div>
                   </td>
