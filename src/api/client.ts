@@ -1,5 +1,13 @@
 import { runtimeConfig } from '../config/runtime';
-import type { ApiErrorPayload, BootstrapResponse } from './contracts';
+import type {
+  ApiErrorPayload,
+  ApiNexusObject,
+  ApiObjectListResponse,
+  BootstrapResponse,
+  CreateApiObjectInput,
+  ListObjectsParams,
+  UpdateApiObjectInput,
+} from './contracts';
 
 export type AccessTokenProvider = () => Promise<string | null>;
 export type TenantIdProvider = () => string | null;
@@ -73,8 +81,44 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
+function objectListPath(params: ListObjectsParams = {}): string {
+  const query = new URLSearchParams();
+  if (params.workspaceId) query.set('workspaceId', params.workspaceId);
+  if (params.type) query.set('type', params.type);
+  if (params.status) query.set('status', params.status);
+  if (params.cursor) query.set('cursor', params.cursor);
+  if (params.limit) query.set('limit', String(params.limit));
+
+  const suffix = query.toString();
+  return suffix ? `/api/v1/objects?${suffix}` : '/api/v1/objects';
+}
+
 export const bridataApi = {
   bootstrap(signal?: AbortSignal): Promise<BootstrapResponse> {
     return request<BootstrapResponse>('/api/v1/bootstrap', { signal });
+  },
+
+  listObjects(params: ListObjectsParams = {}, signal?: AbortSignal): Promise<ApiObjectListResponse> {
+    return request<ApiObjectListResponse>(objectListPath(params), { signal });
+  },
+
+  createObject(input: CreateApiObjectInput): Promise<ApiNexusObject> {
+    return request<ApiNexusObject>('/api/v1/objects', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+
+  updateObject(id: string, input: UpdateApiObjectInput): Promise<ApiNexusObject> {
+    return request<ApiNexusObject>(`/api/v1/objects/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  },
+
+  deleteObject(id: string): Promise<void> {
+    return request<void>(`/api/v1/objects/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
   },
 };
