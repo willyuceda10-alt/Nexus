@@ -1,6 +1,7 @@
 import React from 'react';
 import { ApiBootstrapProvider } from './context/ApiBootstrapContext';
 import { NexusProvider, useNexus } from './context/NexusContext';
+import { SchedulingProvider } from './context/SchedulingContext';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
 import { UniversalObjectDrawer } from './components/layout/UniversalObjectDrawer';
@@ -51,21 +52,23 @@ export function App() {
   return (
     <ApiBootstrapProvider>
       <NexusProvider>
-        <div className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] text-slate-900 font-sans selection:bg-indigo-500 selection:text-white">
-          <Sidebar />
+        <SchedulingProvider>
+          <div className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] font-sans text-slate-900 selection:bg-green-200 selection:text-green-950">
+            <Sidebar />
 
-          <div className="flex flex-1 flex-col min-w-0 overflow-hidden bg-[#F8FAFC]">
-            <Header />
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#F8FAFC]">
+              <Header />
 
-            <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">
-              <MainContentRouter />
-            </main>
+              <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">
+                <MainContentRouter />
+              </main>
+            </div>
+
+            <UniversalObjectDrawer />
+            <CreateObjectModal />
+            <CommandPalette />
           </div>
-
-          <UniversalObjectDrawer />
-          <CreateObjectModal />
-          <CommandPalette />
-        </div>
+        </SchedulingProvider>
       </NexusProvider>
     </ApiBootstrapProvider>
   );
