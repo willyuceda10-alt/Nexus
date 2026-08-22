@@ -15,7 +15,7 @@ jobs:
   preflight:
     name: Validate Azure DEV without deployment
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -53,23 +53,81 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          az group show --name "$AZURE_RESOURCE_GROUP" --output none
-          echo "Target resource group exists and is accessible."
+          actual_location="$(az group show --name "$AZURE_RESOURCE_GROUP" --query location --output tsv)"
+          echo "Target resource group: $AZURE_RESOURCE_GROUP"
+          echo "Resource group location: $actual_location"
+          echo "Configured Azure location: $AZURE_LOCATION"
 
-      - name: Validate Bicep compilation
-        run: az bicep build --file infra/azure/main.bicep --stdout > /dev/null
+      - name: Verify required Azure resource providers
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for namespace in \
+            Microsoft.App \
+            Microsoft.ContainerRegistry \
+            Microsoft.DBforPostgreSQL \
+            Microsoft.Insights \
+            Microsoft.KeyVault \
+            Microsoft.ManagedIdentity \
+            Microsoft.Network \
+            Microsoft.OperationalInsights \
+            Microsoft.Storage; do
+            state="$(az provider show --namespace "$namespace" --query registrationState --output tsv)"
+            echo "$namespace: $state"
+            if [ "$state" != "Registered" ]; then
+              echo "::error title=Azure provider not registered::$namespace is $state. Preflight never registers providers automatically."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
 
-      - name: Run Azure what-if
+      - name: Validate Bicep and DEV parameters
+        shell: bash
+        run: |
+          set -euo pipefail
+          az bicep build --file infra/azure/main.bicep --stdout > /dev/null
+          az bicep build-params --file infra/azure/dev.bicepparam --stdout > /dev/null
+
+      - name: What-if foundation only
         shell: bash
         run: |
           set -euo pipefail
           az deployment group what-if \
-            --name bridata-dev-preflight \
+            --name bridata-dev-foundation-preflight \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --template-file infra/azure/main.bicep \
-            --parameters namePrefix=nexus environment=dev \
+            --parameters \
+              namePrefix=nexus \
+              environment=dev \
+              deployPostgres=false \
+            --no-pretty-print
+
+      - name: What-if full runtime with private PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          WHATIF_PASSWORD="BridataWf!$(openssl rand -hex 16)Aa1"
+          trap 'unset WHATIF_PASSWORD' EXIT
+
+          az deployment group what-if \
+            --name bridata-dev-runtime-preflight \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/main.bicep \
+            --parameters \
+              namePrefix=nexus \
+              environment=dev \
+              deployPostgres=true \
+              postgresAdministratorLogin=bridata_admin \
+              postgresAdministratorPassword="$WHATIF_PASSWORD" \
+              postgresDatabaseName=bridata \
+              postgresSkuName=Standard_B1ms \
+              postgresStorageSizeGb=32 \
             --no-pretty-print
 
       - name: Confirm no deployment was executed
         run: |
-          echo "Preflight completed. This workflow performs validation/what-if only and does not run 'az deployment group create'."
+          echo "Preflight completed. This workflow only validates Bicep and runs Azure what-if."
+          echo "It never runs 'az deployment group create', never provisions resources, and never persists the ephemeral PostgreSQL what-if password."

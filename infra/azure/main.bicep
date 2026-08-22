@@ -12,6 +12,26 @@ param environment string = 'dev'
 
 param location string = resourceGroup().location
 
+@description('Creates the PostgreSQL Flexible Server. Defaults to false so validation and foundation work never provision the database by accident.')
+param deployPostgres bool = false
+
+@description('PostgreSQL administrator login used only when deployPostgres=true.')
+param postgresAdministratorLogin string = 'bridata_admin'
+
+@secure()
+@description('PostgreSQL administrator password. Required only when deployPostgres=true. Never store a real value in git.')
+param postgresAdministratorPassword string = ''
+
+@description('Application database name created inside PostgreSQL when deployPostgres=true.')
+param postgresDatabaseName string = 'bridata'
+
+@description('DEV uses the smallest practical Burstable profile. Staging/prod can override this parameter.')
+param postgresSkuName string = environment == 'prod' ? 'Standard_D2s_v5' : 'Standard_B1ms'
+
+@description('PostgreSQL storage in GiB. Azure Flexible Server starts at 32 GiB.')
+@minValue(32)
+param postgresStorageSizeGb int = environment == 'prod' ? 128 : 32
+
 param tags object = {
   product: 'Bridata Project'
   technicalPlatform: 'Nexus Core'
@@ -24,6 +44,66 @@ var baseName = '${namePrefix}-${environment}'
 var storageName = toLower('${namePrefix}${environment}${suffix}')
 var acrName = toLower('${namePrefix}${environment}${suffix}')
 var keyVaultName = '${baseName}-${suffix}'
+var postgresServerResourceName = take(toLower('${baseName}-${suffix}-pg'), 63)
+var postgresPrivateDnsZoneName = '${baseName}.postgres.database.azure.com'
+
+// Private address plan kept intentionally simple for the first environment.
+// Container Apps consumption-only VNet integration requires a dedicated /23.
+// PostgreSQL Flexible Server private access requires its own delegated subnet; /28 is the supported minimum.
+resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+  name: '${baseName}-vnet'
+  location: location
+  tags: tags
+  properties: {
+    addressSpace: {
+      addressPrefixes: [
+        '10.40.0.0/16'
+      ]
+    }
+  }
+}
+
+resource containerAppsSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
+  parent: virtualNetwork
+  name: 'container-apps'
+  properties: {
+    addressPrefix: '10.40.0.0/23'
+  }
+}
+
+resource postgresSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
+  parent: virtualNetwork
+  name: 'postgres'
+  properties: {
+    addressPrefix: '10.40.2.0/28'
+    delegations: [
+      {
+        name: 'postgres-flexible-server'
+        properties: {
+          serviceName: 'Microsoft.DBforPostgreSQL/flexibleServers'
+        }
+      }
+    ]
+  }
+}
+
+resource postgresPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  name: postgresPrivateDnsZoneName
+  location: 'global'
+  tags: tags
+}
+
+resource postgresPrivateDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+  parent: postgresPrivateDnsZone
+  name: '${baseName}-vnet-link'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: virtualNetwork.id
+    }
+  }
+}
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: '${baseName}-logs'
@@ -116,6 +196,14 @@ resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   }
 }
 
+// This identity is created with the foundation. A later API delivery phase grants it AcrPull
+// and Key Vault access before any private image is attached to a Container App.
+resource apiIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${baseName}-api-mi'
+  location: location
+  tags: tags
+}
+
 resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: '${baseName}-cae'
   location: location
@@ -128,14 +216,75 @@ resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
         sharedKey: listKeys(logAnalytics.id, '2022-10-01').primarySharedKey
       }
     }
+    vnetConfiguration: {
+      infrastructureSubnetId: containerAppsSubnet.id
+    }
+  }
+}
+
+resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' = if (deployPostgres) {
+  name: postgresServerResourceName
+  location: location
+  tags: tags
+  sku: {
+    name: postgresSkuName
+    tier: environment == 'prod' ? 'GeneralPurpose' : 'Burstable'
+  }
+  properties: {
+    administratorLogin: postgresAdministratorLogin
+    administratorLoginPassword: postgresAdministratorPassword
+    version: '16'
+    authConfig: {
+      activeDirectoryAuth: 'Disabled'
+      passwordAuth: 'Enabled'
+    }
+    backup: {
+      backupRetentionDays: environment == 'prod' ? 14 : 7
+      geoRedundantBackup: 'Disabled'
+    }
+    highAvailability: {
+      mode: environment == 'prod' ? 'ZoneRedundant' : 'Disabled'
+    }
+    network: {
+      delegatedSubnetResourceId: postgresSubnet.id
+      privateDnsZoneArmResourceId: postgresPrivateDnsZone.id
+      publicNetworkAccess: 'Disabled'
+    }
+    storage: {
+      autoGrow: 'Enabled'
+      storageSizeGB: postgresStorageSizeGb
+    }
+  }
+  dependsOn: [
+    postgresPrivateDnsLink
+  ]
+}
+
+resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2025-08-01' = if (deployPostgres) {
+  parent: postgresServer
+  name: postgresDatabaseName
+  properties: {
+    charset: 'UTF8'
+    collation: 'en_US.UTF8'
   }
 }
 
 output resourceGroupName string = resourceGroup().name
 output location string = location
+output virtualNetworkName string = virtualNetwork.name
+output containerAppsSubnetId string = containerAppsSubnet.id
+output postgresSubnetId string = postgresSubnet.id
+output postgresPrivateDnsZoneName string = postgresPrivateDnsZone.name
 output logAnalyticsName string = logAnalytics.name
 output applicationInsightsName string = appInsights.name
 output storageAccountName string = storage.name
 output keyVaultName string = keyVault.name
 output containerRegistryName string = registry.name
+output containerRegistryLoginServer string = registry.properties.loginServer
+output apiManagedIdentityName string = apiIdentity.name
+output apiManagedIdentityPrincipalId string = apiIdentity.properties.principalId
 output containerAppsEnvironmentName string = containerEnvironment.name
+output postgresDeployed bool = deployPostgres
+output deployedPostgresServerName string = deployPostgres ? postgresServerResourceName : ''
+output postgresFqdn string = deployPostgres ? '${postgresServerResourceName}.postgres.database.azure.com' : ''
+output applicationDatabaseName string = deployPostgres ? postgresDatabaseName : ''
