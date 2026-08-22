@@ -74,7 +74,7 @@ jobs:
         run: npx tsx prisma/rls-smoke.ts
 
       - name: Verify pre-tenant session discovery
-        env: &dev_auth
+        env:
           AUTH_MODE: dev
           DEV_AUTH_ENABLED: "true"
           DEV_USER_ID: 00000000-0000-4000-8000-000000000001
@@ -82,47 +82,91 @@ jobs:
         run: npx tsx apps/api/test/session-smoke.ts
 
       - name: Verify API bootstrap through auth and RLS
-        env: *dev_auth
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/bootstrap-smoke.ts
 
       - name: Verify object CRUD and optimistic locking
-        env: *dev_auth
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/objects-crud-smoke.ts
 
       - name: Verify persistent portfolio hierarchy
-        env: *dev_auth
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/portfolio-hierarchy-smoke.ts
 
       - name: Verify hierarchy integrity and management roles
-        env: *dev_auth
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/hierarchy-hardening-smoke.ts
 
       - name: Verify resource capacity planning
-        env: *dev_auth
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/resource-capacity-smoke.ts
 
       - name: Verify resource planning edits and recalculation
-        env: *dev_auth
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/resource-capacity-edit-smoke.ts
 
       - name: Verify dependency graph and cycle protection
-        env: *dev_auth
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/dependencies-smoke.ts
 
       - name: Verify CPM schedule analysis
-        env: *dev_auth
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/schedule-analysis-smoke.ts
 
       - name: Verify working calendar scheduling
-        env: *dev_auth
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/working-calendar-smoke.ts
 
       - name: Verify project forecast
-        env: *dev_auth
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/forecast-smoke.ts
 
       - name: Verify project baseline capture
-        env: *dev_auth
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/baseline-smoke.ts
 
       - name: Validate Azure Bicep
