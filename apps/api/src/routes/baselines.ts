@@ -24,7 +24,11 @@ function projectIdFromMetadata(value: Prisma.JsonValue | null): string | null {
 
 function hasBaseline(value: Prisma.JsonValue | null): boolean {
   const metadata = asRecord(value);
-  return typeof metadata.baselineStartDate === 'string' || typeof metadata.baselineEndDate === 'string';
+  return (
+    typeof metadata.baselineCapturedAt === 'string' ||
+    typeof metadata.baselineStartDate === 'string' ||
+    typeof metadata.baselineEndDate === 'string'
+  );
 }
 
 function dateOnly(value: Date | null): string | null {
