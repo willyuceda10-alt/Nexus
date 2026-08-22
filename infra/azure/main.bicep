@@ -44,7 +44,7 @@ var baseName = '${namePrefix}-${environment}'
 var storageName = toLower('${namePrefix}${environment}${suffix}')
 var acrName = toLower('${namePrefix}${environment}${suffix}')
 var keyVaultName = '${baseName}-${suffix}'
-var postgresServerName = take(toLower('${baseName}-${suffix}-pg'), 63)
+var postgresServerResourceName = take(toLower('${baseName}-${suffix}-pg'), 63)
 var postgresPrivateDnsZoneName = '${baseName}.postgres.database.azure.com'
 
 // Private address plan kept intentionally simple for the first environment.
@@ -97,7 +97,6 @@ resource postgresPrivateDnsLink 'Microsoft.Network/privateDnsZones/virtualNetwor
   parent: postgresPrivateDnsZone
   name: '${baseName}-vnet-link'
   location: 'global'
-  tags: tags
   properties: {
     registrationEnabled: false
     virtualNetwork: {
@@ -224,7 +223,7 @@ resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
 }
 
 resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' = if (deployPostgres) {
-  name: postgresServerName
+  name: postgresServerResourceName
   location: location
   tags: tags
   sku: {
@@ -286,6 +285,6 @@ output apiManagedIdentityName string = apiIdentity.name
 output apiManagedIdentityPrincipalId string = apiIdentity.properties.principalId
 output containerAppsEnvironmentName string = containerEnvironment.name
 output postgresDeployed bool = deployPostgres
-output postgresServerName string = deployPostgres ? postgresServerName : ''
-output postgresFqdn string = deployPostgres ? '${postgresServerName}.postgres.database.azure.com' : ''
-output postgresDatabaseName string = deployPostgres ? postgresDatabaseName : ''
+output deployedPostgresServerName string = deployPostgres ? postgresServerResourceName : ''
+output postgresFqdn string = deployPostgres ? '${postgresServerResourceName}.postgres.database.azure.com' : ''
+output applicationDatabaseName string = deployPostgres ? postgresDatabaseName : ''
