@@ -6,6 +6,7 @@ import type {
   ApiErrorPayload,
   ApiNexusObject,
   ApiObjectListResponse,
+  ApiProjectForecast,
   ApiScheduleAnalysis,
   BootstrapResponse,
   CreateApiDependencyInput,
@@ -54,23 +55,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   headers.set('accept', 'application/json');
   headers.set('x-correlation-id', crypto.randomUUID());
 
-  if (init.body && !headers.has('content-type')) {
-    headers.set('content-type', 'application/json');
-  }
+  if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
+  if (token) headers.set('authorization', `Bearer ${token}`);
+  if (tenantId) headers.set('x-bridata-tenant-id', tenantId);
 
-  if (token) {
-    headers.set('authorization', `Bearer ${token}`);
-  }
-
-  if (tenantId) {
-    headers.set('x-bridata-tenant-id', tenantId);
-  }
-
-  const response = await fetch(`${runtimeConfig.apiBaseUrl}${path}`, {
-    ...init,
-    headers,
-  });
-
+  const response = await fetch(`${runtimeConfig.apiBaseUrl}${path}`, { ...init, headers });
   if (!response.ok) {
     let payload: ApiErrorPayload = {};
     try {
@@ -80,11 +69,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
     throw new BridataApiError(response.status, payload);
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -95,7 +80,6 @@ function objectListPath(params: ListObjectsParams = {}): string {
   if (params.status) query.set('status', params.status);
   if (params.cursor) query.set('cursor', params.cursor);
   if (params.limit) query.set('limit', String(params.limit));
-
   const suffix = query.toString();
   return suffix ? `/api/v1/objects?${suffix}` : '/api/v1/objects';
 }
@@ -104,65 +88,43 @@ export const bridataApi = {
   session(signal?: AbortSignal): Promise<SessionResponse> {
     return request<SessionResponse>('/api/v1/session', { signal });
   },
-
   bootstrap(signal?: AbortSignal): Promise<BootstrapResponse> {
     return request<BootstrapResponse>('/api/v1/bootstrap', { signal });
   },
-
   listObjects(params: ListObjectsParams = {}, signal?: AbortSignal): Promise<ApiObjectListResponse> {
     return request<ApiObjectListResponse>(objectListPath(params), { signal });
   },
-
   createObject(input: CreateApiObjectInput): Promise<ApiNexusObject> {
-    return request<ApiNexusObject>('/api/v1/objects', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
+    return request<ApiNexusObject>('/api/v1/objects', { method: 'POST', body: JSON.stringify(input) });
   },
-
   updateObject(id: string, input: UpdateApiObjectInput): Promise<ApiNexusObject> {
-    return request<ApiNexusObject>(`/api/v1/objects/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(input),
-    });
+    return request<ApiNexusObject>(`/api/v1/objects/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
   },
-
   deleteObject(id: string): Promise<void> {
-    return request<void>(`/api/v1/objects/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    });
+    return request<void>(`/api/v1/objects/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
-
   listDependencies(workspaceId: string, signal?: AbortSignal): Promise<ApiDependencyListResponse> {
     const query = new URLSearchParams({ workspaceId });
     return request<ApiDependencyListResponse>(`/api/v1/dependencies?${query.toString()}`, { signal });
   },
-
   createDependency(input: CreateApiDependencyInput): Promise<ApiDependency> {
-    return request<ApiDependency>('/api/v1/dependencies', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
+    return request<ApiDependency>('/api/v1/dependencies', { method: 'POST', body: JSON.stringify(input) });
   },
-
   updateDependency(id: string, input: UpdateApiDependencyInput): Promise<ApiDependency> {
-    return request<ApiDependency>(`/api/v1/dependencies/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(input),
-    });
+    return request<ApiDependency>(`/api/v1/dependencies/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
   },
-
   deleteDependency(id: string): Promise<void> {
-    return request<void>(`/api/v1/dependencies/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    });
+    return request<void>(`/api/v1/dependencies/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
-
   scheduleAnalysis(projectId: string, signal?: AbortSignal): Promise<ApiScheduleAnalysis> {
     const query = new URLSearchParams({ projectId });
     return request<ApiScheduleAnalysis>(`/api/v1/schedule-analysis?${query.toString()}`, { signal });
   },
-
+  projectForecast(projectId: string, asOf?: string, signal?: AbortSignal): Promise<ApiProjectForecast> {
+    const query = new URLSearchParams({ projectId });
+    if (asOf) query.set('asOf', asOf);
+    return request<ApiProjectForecast>(`/api/v1/forecast?${query.toString()}`, { signal });
+  },
   saveProjectBaseline(projectId: string, overwrite = false): Promise<ApiBaselineSummary> {
     return request<ApiBaselineSummary>(`/api/v1/projects/${encodeURIComponent(projectId)}/baseline`, {
       method: 'POST',
