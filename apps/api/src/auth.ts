@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
 import { config } from './config.js';
 import { prisma } from './db.js';
+import { withTenant } from './tenant-transaction.js';
 
 export type AuthProvider = 'ENTRA_ID' | 'DEV';
 
@@ -138,10 +139,12 @@ export async function resolveActor(
   if (principal.provider === 'DEV') {
     const tenantId = principal.devTenantId!;
     const userId = principal.devUserId!;
-    const membership = await prisma.tenantMembership.findUnique({
-      where: { tenantId_userId: { tenantId, userId } },
-      include: { user: true },
-    });
+    const membership = await withTenant(tenantId, (tx) =>
+      tx.tenantMembership.findUnique({
+        where: { tenantId_userId: { tenantId, userId } },
+        include: { user: true },
+      }),
+    );
 
     if (!membership || membership.status !== 'ACTIVE' || !membership.user.isActive) {
       await reply.code(403).send({
@@ -190,14 +193,16 @@ export async function resolveActor(
     return;
   }
 
-  const membership = await prisma.tenantMembership.findUnique({
-    where: {
-      tenantId_userId: {
-        tenantId,
-        userId: identity.userId,
+  const membership = await withTenant(tenantId, (tx) =>
+    tx.tenantMembership.findUnique({
+      where: {
+        tenantId_userId: {
+          tenantId,
+          userId: identity.userId,
+        },
       },
-    },
-  });
+    }),
+  );
 
   if (!membership || membership.status !== 'ACTIVE') {
     await reply.code(403).send({
