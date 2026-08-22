@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import {
-  Search,
-  Plus,
   Bell,
-  Building,
-  ChevronDown,
-  Shield,
+  Building2,
   Check,
+  ChevronDown,
+  Command,
+  Plus,
+  Search,
+  ShieldCheck,
 } from 'lucide-react';
 import { ApiStatusBadge } from '../system/ApiStatusBadge';
 import { useNexus } from '../../context/NexusContext';
-import { BRAND } from '../../config/brand';
 
 export const Header: React.FC = () => {
   const {
@@ -18,9 +18,7 @@ export const Header: React.FC = () => {
     workspaces,
     currentWorkspace,
     setCurrentWorkspaceId,
-    users,
     currentUser,
-    setCurrentUserId,
     setIsCommandPaletteOpen,
     openCreateModal,
     approvals,
@@ -29,175 +27,138 @@ export const Header: React.FC = () => {
     activeTab,
   } = useNexus();
 
-  const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
-  const [isPersonaDropdownOpen, setIsPersonaDropdownOpen] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
-  const pendingApprovals = approvals.filter((a) => a.status === 'PENDING');
+  const pendingApprovals = approvals.filter((approval) => approval.status === 'PENDING');
 
-  const getBreadcrumbTitle = () => {
+  const pageTitle = (() => {
     switch (activeTab) {
-      case 'home': return 'Inicio / Dashboard';
-      case 'project': case 'projects': return 'Centro de Proyectos';
-      case 'portfolios': return 'Portafolios & Programas';
-      case 'governance': return 'Gobernanza & Riesgos';
-      case 'meetings': return 'Reuniones & Decisiones';
-      case 'documents': return 'Centro de Documentos & Aprobaciones';
-      case 'timeline': return 'Timeline Histórico';
-      case 'reports': return 'Reportes & KPIs';
+      case 'home': return 'Centro de mando';
+      case 'project': return 'Proyecto';
+      case 'projects': return 'Proyectos';
+      case 'portfolios': return 'Portafolios';
+      case 'governance': return 'Riesgos y cambios';
+      case 'meetings': return 'Reuniones y decisiones';
+      case 'documents': return 'Documentos y aprobaciones';
+      case 'timeline': return 'Cronograma';
+      case 'reports': return 'Analítica ejecutiva';
       case 'settings': return 'Configuración';
-      default: return BRAND.name;
+      case 'inbox': return 'Mi trabajo';
+      default: return 'Bridata Project';
     }
-  };
+  })();
+
+  const userInitials = currentUser.name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
 
   return (
-    <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-8 flex-shrink-0 z-10 shadow-sm">
-      <div className="flex items-center gap-4 text-sm font-medium text-slate-400">
-        <div className="relative">
+    <header className="relative z-30 flex h-[72px] flex-shrink-0 items-center justify-between border-b border-slate-200/80 bg-white px-6">
+      <div className="flex min-w-0 items-center gap-5">
+        <div className="min-w-0">
+          <p className="truncate text-[15px] font-bold tracking-tight text-slate-950">{pageTitle}</p>
+          <p className="mt-0.5 truncate text-[10px] font-medium text-slate-400">{tenant.name}</p>
+        </div>
+
+        <div className="relative hidden md:block">
           <button
-            onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 transition-colors"
+            onClick={() => setWorkspaceOpen((open) => !open)}
+            className="flex max-w-[250px] items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white"
           >
-            <Building className="h-3.5 w-3.5 text-indigo-600" />
-            <span className="max-w-[150px] truncate">{currentWorkspace?.name || 'Workspace'}</span>
-            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+            <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-indigo-600" />
+            <span className="truncate">{currentWorkspace?.name || 'Seleccionar workspace'}</span>
+            <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
           </button>
 
-          {isWorkspaceDropdownOpen && (
-            <div className="absolute left-0 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl z-50">
-              <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Organización: {tenant.name}
+          {workspaceOpen && (
+            <div className="absolute left-0 top-12 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_20px_60px_rgba(15,23,42,0.14)]">
+              <div className="px-3 pb-2 pt-1">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Workspace activo</p>
               </div>
-              <div className="space-y-1">
-                {workspaces.map((ws) => (
-                  <button
-                    key={ws.id}
-                    onClick={() => {
-                      setCurrentWorkspaceId(ws.id);
-                      setIsWorkspaceDropdownOpen(false);
-                    }}
-                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${
-                      currentWorkspace?.id === ws.id
-                        ? 'bg-indigo-50 font-semibold text-indigo-700'
-                        : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div>
-                      <div className="font-medium">{ws.name}</div>
-                      <div className="text-[10px] text-slate-400">{ws.organizationName}</div>
-                    </div>
-                    {currentWorkspace?.id === ws.id && <Check className="h-4 w-4 text-indigo-600" />}
-                  </button>
-                ))}
-              </div>
+              {workspaces.map((workspace) => (
+                <button
+                  key={workspace.id}
+                  onClick={() => {
+                    setCurrentWorkspaceId(workspace.id);
+                    setWorkspaceOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition ${
+                    currentWorkspace?.id === workspace.id ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-[12px] font-semibold text-slate-900">{workspace.name}</span>
+                    <span className="mt-0.5 block truncate text-[10px] text-slate-400">{workspace.organizationName}</span>
+                  </span>
+                  {currentWorkspace?.id === workspace.id && <Check className="h-4 w-4 text-indigo-600" />}
+                </button>
+              ))}
             </div>
           )}
         </div>
-
-        <span className="text-slate-300">/</span>
-        <span className="text-slate-900 font-semibold">{getBreadcrumbTitle()}</span>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative">
-          <input
-            type="text"
-            readOnly
-            onClick={() => setIsCommandPaletteOpen(true)}
-            placeholder={`Buscar en ${BRAND.name} (⌘K)`}
-            aria-label={`Buscar en ${BRAND.name}`}
-            className="bg-slate-100 border-none rounded-full py-1.5 px-4 pl-9 text-xs w-64 text-slate-700 placeholder:text-slate-400 cursor-pointer focus:ring-2 focus:ring-indigo-500 transition-all"
-          />
-          <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-2.5" />
-        </div>
+      <div className="flex items-center gap-2.5">
+        <button
+          onClick={() => setIsCommandPaletteOpen(true)}
+          className="hidden min-w-[260px] items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-[11px] text-slate-400 transition hover:border-slate-300 hover:bg-white lg:flex"
+        >
+          <Search className="h-3.5 w-3.5" />
+          <span className="flex-1">Buscar proyectos, tareas, riesgos...</span>
+          <span className="flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[9px] font-semibold text-slate-400 ring-1 ring-slate-200">
+            <Command className="h-2.5 w-2.5" />K
+          </span>
+        </button>
 
         <ApiStatusBadge />
 
         <div className="relative">
           <button
-            onClick={() => setIsPersonaDropdownOpen(!isPersonaDropdownOpen)}
-            className="flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
-            title="Cambiar rol para probar permisos RBAC"
-          >
-            <Shield className="h-3.5 w-3.5 text-indigo-600" />
-            <span className="hidden lg:inline">{currentUser.roleName}</span>
-            <ChevronDown className="h-3 w-3 text-indigo-500" />
-          </button>
-
-          {isPersonaDropdownOpen && (
-            <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl z-50">
-              <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Simular Rol / Persona RBAC
-              </div>
-              <div className="space-y-1">
-                {users.map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => {
-                      setCurrentUserId(u.id);
-                      setIsPersonaDropdownOpen(false);
-                    }}
-                    className={`flex w-full items-center gap-3 rounded-xl p-2 text-left text-xs transition-colors ${
-                      currentUser.id === u.id
-                        ? 'bg-indigo-50 text-indigo-900 font-semibold'
-                        : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <img src={u.avatar} alt={u.name} className="h-7 w-7 rounded-full object-cover border border-slate-200" />
-                    <div className="flex-1 truncate">
-                      <div className="font-semibold">{u.name}</div>
-                      <div className="text-[10px] text-slate-400">{u.roleName}</div>
-                    </div>
-                    {currentUser.id === u.id && <Check className="h-4 w-4 text-indigo-600" />}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="relative">
-          <button
-            onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-            className="p-2 hover:bg-slate-50 rounded-full text-slate-500 relative transition-colors"
+            onClick={() => setNotificationsOpen((open) => !open)}
+            className="relative grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
             aria-label="Abrir notificaciones"
           >
             <Bell className="h-4 w-4" />
             {pendingApprovals.length > 0 && (
-              <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white shadow-xs">
+              <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white ring-2 ring-white">
                 {pendingApprovals.length}
               </span>
             )}
           </button>
 
-          {isNotificationsOpen && (
-            <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl z-50">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3 text-xs font-bold text-slate-900">
-                <span>Notificaciones</span>
-                <span className="rounded-full bg-rose-50 border border-rose-200 px-2.5 py-0.5 text-[10px] font-bold text-rose-600">
-                  {pendingApprovals.length} Pendientes
-                </span>
+          {notificationsOpen && (
+            <div className="absolute right-0 top-12 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.14)]">
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <div>
+                  <p className="text-[12px] font-bold text-slate-900">Notificaciones</p>
+                  <p className="mt-0.5 text-[10px] text-slate-400">Acciones que requieren atención</p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">{pendingApprovals.length}</span>
               </div>
-              <div className="mt-3 max-h-64 space-y-2 overflow-y-auto no-scrollbar">
+
+              <div className="max-h-72 overflow-y-auto p-2">
                 {pendingApprovals.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-slate-400">Sin aprobaciones pendientes</div>
+                  <div className="p-6 text-center text-[11px] text-slate-400">No tienes aprobaciones pendientes.</div>
                 ) : (
-                  pendingApprovals.map((app) => {
-                    const target = objects.find((o) => o.id === app.objectId);
+                  pendingApprovals.map((approval) => {
+                    const target = objects.find((object) => object.id === approval.objectId);
                     return (
-                      <div
-                        key={app.id}
+                      <button
+                        key={approval.id}
                         onClick={() => {
-                          if (app.objectId) openObjectDrawer(app.objectId);
-                          setIsNotificationsOpen(false);
+                          if (approval.objectId) openObjectDrawer(approval.objectId);
+                          setNotificationsOpen(false);
                         }}
-                        className="cursor-pointer rounded-xl border border-slate-100 bg-slate-50 p-3 transition hover:border-indigo-200 hover:bg-indigo-50/50"
+                        className="w-full rounded-xl px-3 py-3 text-left transition hover:bg-slate-50"
                       >
-                        <div className="text-xs font-semibold text-slate-900">
-                          {target?.title || 'Solicitud de Aprobación'}
-                        </div>
-                        <div className="mt-1 text-[10px] text-slate-500">{app.comment || 'Requiere firma ejecutiva'}</div>
-                      </div>
+                        <p className="truncate text-[11px] font-semibold text-slate-900">{target?.title || 'Aprobación pendiente'}</p>
+                        <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-400">{approval.comment || 'Requiere revisión antes de continuar.'}</p>
+                      </button>
                     );
                   })
                 )}
@@ -208,11 +169,21 @@ export const Header: React.FC = () => {
 
         <button
           onClick={() => openCreateModal('TASK')}
-          className="px-4 py-2 bg-indigo-600 rounded-lg text-sm font-semibold text-white shadow-sm shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center gap-1.5 active:scale-95"
+          className="flex h-9 items-center gap-2 rounded-xl bg-indigo-600 px-3.5 text-[11px] font-bold text-white shadow-[0_6px_16px_rgba(79,70,229,0.22)] transition hover:bg-indigo-700 active:scale-[0.98]"
         >
-          <Plus className="h-4 w-4" />
-          <span>Nuevo objeto</span>
+          <Plus className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Crear</span>
         </button>
+
+        <div className="ml-1 hidden items-center gap-2.5 border-l border-slate-200 pl-3 sm:flex">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-900 text-[10px] font-bold text-white">{userInitials || 'BP'}</div>
+          <div className="hidden max-w-[140px] xl:block">
+            <p className="truncate text-[11px] font-semibold text-slate-900">{currentUser.name}</p>
+            <p className="mt-0.5 flex items-center gap-1 truncate text-[9px] font-medium text-slate-400">
+              <ShieldCheck className="h-2.5 w-2.5 text-emerald-500" /> {currentUser.roleName}
+            </p>
+          </div>
+        </div>
       </div>
     </header>
   );
