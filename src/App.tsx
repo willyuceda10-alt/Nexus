@@ -9,6 +9,7 @@ import { CreateObjectModal } from './components/layout/CreateObjectModal';
 import { CommandPalette } from './components/layout/CommandPalette';
 
 import { WorkspaceHome } from './components/views/WorkspaceHome';
+import { MyWorkView } from './components/views/MyWorkView';
 import { ProjectCenter } from './components/views/ProjectCenter';
 import { PortfoliosView } from './components/views/PortfoliosView';
 import { ResourceManagementView } from './components/views/ResourceManagementView';
@@ -25,6 +26,8 @@ const MainContentRouter: React.FC = () => {
   switch (activeTab) {
     case 'home':
       return <WorkspaceHome />;
+    case 'inbox':
+      return <MyWorkView />;
     case 'project':
     case 'projects':
       return <ProjectCenter />;
@@ -44,8 +47,6 @@ const MainContentRouter: React.FC = () => {
       return <ExecutiveDashboard />;
     case 'settings':
       return <SettingsView />;
-    case 'inbox':
-      return <GovernanceRiskView />;
     default:
       return <WorkspaceHome />;
   }
