@@ -14,6 +14,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
+import { isOpenPersonalWork } from '../../domain/myWork';
 import { BRAND } from '../../config/brand';
 
 interface NavigationItem {
@@ -28,18 +29,21 @@ export const Sidebar: React.FC = () => {
     activeTab,
     setActiveTab,
     objects,
+    currentWorkspace,
     selectedProjectId,
     setSelectedProjectId,
-    approvals,
     currentUser,
   } = useNexus();
 
-  const projects = objects.filter((object) => object.type === 'PROJECT');
-  const pendingApprovals = approvals.filter((approval) => approval.status === 'PENDING').length;
+  const scopedObjects = currentWorkspace
+    ? objects.filter((object) => object.workspaceId === currentWorkspace.id)
+    : objects;
+  const projects = scopedObjects.filter((object) => object.type === 'PROJECT');
+  const personalWorkCount = scopedObjects.filter((object) => isOpenPersonalWork(object, currentUser.id)).length;
 
   const commandItems: NavigationItem[] = [
     { id: 'home', label: 'Centro de mando', icon: Gauge },
-    { id: 'inbox', label: 'Mi trabajo', icon: CheckSquare2, badge: pendingApprovals },
+    { id: 'inbox', label: 'Mi trabajo', icon: CheckSquare2, badge: personalWorkCount },
   ];
 
   const planningItems: NavigationItem[] = [
