@@ -11,6 +11,15 @@ const projectChildTypes = new Set<ObjectType>([
 
 type OptionalNumber = number | '';
 
+function parseParticipants(value: string): string[] {
+  return [...new Set(
+    value
+      .split(/[,;\n]+/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+  )];
+}
+
 export const CreateObjectModal: React.FC = () => {
   const {
     isCreateModalOpen,
@@ -39,13 +48,24 @@ export const CreateObjectModal: React.FC = () => {
   const [costImpact, setCostImpact] = useState<OptionalNumber>('');
   const [timeImpactDays, setTimeImpactDays] = useState<OptionalNumber>('');
   const [changeReason, setChangeReason] = useState('');
+  const [meetingDate, setMeetingDate] = useState('');
+  const [meetingAgenda, setMeetingAgenda] = useState('');
+  const [meetingMinutes, setMeetingMinutes] = useState('');
+  const [participantsText, setParticipantsText] = useState('');
+  const [decisionJustification, setDecisionJustification] = useState('');
+  const [decisionMeetingId, setDecisionMeetingId] = useState('');
 
   const portfolios = useMemo(() => objects.filter((item) => item.type === 'PORTFOLIO'), [objects]);
   const programs = useMemo(() => objects.filter((item) => item.type === 'PROGRAM'), [objects]);
   const projects = useMemo(() => objects.filter((item) => item.type === 'PROJECT'), [objects]);
+  const meetings = useMemo(() => objects.filter((item) => item.type === 'MEETING'), [objects]);
   const programsForPortfolio = useMemo(
     () => programs.filter((program) => !portfolioId || program.portfolioId === portfolioId),
     [programs, portfolioId],
+  );
+  const meetingsForProject = useMemo(
+    () => meetings.filter((meeting) => !projectId || meeting.projectId === projectId),
+    [meetings, projectId],
   );
 
   useEffect(() => {
@@ -67,6 +87,12 @@ export const CreateObjectModal: React.FC = () => {
     setCostImpact('');
     setTimeImpactDays('');
     setChangeReason('');
+    setMeetingDate('');
+    setMeetingAgenda('');
+    setMeetingMinutes('');
+    setParticipantsText('');
+    setDecisionJustification('');
+    setDecisionMeetingId('');
   }, [isCreateModalOpen, createModalDefaultType, selectedProjectId, projects, portfolios]);
 
   if (!isCreateModalOpen) return null;
@@ -81,7 +107,11 @@ export const CreateObjectModal: React.FC = () => {
 
     const selectedProgram = programId ? programs.find((program) => program.id === programId) : undefined;
     const resolvedPortfolioId = selectedProgram?.portfolioId ?? (portfolioId || undefined);
-    const hasRiskScore = typeof probability === 'number' && typeof impact === 'number';
+    const riskScore = typeof probability === 'number' && typeof impact === 'number'
+      ? probability * impact
+      : undefined;
+    const participants = parseParticipants(participantsText);
+    const normalizedMeetingDate = meetingDate ? new Date(meetingDate).toISOString() : undefined;
 
     try {
       await createNexusObject({
@@ -99,16 +129,24 @@ export const CreateObjectModal: React.FC = () => {
         status:
           type === 'RISK' ? 'IDENTIFIED'
             : type === 'CHANGE_REQUEST' ? 'PENDING_APPROVAL'
-              : ['PORTFOLIO', 'PROGRAM', 'PROJECT'].includes(type) ? 'PLANNING'
-                : 'IN_PROGRESS',
+              : type === 'MEETING' ? 'PLANNING'
+                : type === 'DECISION' ? 'DRAFT'
+                  : ['PORTFOLIO', 'PROGRAM', 'PROJECT'].includes(type) ? 'PLANNING'
+                    : 'IN_PROGRESS',
         ...(type === 'RISK' && typeof probability === 'number' ? { probability } : {}),
         ...(type === 'RISK' && typeof impact === 'number' ? { impact } : {}),
-        ...(type === 'RISK' && hasRiskScore ? { riskScore: probability * impact } : {}),
+        ...(type === 'RISK' && riskScore !== undefined ? { riskScore } : {}),
         ...(type === 'RISK' && mitigationPlan.trim() ? { mitigationPlan: mitigationPlan.trim() } : {}),
         ...(type === 'RISK' && riskTargetDate ? { endDate: riskTargetDate } : {}),
         ...(type === 'CHANGE_REQUEST' && typeof costImpact === 'number' ? { costImpact } : {}),
         ...(type === 'CHANGE_REQUEST' && typeof timeImpactDays === 'number' ? { timeImpactDays } : {}),
         ...(type === 'CHANGE_REQUEST' && changeReason.trim() ? { changeReason: changeReason.trim() } : {}),
+        ...(type === 'MEETING' && normalizedMeetingDate ? { meetingDate: normalizedMeetingDate } : {}),
+        ...(type === 'MEETING' && meetingAgenda.trim() ? { meetingAgenda: meetingAgenda.trim() } : {}),
+        ...(type === 'MEETING' && meetingMinutes.trim() ? { meetingMinutes: meetingMinutes.trim() } : {}),
+        ...(type === 'MEETING' && participants.length > 0 ? { participants } : {}),
+        ...(type === 'DECISION' && decisionJustification.trim() ? { decisionJustification: decisionJustification.trim() } : {}),
+        ...(type === 'DECISION' && decisionMeetingId ? { meetingId: decisionMeetingId } : {}),
       });
       setTitle('');
       setDescription('');
@@ -137,7 +175,7 @@ export const CreateObjectModal: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-xs">
           <Field label="Tipo de objeto">
-            <select value={type} onChange={(event) => { setType(event.target.value as ObjectType); setProgramId(''); }} className="form-control">
+            <select value={type} onChange={(event) => { setType(event.target.value as ObjectType); setProgramId(''); setDecisionMeetingId(''); }} className="form-control">
               <option value="PORTFOLIO">Portafolio</option><option value="PROGRAM">Programa</option><option value="PROJECT">Proyecto</option>
               <option value="TASK">Tarea</option><option value="DELIVERABLE">Entregable</option><option value="MILESTONE">Hito</option>
               <option value="RISK">Riesgo</option><option value="MEETING">Reunión</option><option value="DECISION">Decisión</option>
@@ -154,7 +192,19 @@ export const CreateObjectModal: React.FC = () => {
             </div>
           )}
 
-          {needsProject && <Field label="Proyecto asociado"><select value={projectId} onChange={(event) => setProjectId(event.target.value)} required className="form-control">{projects.length === 0 && <option value="">No hay proyectos disponibles</option>}{projects.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></Field>}
+          {needsProject && (
+            <Field label="Proyecto asociado">
+              <select
+                value={projectId}
+                onChange={(event) => { setProjectId(event.target.value); setDecisionMeetingId(''); }}
+                required
+                className="form-control"
+              >
+                {projects.length === 0 && <option value="">No hay proyectos disponibles</option>}
+                {projects.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+              </select>
+            </Field>
+          )}
 
           <Field label="Título / nombre"><input required maxLength={500} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={type === 'PORTFOLIO' ? 'Ej: Transformación Operativa 2027' : 'Ej: Implementar módulo de costos...'} className="form-control" /></Field>
 
@@ -194,6 +244,35 @@ export const CreateObjectModal: React.FC = () => {
                 <NumberField label="Impacto tiempo (días)" value={timeImpactDays} onChange={setTimeImpactDays} min={0} placeholder="Sin estimar" />
               </div>
               <Field label="Motivo del cambio"><textarea rows={2} maxLength={4000} value={changeReason} onChange={(event) => setChangeReason(event.target.value)} placeholder="Por qué se solicita el cambio y qué necesidad resuelve..." className="form-control bg-white" /></Field>
+            </div>
+          )}
+
+          {type === 'MEETING' && (
+            <div className="space-y-3 rounded-xl border border-sky-200 bg-sky-50/40 p-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-sky-800">Preparación de la reunión</p>
+                <p className="mt-0.5 text-[9px] text-sky-700/75">La agenda y participantes pueden completarse ahora. La minuta puede registrarse después desde el objeto.</p>
+              </div>
+              <Field label="Fecha y hora"><input type="datetime-local" value={meetingDate} onChange={(event) => setMeetingDate(event.target.value)} className="form-control bg-white" /></Field>
+              <Field label="Agenda"><textarea rows={3} maxLength={6000} value={meetingAgenda} onChange={(event) => setMeetingAgenda(event.target.value)} placeholder="Temas, decisiones requeridas y responsables que deben asistir..." className="form-control bg-white" /></Field>
+              <Field label="Participantes"><textarea rows={2} maxLength={3000} value={participantsText} onChange={(event) => setParticipantsText(event.target.value)} placeholder="Ana Torres, Carlos Pérez, Equipo PMO" className="form-control bg-white" /></Field>
+              <Field label="Minuta inicial (opcional)"><textarea rows={2} maxLength={10000} value={meetingMinutes} onChange={(event) => setMeetingMinutes(event.target.value)} placeholder="Déjalo vacío si la reunión todavía no se realizó." className="form-control bg-white" /></Field>
+            </div>
+          )}
+
+          {type === 'DECISION' && (
+            <div className="space-y-3 rounded-xl border border-green-200 bg-green-50/40 p-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-green-800">Registro de decisión</p>
+                <p className="mt-0.5 text-[9px] text-green-700/75">Una decisión nueva nace como borrador. Vincularla a la reunión de origen mejora la trazabilidad.</p>
+              </div>
+              <Field label="Reunión de origen">
+                <select value={decisionMeetingId} onChange={(event) => setDecisionMeetingId(event.target.value)} className="form-control bg-white">
+                  <option value="">Sin reunión vinculada</option>
+                  {meetingsForProject.map((meeting) => <option key={meeting.id} value={meeting.id}>{meeting.title}</option>)}
+                </select>
+              </Field>
+              <Field label="Justificación / fundamento"><textarea rows={3} maxLength={8000} value={decisionJustification} onChange={(event) => setDecisionJustification(event.target.value)} placeholder="Qué se decidió, por qué y con qué criterio..." className="form-control bg-white" /></Field>
             </div>
           )}
 
