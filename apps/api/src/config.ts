@@ -40,6 +40,7 @@ const envSchema = z
     AUTOMATION_RECEIVE_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(55).default(20),
     AUTOMATION_LOOP_DELAY_MS: z.coerce.number().int().min(50).max(10000).default(250),
     NOTIFICATION_WORKER_ENABLED: booleanFromEnv.default('false'),
+    NOTIFICATION_WORKER_AVAILABLE: booleanFromEnv.default('false'),
     NOTIFICATION_RECEIVE_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(55).default(20),
     NOTIFICATION_LOOP_DELAY_MS: z.coerce.number().int().min(50).max(10000).default(250),
     SERVICE_BUS_NAMESPACE: optionalNonEmptyString,
