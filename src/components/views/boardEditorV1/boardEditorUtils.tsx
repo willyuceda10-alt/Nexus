@@ -10,9 +10,11 @@ export const CUSTOM_TYPES: Array<{ value: ApiWorkBoardColumnTypeV1; label: strin
   { value: 'CURRENCY', label: 'Moneda' },
   { value: 'DATE', label: 'Fecha' },
   { value: 'BOOLEAN', label: 'Sí / No' },
-  { value: 'STATUS', label: 'Estado' },
+  { value: 'STATUS', label: 'Estado / opción' },
   { value: 'PRIORITY', label: 'Prioridad' },
   { value: 'PROGRESS', label: 'Avance' },
+  { value: 'PERSON', label: 'Persona' },
+  { value: 'TAGS', label: 'Etiquetas' },
   { value: 'LINK', label: 'Enlace' },
 ];
 
@@ -57,12 +59,13 @@ export function boardCellDisplay(item: ApiWorkBoardItemV1, column: ApiWorkBoardC
     const progress = Math.max(0, Math.min(100, Number(value ?? 0)));
     return <div className="flex min-w-[110px] items-center gap-2"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-green-600" style={{ width: `${progress}%` }} /></div><span className="w-8 text-right text-[9px] font-bold text-slate-500">{progress}%</span></div>;
   }
+  if (column.data_type === 'TAGS' && Array.isArray(value)) return <div className="flex flex-wrap gap-1">{value.map((tag) => <span key={String(tag)} className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-bold text-slate-600">{String(tag)}</span>)}</div>;
   if (value === null || value === undefined || value === '') return <span className="text-slate-300">—</span>;
   return String(value);
 }
 
 export function boardCellEditable(column: ApiWorkBoardColumnV1): boolean {
   return column.is_editable
-    && !['PERSON', 'FILE', 'FORMULA', 'TAGS'].includes(column.data_type)
+    && !['FILE', 'FORMULA', 'RELATION'].includes(column.data_type)
     && !['ownerId', 'createdAt', 'updatedAt'].includes(column.field_key);
 }
