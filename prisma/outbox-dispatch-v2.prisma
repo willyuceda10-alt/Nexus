@@ -1,0 +1,12 @@
+// Transactional outbox dispatcher control-plane projection.
+// It contains no domain payload and intentionally is not tenant-RLS protected.
+
+model OutboxTenantPartitionV2 {
+  tenantId      String    @id @map("tenant_id") @db.Uuid
+  nextScanAt    DateTime  @default(now()) @map("next_scan_at") @db.Timestamptz(6)
+  lastEventAt   DateTime  @default(now()) @map("last_event_at") @db.Timestamptz(6)
+  lastScannedAt DateTime? @map("last_scanned_at") @db.Timestamptz(6)
+
+  @@index([nextScanAt, tenantId], map: "outbox_tenant_partitions_next_scan_idx")
+  @@map("outbox_tenant_partitions")
+}
