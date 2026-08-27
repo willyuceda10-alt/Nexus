@@ -1,5 +1,14 @@
 export type ApiMeetingSyncStatusV1 = 'LOCAL_ONLY' | 'PENDING' | 'SYNCED' | 'FAILED';
 
+export interface ApiMeetingWorkspacePersonV1 {
+  id: string;
+  fullName: string;
+  email: string;
+  avatarUrl: string | null;
+  workspaceRole: string;
+  isCurrentUser: boolean;
+}
+
 export interface ApiMeetingAttendeeV1 {
   userId: string | null;
   email: string;
