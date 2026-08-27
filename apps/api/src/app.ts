@@ -22,6 +22,7 @@ import { materialOperationsV2Routes } from './routes/material-operations-v2.js';
 import { materialOverviewV2Routes } from './routes/material-overview-v2.js';
 import { meRoutes } from './routes/me.js';
 import { meetingActionsV1Routes } from './routes/meeting-actions-v1.js';
+import { meetingPeopleV1Routes } from './routes/meeting-people-v1.js';
 import { meetingsV1Routes } from './routes/meetings-v1.js';
 import { notificationCapabilitiesV1Routes } from './routes/notification-capabilities-v1.js';
 import { notificationPreferencesV1Routes } from './routes/notification-preferences-v1.js';
@@ -151,6 +152,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
   await app.register(meetingsV1Routes);
+  await app.register(meetingPeopleV1Routes);
   await app.register(meetingActionsV1Routes);
   await app.register(workOsBoardsV1Routes);
   await app.register(workOsBoardEditorV1Routes);
