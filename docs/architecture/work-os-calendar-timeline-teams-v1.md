@@ -120,7 +120,9 @@ Graph event id + onlineMeeting.joinUrl + webLink
 meeting_collaboration_v1 = SYNCED
 ```
 
-Graph is never called on the API request path. A temporary Graph outage does not prevent Bridata from saving a local meeting.
+Graph is never called on the meeting create/update request path. A temporary Graph outage does not prevent Bridata from saving a local meeting.
+
+Free/busy is intentionally different: it is a user-requested read-only query because the UI needs an immediate answer before the meeting exists.
 
 ## Sync states
 
@@ -159,9 +161,75 @@ Internal attendees are validated twice:
 - API: active user and active workspace membership;
 - PostgreSQL trigger: same tenant/workspace and active membership.
 
-External attendees are stored by email/display name.
+The meeting form reads participants from:
+
+```text
+GET /api/v1/meetings-v1/people?workspaceId=...
+```
+
+so the selector cannot invent an internal attendee outside the workspace.
+
+External attendees are stored by email/display name. They can receive the Outlook/Teams invitation but their calendars are not queried by the V1 free/busy assistant.
 
 Email uniqueness for one meeting is enforced case-insensitively.
+
+## Free / busy availability V1
+
+Endpoint:
+
+```text
+POST /api/v1/meetings-v1/availability
+```
+
+The input contains only workspace-scoped internal `attendeeUserIds`, a time window, interval and desired duration.
+
+The API:
+
+1. verifies every requested user is an active workspace member;
+2. optionally includes the current organizer;
+3. requests Microsoft Graph `calendar/getSchedule`;
+4. discards event subject/location/body details;
+5. keeps availability strings plus conflict status/time ranges;
+6. computes common free slots in Bridata.
+
+The current UI queries a conservative 08:00-18:00 work window for the selected day and rounds meeting duration to 30-minute blocks.
+
+Availability characters are interpreted conservatively:
+
+```text
+0 = free
+anything else = unavailable
+```
+
+Missing or unresolved calendars are treated as unavailable rather than generating optimistic recommendations.
+
+The slot engine is deterministic and has unit tests for common availability, tentative/busy/oof/unknown states, and invalid duration/interval combinations.
+
+### Availability privacy
+
+The web response does not expose Outlook event subjects or locations. It returns only the information required to display availability and suggested meeting slots.
+
+### Availability permission isolation
+
+Calendar writes remain on the Meeting Calendar worker with `Calendars.ReadWrite`.
+
+Free/busy is a separate API capability controlled by:
+
+```text
+M365_AVAILABILITY_ENABLED=false
+```
+
+The Graph documentation currently has inconsistent naming between the `getSchedule` API page and the application-permission catalog (`Calendars.ReadBasic` vs the exposed application role `Calendars.ReadBasic.All`; another Outlook guide still references `Calendars.Read`). Therefore Bridata does not silently escalate permission.
+
+`infra/azure/grant-meeting-availability-graph.ps1`:
+
+- is dry-run by default;
+- resolves the requested application role dynamically from the Microsoft Graph service principal;
+- defaults to `Calendars.ReadBasic.All` because that is the current application role exposed by the permission catalog;
+- allows an administrator to choose another role explicitly if DEV validation demonstrates it is required;
+- never falls back automatically to a broader role.
+
+Before enabling availability, validate the narrowest working role against the tenant and restrict mailbox scope with Exchange Online Application RBAC or another tenant-approved access control.
 
 ## Idempotency
 
@@ -203,7 +271,15 @@ The worker uses the existing API image and starts:
 node apps/api/dist/meeting-calendar-worker.js
 ```
 
-## Microsoft Graph permission
+The main API runtime now also accepts the disabled-by-default parameter:
+
+```text
+m365AvailabilityEnabled = false
+```
+
+and exposes its own managed identity client id to the container so the read-only availability client can request a Graph token when explicitly enabled.
+
+## Microsoft Graph meeting-write permission
 
 The meeting worker needs Microsoft Graph application permission `Calendars.ReadWrite` to create/update calendar events without a signed-in user.
 
@@ -225,6 +301,7 @@ Keep these false until database, Service Bus, identity and Graph permissions are
 MEETING_CALENDAR_WORKER_ENABLED=false
 MEETING_CALENDAR_WORKER_AVAILABLE=false
 M365_CALENDAR_SYNC_ENABLED=false
+M365_AVAILABILITY_ENABLED=false
 ```
 
 The API capability response must be configured consistently with the deployed worker. Do not present M365 sync as available merely because code exists.
@@ -249,8 +326,12 @@ The API capability response must be configured consistently with the deployed wo
 - **Unirse a Teams**;
 - open in Outlook;
 - retry failed sync when capability is available;
-- derive persistent task;
-- decisions panel.
+- persistent derive-task action;
+- decisions panel;
+- searchable internal workspace-attendee picker;
+- separate external invitee list;
+- free/busy lookup for internal participants;
+- common meeting-time suggestions that can populate start/end with one click.
 
 ## Explicit V1 limitations
 
@@ -259,8 +340,8 @@ Not implemented yet:
 - recurring meeting series;
 - delete/cancel propagation to Outlook;
 - Graph webhook ingestion of edits made directly in Outlook;
-- free/busy assistant;
 - room/resource booking;
+- external attendee free/busy lookup;
 - Teams transcript/recording ingestion;
 - Calendar drag/reschedule writes;
 - Calendar week/day views;
@@ -269,15 +350,16 @@ Not implemented yet:
 
 ## Validation required before DEV rollout
 
-Do not enable M365 synchronization until all of the following have been executed successfully:
+Do not enable M365 synchronization or availability until all of the following have been executed successfully:
 
 1. `npm run prisma:validate`
 2. `npm run prisma:generate`
 3. `npm run typecheck`
 4. `npm test`
 5. `npm run build`
-6. Bicep build/what-if for `meeting-calendar-runtime.bicep`
+6. Bicep build/what-if for `meeting-calendar-runtime.bicep` and the modified API runtime
 7. migration deploy against a disposable/DEV PostgreSQL with FORCE RLS
 8. API smoke tests under a restricted runtime DB role
 9. Service Bus redelivery/idempotency test
-10. Graph create/update Teams meeting test using an approved test mailbox.
+10. Graph create/update Teams meeting test using an approved test mailbox
+11. Graph `getSchedule` smoke test using the narrowest approved application permission and restricted mailbox scope.
