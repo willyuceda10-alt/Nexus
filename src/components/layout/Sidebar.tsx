@@ -81,6 +81,7 @@ export const Sidebar: React.FC = () => {
   const planningItems: NavigationItem[] = [
     { id: 'projects', label: 'Proyectos', icon: FolderKanban },
     { id: 'boards', label: 'Tableros', icon: Columns3 },
+    { id: 'calendar', label: 'Calendario y Timeline', icon: CalendarDays },
     { id: 'portfolios', label: 'Portafolios', icon: Layers3 },
     { id: 'timeline', label: 'Plan maestro', icon: CalendarClock },
   ];
