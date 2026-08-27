@@ -9,6 +9,36 @@ export interface ApiMeetingWorkspacePersonV1 {
   isCurrentUser: boolean;
 }
 
+export interface ApiMeetingAvailabilityConflictV1 {
+  status: string;
+  start: string;
+  end: string;
+}
+
+export interface ApiMeetingAvailabilityParticipantV1 {
+  userId: string;
+  fullName: string;
+  email: string;
+  isOrganizer: boolean;
+  availabilityView: string;
+  conflicts: ApiMeetingAvailabilityConflictV1[];
+  resolved: boolean;
+}
+
+export interface ApiMeetingAvailabilitySuggestionV1 {
+  start: string;
+  end: string;
+}
+
+export interface ApiMeetingAvailabilityV1 {
+  source: 'MICROSOFT_GRAPH';
+  intervalMinutes: number;
+  durationMinutes: number;
+  range: { start: string; end: string };
+  participants: ApiMeetingAvailabilityParticipantV1[];
+  suggestions: ApiMeetingAvailabilitySuggestionV1[];
+}
+
 export interface ApiMeetingAttendeeV1 {
   userId: string | null;
   email: string;
@@ -44,6 +74,7 @@ export interface ApiMeetingV1 {
 export interface ApiMeetingCapabilitiesV1 {
   m365CalendarSyncEnabled: boolean;
   meetingCalendarWorkerAvailable: boolean;
+  m365AvailabilityEnabled: boolean;
   teamsOnlineMeetingSupported: boolean;
   canonicalStore: 'BRIDATA';
 }
