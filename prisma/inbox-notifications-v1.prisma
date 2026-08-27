@@ -19,6 +19,7 @@ enum NotificationChannelV1 {
 
 enum NotificationDeliveryStatusV1 {
   PENDING
+  PROCESSING
   DELIVERED
   FAILED
   SKIPPED
