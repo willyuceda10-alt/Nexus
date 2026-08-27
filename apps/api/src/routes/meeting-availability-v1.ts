@@ -99,7 +99,16 @@ export async function meetingAvailabilityV1Routes(app: FastifyInstance): Promise
 
     if (resolved.kind === 'forbidden') return reply.code(403).send({ error: 'workspace_access_denied' });
     if (resolved.kind === 'invalid_member') return reply.code(409).send({ error: 'attendee_not_workspace_member' });
-    if (!resolved.participants.length) return { source: 'MICROSOFT_GRAPH', participants: [], suggestions: [] };
+    if (!resolved.participants.length) {
+      return {
+        source: 'MICROSOFT_GRAPH',
+        intervalMinutes: body.data.intervalMinutes,
+        durationMinutes: body.data.durationMinutes,
+        range: { start: body.data.startAt.toISOString(), end: body.data.endAt.toISOString() },
+        participants: [],
+        suggestions: [],
+      };
+    }
 
     try {
       const schedules = await graph.getSchedule({
