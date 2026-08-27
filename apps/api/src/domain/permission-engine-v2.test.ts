@@ -64,6 +64,25 @@ describe('permission engine v2', () => {
     expect(evaluatePermissionV2(input)).toMatchObject({ allowed: false, source: 'EXPLICIT_DENY' });
   });
 
+  it('keeps tenant OWNER as break-glass for permission administration', () => {
+    const input = base({
+      tenantRole: 'OWNER',
+      workspaceRole: null,
+      workspaceId: null,
+      projectId: null,
+      permission: 'tenant.manage_permissions',
+      policies: [{
+        scopeType: 'TENANT',
+        scopeId: '00000000-0000-0000-0000-000000000001',
+        subjectType: 'TENANT_ROLE',
+        subjectKey: 'OWNER',
+        permissionKey: 'tenant.manage_permissions',
+        effect: 'DENY',
+      }],
+    });
+    expect(evaluatePermissionV2(input)).toMatchObject({ allowed: true, source: 'BREAK_GLASS_OWNER' });
+  });
+
   it('ignores a policy from another project scope', () => {
     const input = base({
       workspaceRole: 'VIEWER',
