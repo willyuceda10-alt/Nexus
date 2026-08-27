@@ -178,8 +178,14 @@ export async function scheduleAnalysisV2Routes(app: FastifyInstance): Promise<vo
               },
             });
         const scheduleByObject = new Map(typedSchedules.map((schedule) => [schedule.objectId, schedule]));
+        const summaryObjectIds = new Set(
+          typedSchedules
+            .map((schedule) => schedule.parentWorkItemId)
+            .filter((value): value is string => Boolean(value)),
+        );
 
         const tasks = projectObjects.flatMap((object) => {
+          if (summaryObjectIds.has(object.id)) return [];
           const typed = scheduleByObject.get(object.id);
           const durationMinutes = typed?.durationMinutes ?? fallbackDurationMinutes(
             object,
@@ -304,6 +310,7 @@ export async function scheduleAnalysisV2Routes(app: FastifyInstance): Promise<vo
                 totalWorkItems: projectObjects.length,
                 v2WorkItems: typedSchedules.length,
                 fallbackWorkItems: projectObjects.length - typedSchedules.length,
+                summaryWorkItems: summaryObjectIds.size,
                 v2Dependencies: dependencies.filter((dependency) => dependency.source === 'V2').length,
                 fallbackDependencies: dependencies.filter((dependency) => dependency.source === 'V1_FALLBACK').length,
               },
@@ -316,8 +323,9 @@ export async function scheduleAnalysisV2Routes(app: FastifyInstance): Promise<vo
                 ...dependency,
                 source: dependencySource.get(`${dependency.predecessorId}:${dependency.successorId}`) ?? dependency.source,
               })),
+              summaryObjectIds: [...summaryObjectIds],
               unscheduledObjectIds: projectObjects
-                .filter((object) => !scheduledIds.has(object.id))
+                .filter((object) => !summaryObjectIds.has(object.id) && !scheduledIds.has(object.id))
                 .map((object) => object.id),
               calculatedAt: new Date().toISOString(),
               anchorDate: dateOnly(anchorDate),
