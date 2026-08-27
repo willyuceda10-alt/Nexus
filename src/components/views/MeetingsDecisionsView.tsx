@@ -1,1 +1,1 @@
-export { MeetingsLifecycleV2View as MeetingsDecisionsView } from './MeetingsLifecycleV2View';
+export { RecurringMeetingsV1View as MeetingsDecisionsView } from './RecurringMeetingsV1View';
