@@ -54,11 +54,32 @@ param deployOutboxWorker bool = false
 @description('Creates the standalone Automation Engine worker. Requires deployApiRuntime and deployAsyncMessaging.')
 param deployAutomationWorker bool = false
 
+@description('Creates the standalone Microsoft 365 notification worker. Requires deployApiRuntime and deployAsyncMessaging.')
+param deployNotificationWorker bool = false
+
 @description('Service Bus topic that receives versioned Bridata domain event envelopes.')
 param domainEventsTopicName string = 'bridata-domain-events'
 
 @description('Service Bus subscription dedicated to Automation Engine V1.')
 param automationSubscriptionName string = 'automation-v1'
+
+@description('Service Bus subscription dedicated to external notification delivery.')
+param notificationSubscriptionName string = 'notifications-v1'
+
+@description('Enables Microsoft Graph delivery inside the notification worker. Keep false until Graph app roles/RSC are granted.')
+param m365GraphDeliveryEnabled bool = false
+
+@description('Mailbox user id or UPN used by Graph /users/{id}/sendMail. Required when Outlook delivery is enabled.')
+param m365OutlookSenderUser string = ''
+
+@description('Teams activity type. Must match the installed Teams app manifest unless using an approved reserved type.')
+param m365TeamsActivityType string = ''
+
+@description('URL opened by the Teams activity notification topic.')
+param m365TeamsTopicWebUrl string = ''
+
+@description('Human-readable Teams activity topic.')
+param m365TeamsTopicValue string = 'Bridata'
 
 @description('Immutable API runtime image reference, preferably ACR repo@sha256:digest.')
 param apiImage string = 'not-configured'
@@ -239,6 +260,12 @@ resource automationIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@20
   tags: tags
 }
 
+resource notificationIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${baseName}-notifications-mi'
+  location: location
+  tags: tags
+}
+
 resource automationAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: registry
   name: guid(registry.id, automationIdentity.properties.principalId, acrPullRoleId)
@@ -254,6 +281,26 @@ resource automationKeyVaultSecretsUserRole 'Microsoft.Authorization/roleAssignme
   name: guid(keyVault.id, automationIdentity.properties.principalId, keyVaultSecretsUserRoleId)
   properties: {
     principalId: automationIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: keyVaultSecretsUserRoleId
+  }
+}
+
+resource notificationAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: registry
+  name: guid(registry.id, notificationIdentity.properties.principalId, acrPullRoleId)
+  properties: {
+    principalId: notificationIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: acrPullRoleId
+  }
+}
+
+resource notificationKeyVaultSecretsUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: keyVault
+  name: guid(keyVault.id, notificationIdentity.properties.principalId, keyVaultSecretsUserRoleId)
+  properties: {
+    principalId: notificationIdentity.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: keyVaultSecretsUserRoleId
   }
@@ -334,9 +381,12 @@ module asyncMessaging './async-messaging.bicep' = if (deployAsyncMessaging) {
     tags: tags
     runtimeIdentityPrincipalId: apiIdentity.properties.principalId
     automationIdentityPrincipalId: automationIdentity.properties.principalId
+    notificationIdentityPrincipalId: notificationIdentity.properties.principalId
     topicName: domainEventsTopicName
     automationSubscriptionName: automationSubscriptionName
+    notificationSubscriptionName: notificationSubscriptionName
     deployAutomationConsumer: deployAutomationWorker
+    deployNotificationConsumer: deployNotificationWorker
   }
 }
 
@@ -352,6 +402,8 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     apiIdentityClientId: apiIdentity.properties.clientId
     automationIdentityResourceId: automationIdentity.id
     automationIdentityClientId: automationIdentity.properties.clientId
+    notificationIdentityResourceId: notificationIdentity.id
+    notificationIdentityClientId: notificationIdentity.properties.clientId
     apiImage: apiImage
     migrationImage: migrationImage
     runtimeDatabaseSecretUri: runtimeDatabaseSecretUri
@@ -361,13 +413,22 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     corsOrigins: apiCorsOrigins
     deployOutboxWorker: deployOutboxWorker && deployAsyncMessaging
     deployAutomationWorker: deployAutomationWorker && deployAsyncMessaging
+    deployNotificationWorker: deployNotificationWorker && deployAsyncMessaging
     serviceBusNamespaceFqdn: asyncMessaging.?outputs.namespaceFqdn ?? ''
     serviceBusTopicName: domainEventsTopicName
     serviceBusAutomationSubscriptionName: automationSubscriptionName
+    serviceBusNotificationSubscriptionName: notificationSubscriptionName
+    m365GraphDeliveryEnabled: m365GraphDeliveryEnabled
+    m365OutlookSenderUser: m365OutlookSenderUser
+    m365TeamsActivityType: m365TeamsActivityType
+    m365TeamsTopicWebUrl: m365TeamsTopicWebUrl
+    m365TeamsTopicValue: m365TeamsTopicValue
   }
   dependsOn: [
     automationAcrPullRole
     automationKeyVaultSecretsUserRole
+    notificationAcrPullRole
+    notificationKeyVaultSecretsUserRole
   ]
 }
 
@@ -389,6 +450,9 @@ output apiManagedIdentityClientId string = apiIdentity.properties.clientId
 output automationManagedIdentityName string = automationIdentity.name
 output automationManagedIdentityPrincipalId string = automationIdentity.properties.principalId
 output automationManagedIdentityClientId string = automationIdentity.properties.clientId
+output notificationManagedIdentityName string = notificationIdentity.name
+output notificationManagedIdentityPrincipalId string = notificationIdentity.properties.principalId
+output notificationManagedIdentityClientId string = notificationIdentity.properties.clientId
 output containerAppsEnvironmentName string = containerEnvironment.name
 output postgresDeployed bool = deployPostgres
 output deployedPostgresServerName string = deployPostgres ? postgresServerResourceName : ''
@@ -399,6 +463,8 @@ output asyncMessagingDeployed bool = deployAsyncMessaging
 output serviceBusNamespaceName string = asyncMessaging.?outputs.namespaceName ?? ''
 output domainEventsTopic string = asyncMessaging.?outputs.topicName ?? ''
 output automationServiceBusSubscription string = asyncMessaging.?outputs.automationSubscriptionName ?? ''
+output notificationServiceBusSubscription string = asyncMessaging.?outputs.notificationSubscriptionName ?? ''
 output apiRuntimeDeployed bool = deployApiRuntime
 output outboxWorkerDeployed bool = deployApiRuntime && deployOutboxWorker && deployAsyncMessaging
 output automationWorkerDeployed bool = deployApiRuntime && deployAutomationWorker && deployAsyncMessaging
+output notificationWorkerDeployed bool = deployApiRuntime && deployNotificationWorker && deployAsyncMessaging
