@@ -56,11 +56,14 @@ Review these flows first:
 9. **Calendario mensual** — open a source object from a calendar entry.
 10. **Timeline** — confirm the same object set is represented as ranges without CPM logic.
 11. **Colaborar → Reuniones** — review the dedicated monthly meeting agenda.
-12. **Reuniones → Agendar reunión** — review Bridata + Outlook/Teams form, attendees, online toggle and sync toggle.
-13. **Reuniones → Próximas reuniones** — Teams/Outlook actions, sync badges, failure state and persistent derived-task action.
-14. **Mi trabajo, Materiales, Costos, Automatizaciones and Configuración** — verify continuity with the shared shell.
+12. **Reuniones → Agendar reunión** — review the new V2 meeting dialog.
+13. **Participantes Bridata** — search/select internal workspace people; mock mode uses preview users and API mode uses governed workspace membership.
+14. **Invitados externos** — verify external emails remain visually separated from governed internal participants.
+15. **Disponibilidad M365** — review the free/busy panel and its privacy wording. The actual lookup is disabled in mock mode.
+16. **Reuniones → Próximas reuniones** — Teams/Outlook actions, sync badges, failure state and persistent derived-task action.
+17. **Mi trabajo, Materiales, Costos, Automatizaciones and Configuración** — verify continuity with the shared shell.
 
-In mock mode interactions are local to the browser session. Graph sync is intentionally simulated as unavailable: no real Outlook/Teams event is created in mock preview.
+In mock mode interactions are local to the browser session. Graph sync and free/busy lookup are intentionally unavailable: no real Outlook calendar is read and no Teams event is created.
 
 ## API mode
 
@@ -77,7 +80,7 @@ API mode requires:
 - `configureApiSession()` wired to a real access-token provider;
 - preview origin allowed by API CORS.
 
-The current frontend injects tenant context after bootstrap, but the real Entra access-token provider is still a pending integration. Do not use the mock preview as proof of API authentication.
+The current frontend injects tenant context after bootstrap, but the real Entra access-token provider is still a pending integration. Specialized Calendar/Meeting helpers are therefore not yet proof of authenticated production API mode.
 
 ## Microsoft 365 meeting preview
 
@@ -94,10 +97,22 @@ The visual UI can be reviewed in mock mode, but real Teams/Outlook synchronizati
 
 Until those prerequisites are met, Bridata meetings remain usable as `LOCAL_ONLY`.
 
+## Microsoft 365 availability preview
+
+Real free/busy suggestions additionally require:
+
+- the API user-assigned Managed Identity;
+- the narrowest validated Graph calendar-read application role for `getSchedule`;
+- approved mailbox scope;
+- a successful DEV `getSchedule` smoke test;
+- `M365_AVAILABILITY_ENABLED=true` only after that validation.
+
+`infra/azure/grant-meeting-availability-graph.ps1` is dry-run by default and never escalates automatically to a broader permission.
+
 ## Azure shared preview
 
 The long-lived shared preview remains an Azure concern. Do not move Bridata core hosting to Vercel/Railway. Once the branch passes Prisma/typecheck/tests/build and Bicep validation, deploy the web/API DEV runtime to the existing Azure foundation and use that Azure URL for stakeholder review.
 
 ## Important distinction
 
-The Codespaces preview proves visual composition and mock interaction. It does **not** prove migrations, FORCE RLS, API authorization, concurrency, workers, Microsoft Graph permissions, Teams meeting creation or production behavior.
+The Codespaces preview proves visual composition and mock interaction. It does **not** prove migrations, FORCE RLS, API authorization, concurrency, workers, Microsoft Graph permissions, free/busy retrieval, Teams meeting creation or production behavior.
