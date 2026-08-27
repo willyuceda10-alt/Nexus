@@ -14,6 +14,7 @@ import {
   Settings2,
   ShieldAlert,
   UsersRound,
+  Workflow,
 } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
 import { BRAND } from '../../config/brand';
@@ -51,6 +52,7 @@ export const Sidebar: React.FC = () => {
     { id: 'resources', label: 'Recursos y capacidad', icon: UsersRound },
     { id: 'materials', label: 'Materiales', icon: PackageSearch },
     { id: 'costs', label: 'Costos', icon: CircleDollarSign },
+    { id: 'automations', label: 'Automatizaciones', icon: Workflow },
     { id: 'governance', label: 'Riesgos y cambios', icon: ShieldAlert },
   ];
 
