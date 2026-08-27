@@ -121,6 +121,14 @@ export async function outboxAdminV2Routes(app: FastifyInstance): Promise<void> {
           RETURNING id
         `);
         if (!rows[0]) return { kind: 'not_found' as const };
+
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO outbox_tenant_partitions (tenant_id, next_scan_at, last_event_at)
+          VALUES (${actor.tenantId}::uuid, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT (tenant_id)
+          DO UPDATE SET next_scan_at = CURRENT_TIMESTAMP,
+                        last_event_at = GREATEST(outbox_tenant_partitions.last_event_at, CURRENT_TIMESTAMP)
+        `);
         await tx.auditLog.create({
           data: {
             tenantId: actor.tenantId,
