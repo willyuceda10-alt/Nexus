@@ -3,7 +3,7 @@ import { defaultExternalNotificationPreferencesV1, externalDeliveryDecisionV1 } 
 
 describe('notification preference policy v1', () => {
   it('keeps external channels disabled by default', () => {
-    expect(defaultExternalNotificationPreferencesV1('America/Lima').every((item) => item.enabled === false)).toBe(true);
+    expect(defaultExternalNotificationPreferencesV1('UTC').every((item) => item.enabled === false)).toBe(true);
   });
 
   it('queues enabled notifications that meet the priority threshold', () => {
@@ -52,5 +52,21 @@ describe('notification preference policy v1', () => {
       requiresAction: false,
       occurredAt: new Date(),
     })).toEqual({ queue: false, reason: 'ACTION_ONLY' });
+  });
+
+  it('suppresses external delivery during quiet hours that cross midnight', () => {
+    expect(externalDeliveryDecisionV1({
+      channel: 'OUTLOOK_EMAIL',
+      enabled: true,
+      minimumPriority: 'LOW',
+      onlyRequiresAction: false,
+      quietHoursStart: '22:00',
+      quietHoursEnd: '07:00',
+      timezone: 'UTC',
+    }, {
+      priority: 'HIGH',
+      requiresAction: true,
+      occurredAt: new Date('2026-08-27T23:30:00Z'),
+    })).toEqual({ queue: false, reason: 'QUIET_HOURS' });
   });
 });
