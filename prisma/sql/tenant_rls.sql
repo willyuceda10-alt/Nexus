@@ -64,7 +64,9 @@ BEGIN
     'work_views_v1',
     'work_board_item_placements_v1',
     'work_board_option_sets_v1',
-    'work_board_options_v1'
+    'work_board_options_v1',
+    'meeting_collaboration_v1',
+    'meeting_collaboration_attendees_v1'
   ]
   LOOP
     -- This script is also used as a defensive re-application step. During
