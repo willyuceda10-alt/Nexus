@@ -54,6 +54,7 @@ const envSchema = z
     SERVICE_BUS_MEETING_SUBSCRIPTION: z.string().trim().min(1).default('meetings-v1'),
     M365_GRAPH_DELIVERY_ENABLED: booleanFromEnv.default('false'),
     M365_CALENDAR_SYNC_ENABLED: booleanFromEnv.default('false'),
+    M365_AVAILABILITY_ENABLED: booleanFromEnv.default('false'),
     M365_OUTLOOK_SENDER_USER: optionalNonEmptyString,
     M365_TEAMS_ACTIVITY_TYPE: optionalNonEmptyString,
     M365_TEAMS_TOPIC_WEB_URL: optionalUrlString,
