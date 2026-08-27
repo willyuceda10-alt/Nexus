@@ -35,7 +35,7 @@ export interface GraphCalendarEventInputV1 {
   startAt: Date;
   endAt: Date;
   location: string | null;
-  attendees: Array<{ email: string; displayName: string; type: 'required' | 'optional' }>;
+  attendees: Array<{ email: string; displayName: string; type: 'required' | 'optional' | 'resource' }>;
   isOnline: boolean;
 }
 
