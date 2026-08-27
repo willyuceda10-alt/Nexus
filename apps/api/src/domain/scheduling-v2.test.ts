@@ -76,8 +76,9 @@ describe('scheduling engine v2', () => {
     expect(result.criticalTaskIds).toEqual(['a', 'b', 'c']);
     expect(result.tasks.find((task) => task.id === 'a')?.plannedStart).toBe('2026-08-24');
     expect(result.tasks.find((task) => task.id === 'b')?.plannedStart).toBe('2026-08-25');
-    expect(result.tasks.find((task) => task.id === 'b')?.plannedFinish).toBe('2026-08-28');
-    expect(result.tasks.find((task) => task.id === 'c')?.plannedStart).toBe('2026-08-31');
+    expect(result.tasks.find((task) => task.id === 'b')?.plannedFinish).toBe('2026-08-27');
+    expect(result.tasks.find((task) => task.id === 'c')?.plannedStart).toBe('2026-08-28');
+    expect(result.tasks.find((task) => task.id === 'c')?.plannedFinish).toBe('2026-08-28');
     expect(result.feasible).toBe(true);
   });
 
