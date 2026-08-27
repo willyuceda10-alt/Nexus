@@ -140,6 +140,21 @@ export async function automationActionsV2Routes(app: FastifyInstance): Promise<v
           return { kind: 'invalid_target' as const };
         }
 
+        if (definition.workspace_id) {
+          const targetWorkspaceMembership = await tx.workspaceMember.findUnique({
+            where: {
+              workspaceId_userId: {
+                workspaceId: definition.workspace_id,
+                userId: body.data.targetUserId,
+              },
+            },
+            select: { tenantId: true },
+          });
+          if (!targetWorkspaceMembership || targetWorkspaceMembership.tenantId !== actor.tenantId) {
+            return { kind: 'invalid_target_scope' as const };
+          }
+        }
+
         const action = notificationAction(definition, body.data);
         try {
           validateAutomationVersionV1({
@@ -228,6 +243,9 @@ export async function automationActionsV2Routes(app: FastifyInstance): Promise<v
       if (result.kind === 'not_found') return reply.code(404).send({ error: 'automation_not_found' });
       if (result.kind === 'forbidden') return reply.code(403).send({ error: 'automation_management_denied' });
       if (result.kind === 'invalid_target') return reply.code(400).send({ error: 'notification_target_invalid' });
+      if (result.kind === 'invalid_target_scope') {
+        return reply.code(400).send({ error: 'notification_target_outside_automation_workspace' });
+      }
       if (result.kind === 'invalid_automation') {
         return reply.code(400).send({ error: 'invalid_automation', message: result.message });
       }
