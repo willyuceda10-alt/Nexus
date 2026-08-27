@@ -1,5 +1,6 @@
 import { runtimeConfig } from '../config/runtime';
 import type {
+  ApiMeetingAvailabilityV1,
   ApiMeetingCapabilitiesV1,
   ApiMeetingV1,
   ApiMeetingWorkspacePersonV1,
@@ -32,6 +33,23 @@ export const meetingsV1Api = {
   people(tenantId: string, workspaceId: string): Promise<{ items: ApiMeetingWorkspacePersonV1[] }> {
     const query = new URLSearchParams({ workspaceId });
     return request(tenantId, `/api/v1/meetings-v1/people?${query.toString()}`);
+  },
+  availability(
+    tenantId: string,
+    input: {
+      workspaceId: string;
+      attendeeUserIds: string[];
+      includeOrganizer?: boolean;
+      startAt: string;
+      endAt: string;
+      intervalMinutes?: number;
+      durationMinutes?: number;
+    },
+  ): Promise<ApiMeetingAvailabilityV1> {
+    return request(tenantId, '/api/v1/meetings-v1/availability', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
   },
   list(tenantId: string, input: { workspaceId: string; projectId?: string; from?: string; to?: string; limit?: number }): Promise<{ items: ApiMeetingV1[] }> {
     const query = new URLSearchParams({ workspaceId: input.workspaceId });
