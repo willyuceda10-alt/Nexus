@@ -20,6 +20,8 @@ function mockTemporalItems(objects: ReturnType<typeof useNexus>['objects']): Api
       objectId: object.id,
       objectTypeKey: object.type,
       title: object.title,
+      displayTitle: object.title,
+      colorValue: object.status,
       status: object.status,
       priority: object.priority,
       progress: object.progress,
@@ -90,11 +92,11 @@ export const WorkCalendarTimelineV1View: React.FC = () => {
     else {
       setBoards([mockBoard.board]);
       setSelectedBoardId(mockBoard.board.id);
-      const calendar: ApiWorkViewV1 = { id: 'mock-calendar-v1', name: 'Calendario', view_type: 'CALENDAR', is_default: false, sort_order: 30, config: { temporal: { startFieldKey: 'startDate', endFieldKey: 'dueDate' } } };
-      const timeline: ApiWorkViewV1 = { id: 'mock-timeline-v1', name: 'Timeline', view_type: 'TIMELINE', is_default: false, sort_order: 40, config: { temporal: { startFieldKey: 'startDate', endFieldKey: 'dueDate' } } };
+      const calendar: ApiWorkViewV1 = { id: 'mock-calendar-v1', name: 'Calendario', view_type: 'CALENDAR', is_default: false, sort_order: 30, config: { temporal: { startFieldKey: 'startDate', endFieldKey: 'dueDate', titleFieldKey: 'title', colorFieldKey: 'status' } } };
+      const timeline: ApiWorkViewV1 = { id: 'mock-timeline-v1', name: 'Timeline', view_type: 'TIMELINE', is_default: false, sort_order: 40, config: { temporal: { startFieldKey: 'startDate', endFieldKey: 'dueDate', titleFieldKey: 'title', colorFieldKey: 'status' } } };
       setDetail({ ...mockBoard.board, groups: mockBoard.groups, columns: mockBoard.columns, views: [...mockBoard.views, calendar, timeline] });
       setSelectedViewId(calendar.id);
-      setTemporal({ viewId: calendar.id, viewType: 'CALENDAR', temporal: { startFieldKey: 'startDate', endFieldKey: 'dueDate', allDay: true }, items: mockTemporalItems(objects) });
+      setTemporal({ viewId: calendar.id, viewType: 'CALENDAR', temporal: { startFieldKey: 'startDate', endFieldKey: 'dueDate', titleFieldKey: 'title', colorFieldKey: 'status', allDay: true }, items: mockTemporalItems(objects) });
     }
   }, [apiReady, currentWorkspace?.id, mockBoard]);
 
@@ -143,10 +145,10 @@ export const WorkCalendarTimelineV1View: React.FC = () => {
         <main className="min-w-0 space-y-4">
           <section className="command-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
             <div className="flex items-center gap-1 overflow-x-auto">
-              {temporalViews.map((view) => <button key={view.id} onClick={() => setSelectedViewId(view.id)} className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[9px] font-black ${selectedViewId === view.id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>{view.view_type === 'CALENDAR' ? <CalendarDays className="h-3.5 w-3.5" /> : <GanttChartSquare className="h-3.5 w-3.5" />}{view.name}</button>)}
+              {temporalViews.map((view) => <button key={view.id} onClick={() => { setSelectedViewId(view.id); if (apiReady && detail) void loadTemporal(detail.id, view); }} className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[9px] font-black ${selectedViewId === view.id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>{view.view_type === 'CALENDAR' ? <CalendarDays className="h-3.5 w-3.5" /> : <GanttChartSquare className="h-3.5 w-3.5" />}{view.name}</button>)}
               {!temporalViews.length && <span className="px-2 text-[9px] text-slate-400">Este Board aún no tiene vistas temporales.</span>}
             </div>
-            <button disabled={!apiReady || !selectedBoardId || !selectedView} onClick={() => selectedBoardId && selectedView && void loadTemporal(selectedBoardId, selectedView)} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 disabled:opacity-40"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /></button>
+            <button disabled={!apiReady || !selectedBoardId || !selectedView} onClick={() => selectedBoardId && selectedView && void loadTemporal(selectedBoardId, selectedView)} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 disabled:opacity-40" aria-label="Actualizar vista"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /></button>
           </section>
           {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-[10px] font-semibold text-rose-700">{error}</div>}
           {temporal?.viewType === 'CALENDAR' && <BoardCalendarV1 items={temporal.items} onOpen={openObjectDrawer} />}
