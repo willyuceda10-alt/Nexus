@@ -10,7 +10,7 @@ V1 supports only:
 
 - `DAILY` recurrence;
 - `WEEKLY` recurrence with explicit weekdays;
-- `ABSOLUTE_MONTHLY` recurrence by day of month;
+- `ABSOLUTE_MONTHLY` recurrence by day of month **1 through 28**;
 - `NUMBERED` ranges;
 - `END_DATE` ranges;
 - timezone `America/Lima`;
@@ -23,6 +23,7 @@ V1 intentionally does not support:
 - no-end recurrence;
 - yearly patterns;
 - relative monthly patterns such as the second Tuesday;
+- absolute-monthly days 29, 30 or 31 until Outlook/Graph DEV smoke tests explicitly validate the desired edge-month behavior;
 - changing the recurrence pattern after a series is created;
 - series-wide reschedule after an occurrence exception/cancellation exists;
 - moving an Outlook-synchronized occurrence across the previous/next occurrence date boundary.
@@ -43,7 +44,7 @@ The series master owns title, description, attendees, organizer, Teams/Outlook s
 
 `apps/api/src/domain/meeting-recurrence-v1.ts` materializes the local occurrence set before the database transaction commits. The expansion is deterministic for `America/Lima` and bounded to prevent unbounded storage or request work.
 
-For monthly day 29/30/31, a month shorter than the configured day uses that month's final calendar day. This behavior is covered by unit tests and must be validated against Microsoft Graph during the DEV smoke test before deployment.
+Absolute-monthly V1 accepts only days 1 through 28. This deliberately avoids assuming Outlook/Graph behavior for dates that do not exist in every month. The same 1..28 boundary is enforced by the domain engine and a PostgreSQL check constraint.
 
 ## Microsoft Graph mapping
 
@@ -84,7 +85,7 @@ Cancelling one occurrence changes only that occurrence. When a Graph series mast
 
 ## Series cancellation
 
-Cancelling the whole series delegates to Meeting Lifecycle V2 on the canonical meeting collaboration. Local resource availability is released immediately by lifecycle state; the Graph series master cancellation remains asynchronous through the Meeting Calendar Worker.
+Cancelling the whole series delegates to Meeting Lifecycle V2 on the canonical meeting collaboration. A database lifecycle trigger propagates `CANCEL_PENDING` / `CANCELLED` to the materialized occurrences so availability and history remain consistent. The Graph series master cancellation remains asynchronous through the Meeting Calendar Worker.
 
 ## Master-sync guard
 
@@ -110,7 +111,7 @@ Therefore simple meetings and recurring occurrences cannot double-book the same 
 
 ## Security
 
-All recurring tables use tenant scope, RLS and FORCE RLS. Workspace authorization is checked before creating or modifying a series. Occurrences use optimistic version checks. PostgreSQL remains the final integrity boundary for cross-scope resource bookings and master-sync sequencing.
+All recurring tables use tenant scope, RLS and FORCE RLS. Workspace authorization is checked before creating or modifying a series. Occurrences use optimistic version checks. PostgreSQL remains the final integrity boundary for cross-scope resource bookings, monthly V1 bounds, lifecycle propagation and master-sync sequencing.
 
 ## Availability
 
@@ -146,10 +147,12 @@ Do not deploy Recurring Meetings V1 until all of the following have been execute
 5. `npm run build`
 6. database migration against DEV
 7. PostgreSQL concurrent booking tests across simple and recurring reservations
-8. Graph create recurring series smoke test
-9. Graph list instances smoke test using `SA Pacific Standard Time`
-10. Graph reschedule one occurrence smoke test
-11. Graph cancel one occurrence smoke test
-12. Graph cancel series smoke test
+8. whole-series lifecycle propagation test
+9. master-sync occurrence guard test
+10. Graph create recurring series smoke test
+11. Graph list instances smoke test using `SA Pacific Standard Time`
+12. Graph reschedule one occurrence smoke test
+13. Graph cancel one occurrence smoke test
+14. Graph cancel series smoke test
 
 Until those validations pass, the implementation is code-complete for review but not production-ready.
