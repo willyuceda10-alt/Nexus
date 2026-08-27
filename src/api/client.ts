@@ -27,6 +27,10 @@ import type {
   PublishApiAutomationVersionV1Input,
 } from './automationV1Contracts';
 import type {
+  PublishInternalNotificationAutomationV2Input,
+  PublishInternalNotificationAutomationV2Response,
+} from './automationActionsV2Contracts';
+import type {
   ApiCostBackfillV2Response,
   ApiCostCatalogV2,
   ApiProjectCostOverviewV2,
@@ -37,6 +41,11 @@ import type {
   UpdateApiBudgetLineV2Input,
   UpdateApiCostProfileV2Input,
 } from './costEngineV2Contracts';
+import type {
+  ApiInboxItemV1,
+  ApiInboxListV1,
+  ListApiInboxV1Params,
+} from './inboxV1Contracts';
 import type {
   ApiMaterialMasterV2,
   ApiMaterialOverviewV2,
@@ -289,6 +298,15 @@ export const bridataApi = {
       method: 'POST', body: JSON.stringify(input),
     });
   },
+  publishInternalNotificationAutomationV2(
+    id: string,
+    input: PublishInternalNotificationAutomationV2Input,
+  ): Promise<PublishInternalNotificationAutomationV2Response> {
+    return request<PublishInternalNotificationAutomationV2Response>(
+      `/api/v1/automations-v1/${encodeURIComponent(id)}/internal-notification-version-v2`,
+      { method: 'POST', body: JSON.stringify(input) },
+    );
+  },
   setAutomationStatusV1(id: string, status: ApiAutomationStatusV1): Promise<ApiAutomationDefinitionV1> {
     return request<ApiAutomationDefinitionV1>(`/api/v1/automations-v1/${encodeURIComponent(id)}/status`, {
       method: 'PATCH', body: JSON.stringify({ status }),
@@ -305,6 +323,29 @@ export const bridataApi = {
   decideAutomationApprovalV1(id: string, decision: 'APPROVED' | 'REJECTED', comment?: string | null): Promise<{ id: string; status: string; decidedAt: string | null }> {
     return request<{ id: string; status: string; decidedAt: string | null }>(`/api/v1/automation-approvals-v1/${encodeURIComponent(id)}/decision`, {
       method: 'POST', body: JSON.stringify({ decision, comment: comment ?? null }),
+    });
+  },
+  inboxV1(params: ListApiInboxV1Params = {}, signal?: AbortSignal): Promise<ApiInboxListV1> {
+    const query = new URLSearchParams();
+    if (params.status) query.set('status', params.status);
+    if (params.unread !== undefined) query.set('unread', String(params.unread));
+    if (params.includeSnoozed !== undefined) query.set('includeSnoozed', String(params.includeSnoozed));
+    if (params.limit !== undefined) query.set('limit', String(params.limit));
+    const suffix = query.toString();
+    return request<ApiInboxListV1>(`/api/v1/inbox-v1${suffix ? `?${suffix}` : ''}`, { signal });
+  },
+  readInboxItemV1(id: string): Promise<ApiInboxItemV1> {
+    return request<ApiInboxItemV1>(`/api/v1/inbox-v1/${encodeURIComponent(id)}/read`, { method: 'POST' });
+  },
+  resolveInboxItemV1(id: string): Promise<ApiInboxItemV1> {
+    return request<ApiInboxItemV1>(`/api/v1/inbox-v1/${encodeURIComponent(id)}/resolve`, { method: 'POST' });
+  },
+  dismissInboxItemV1(id: string): Promise<ApiInboxItemV1> {
+    return request<ApiInboxItemV1>(`/api/v1/inbox-v1/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
+  },
+  snoozeInboxItemV1(id: string, until: string | null): Promise<ApiInboxItemV1> {
+    return request<ApiInboxItemV1>(`/api/v1/inbox-v1/${encodeURIComponent(id)}/snooze`, {
+      method: 'POST', body: JSON.stringify({ until }),
     });
   },
   projectForecast(projectId: string, asOf?: string, signal?: AbortSignal): Promise<ApiProjectForecast> {
