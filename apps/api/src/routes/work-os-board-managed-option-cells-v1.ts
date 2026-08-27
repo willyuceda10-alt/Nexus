@@ -33,7 +33,15 @@ export async function workOsBoardManagedOptionCellsV1Routes(app: FastifyInstance
         WHERE tenant_id = ${actor.tenantId}::uuid AND board_id = ${board.id}::uuid AND id = ${params.data.columnId}::uuid LIMIT 1
       `);
       const column = columnRows[0];
-      if (!column || !column.is_editable || !['STATUS', 'PRIORITY', 'TAGS'].includes(column.data_type)) return reply.code(409).send({ error: 'managed_option_column_not_editable' });
+      if (!column || !column.is_editable || !['STATUS', 'PRIORITY', 'TAGS'].includes(column.data_type)) {
+        return reply.code(409).send({ error: 'managed_option_column_not_editable' });
+      }
+      if (column.source === 'CORE' && !(
+        (column.data_type === 'STATUS' && column.field_key === 'status')
+        || (column.data_type === 'PRIORITY' && column.field_key === 'priority')
+      )) {
+        return reply.code(409).send({ error: 'unsupported_core_managed_option_field' });
+      }
 
       const setRows = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
         SELECT id FROM work_board_option_sets_v1
@@ -49,14 +57,20 @@ export async function workOsBoardManagedOptionCellsV1Routes(app: FastifyInstance
 
       let normalized: string | string[] | null;
       if (column.data_type === 'TAGS') {
-        if (!Array.isArray(body.data.value) || body.data.value.some((value) => typeof value !== 'string')) return reply.code(400).send({ error: 'tags_value_must_be_string_array' });
+        if (!Array.isArray(body.data.value) || body.data.value.some((value) => typeof value !== 'string')) {
+          return reply.code(400).send({ error: 'tags_value_must_be_string_array' });
+        }
         normalized = [...new Set(body.data.value as string[])];
         if (normalized.some((value) => !allowed.has(value))) return reply.code(409).send({ error: 'inactive_or_unknown_option' });
       } else {
         if (body.data.value === null || body.data.value === '') normalized = null;
         else if (typeof body.data.value !== 'string') return reply.code(400).send({ error: 'option_value_must_be_string' });
         else normalized = body.data.value;
-        if (normalized !== null && !allowed.has(normalized as string)) return reply.code(409).send({ error: 'inactive_or_unknown_option' });
+
+        if (column.source === 'CORE' && normalized === null) {
+          return reply.code(400).send({ error: 'core_managed_option_value_required' });
+        }
+        if (normalized !== null && !allowed.has(normalized)) return reply.code(409).send({ error: 'inactive_or_unknown_option' });
       }
 
       const placement = await tx.$queryRaw<{ exists: boolean }[]>(Prisma.sql`
@@ -66,13 +80,17 @@ export async function workOsBoardManagedOptionCellsV1Routes(app: FastifyInstance
 
       const updated = await tx.nexusObject.updateMany({
         where: {
-          id: params.data.objectId, tenantId: actor.tenantId, workspaceId: board.workspace_id,
-          objectDefinitionId: board.object_definition_id, version: body.data.version, deletedAt: null,
+          id: params.data.objectId,
+          tenantId: actor.tenantId,
+          workspaceId: board.workspace_id,
+          objectDefinitionId: board.object_definition_id,
+          version: body.data.version,
+          deletedAt: null,
         },
         data: column.source === 'CORE' && column.field_key === 'status'
-          ? { status: normalized as string | null ?? 'DRAFT', version: { increment: 1 } }
+          ? { status: normalized as string, version: { increment: 1 } }
           : column.source === 'CORE' && column.field_key === 'priority'
-            ? { priority: normalized as string | null ?? 'MEDIUM', version: { increment: 1 } }
+            ? { priority: normalized as string, version: { increment: 1 } }
             : { version: { increment: 1 } },
       });
       if (updated.count !== 1) return reply.code(409).send({ error: 'version_conflict' });
@@ -97,12 +115,19 @@ export async function workOsBoardManagedOptionCellsV1Routes(app: FastifyInstance
 
       await Promise.all([
         tx.domainEvent.create({ data: {
-          tenantId: actor.tenantId, aggregateId: params.data.objectId, eventType: 'bridata.work_board.managed_option_changed',
+          tenantId: actor.tenantId,
+          aggregateId: params.data.objectId,
+          eventType: 'bridata.work_board.managed_option_changed',
           payload: { boardId: board.id, columnId: column.id, fieldKey: column.field_key, value: normalized, actorId: actor.userId, version: body.data.version + 1 },
         } }),
         tx.auditLog.create({ data: {
-          tenantId: actor.tenantId, userId: actor.userId, action: 'BOARD_MANAGED_OPTION_CELL_UPDATED', resource: 'NEXUS_OBJECT',
-          resourceId: params.data.objectId, correlationId: request.id, ipAddress: request.ip,
+          tenantId: actor.tenantId,
+          userId: actor.userId,
+          action: 'BOARD_MANAGED_OPTION_CELL_UPDATED',
+          resource: 'NEXUS_OBJECT',
+          resourceId: params.data.objectId,
+          correlationId: request.id,
+          ipAddress: request.ip,
           details: { boardId: board.id, columnId: column.id, fieldKey: column.field_key, value: normalized },
         } }),
       ]);
