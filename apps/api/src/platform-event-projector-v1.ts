@@ -131,7 +131,7 @@ export async function projectPlatformEventV1(event: AutomationEventEnvelopeV1): 
         AND user_id = ${request.targetUserId}::uuid
         AND channel IN ('OUTLOOK_EMAIL'::"NotificationChannelV1", 'TEAMS_ACTIVITY'::"NotificationChannelV1")
     `);
-    const defaults = defaultExternalNotificationPreferencesV1('America/Lima');
+    const defaults = defaultExternalNotificationPreferencesV1('UTC');
     const preferences = defaults.map((fallback) => {
       const row = preferenceRows.find((item) => item.channel === fallback.channel);
       return row ? preferenceFromRow(row) : fallback;
@@ -181,25 +181,23 @@ export async function projectPlatformEventV1(event: AutomationEventEnvelopeV1): 
       }
       const deliveryId = deliveryRows[0]?.id;
       if (canQueue && deliveryId) {
-        await tx.domainEvent.create({
-          data: {
-            tenantId: request.tenantId,
-            aggregateId: deliveryId,
-            eventType: 'bridata.notification.delivery.requested',
-            idempotencyKey: `notification-delivery:${deliveryId}`,
-            payload: {
-              deliveryId,
-              userId: request.targetUserId,
-              inboxItemId,
-              channel: preference.channel,
-              workspaceId: resolvedWorkspaceId,
-              projectId: request.projectId,
-            },
-          },
-        }).catch((error: unknown) => {
-          const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: unknown }).code) : '';
-          if (code !== 'P2002') throw error;
-        });
+        const deliveryPayload = {
+          deliveryId,
+          userId: request.targetUserId,
+          inboxItemId,
+          channel: preference.channel,
+          workspaceId: resolvedWorkspaceId,
+          projectId: request.projectId,
+        };
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO domain_events
+            (tenant_id, aggregate_id, event_type, payload, idempotency_key)
+          VALUES
+            (${request.tenantId}::uuid, ${deliveryId}::uuid,
+             'bridata.notification.delivery.requested', ${JSON.stringify(deliveryPayload)}::jsonb,
+             ${`notification-delivery:${deliveryId}`})
+          ON CONFLICT (idempotency_key) DO NOTHING
+        `);
       }
     }
 
