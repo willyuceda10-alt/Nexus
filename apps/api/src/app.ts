@@ -44,6 +44,8 @@ type PrismaWrappedDatabaseError = FastifyError & {
   meta?: { code?: string; message?: string };
 };
 
+const legacyBoardOptionsPath = /^\/api\/v1\/work-os\/boards-v1\/[^/]+\/columns\/[^/]+\/options(?:\?|$)/;
+
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
@@ -82,6 +84,16 @@ export async function buildApp(): Promise<FastifyInstance> {
       callback(new Error('Origin not allowed by Bridata Project CORS policy'), false);
     },
     credentials: true,
+  });
+
+  app.addHook('onRequest', async (request, reply) => {
+    if (request.method === 'PUT' && legacyBoardOptionsPath.test(request.raw.url ?? '')) {
+      return reply.code(410).send({
+        error: 'legacy_board_options_endpoint_disabled',
+        message: 'Use the governed managed-options endpoint instead.',
+        correlationId: request.id,
+      });
+    }
   });
 
   app.addHook('onSend', async (request, reply, payload) => {
