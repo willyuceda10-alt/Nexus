@@ -336,6 +336,7 @@ module asyncMessaging './async-messaging.bicep' = if (deployAsyncMessaging) {
     automationIdentityPrincipalId: automationIdentity.properties.principalId
     topicName: domainEventsTopicName
     automationSubscriptionName: automationSubscriptionName
+    deployAutomationConsumer: deployAutomationWorker
   }
 }
 
