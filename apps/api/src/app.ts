@@ -21,6 +21,7 @@ import { materialMasterV2Routes } from './routes/material-master-v2.js';
 import { materialOperationsV2Routes } from './routes/material-operations-v2.js';
 import { materialOverviewV2Routes } from './routes/material-overview-v2.js';
 import { meRoutes } from './routes/me.js';
+import { notificationCapabilitiesV1Routes } from './routes/notification-capabilities-v1.js';
 import { notificationPreferencesV1Routes } from './routes/notification-preferences-v1.js';
 import { objectRoutes } from './routes/objects.js';
 import { outboxAdminV2Routes } from './routes/outbox-admin-v2.js';
@@ -125,6 +126,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(automationActionsV2Routes);
   await app.register(inboxV1Routes);
   await app.register(notificationPreferencesV1Routes);
+  await app.register(notificationCapabilitiesV1Routes);
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
   await app.register(dependencyRoutes);
