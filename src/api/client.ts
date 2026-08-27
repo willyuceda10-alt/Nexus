@@ -17,6 +17,19 @@ import type {
   UpdateApiObjectInput,
 } from './contracts';
 import type {
+  ApiMaterialMasterV2,
+  ApiMaterialOverviewV2,
+  ApiMaterialSetupV2,
+  ApiSupplierV2,
+  ApiWarehouseV2,
+  CreateGoodsReceiptV2Input,
+  CreateMaterialIssueV2Input,
+  CreateMaterialRequirementV2Input,
+  CreatePurchaseOrderV2Input,
+  CreateReservationV2Input,
+  MaterialEngineBackfillV2Response,
+} from './materialInventoryV2Contracts';
+import type {
   ApiProjectEngineV2BackfillResponse,
   ApiScheduleAnalysisV2,
   ApiWbsV2Response,
@@ -161,6 +174,76 @@ export const bridataApi = {
     return request<ApiProjectEngineV2BackfillResponse>('/api/v1/project-engine-v2/backfill', {
       method: 'POST',
       body: JSON.stringify({ projectId, dryRun }),
+    });
+  },
+  materialSetupV2(workspaceId: string, signal?: AbortSignal): Promise<ApiMaterialSetupV2> {
+    const query = new URLSearchParams({ workspaceId });
+    return request<ApiMaterialSetupV2>(`/api/v1/material-engine-v2/setup?${query.toString()}`, { signal });
+  },
+  materialOverviewV2(
+    workspaceId: string,
+    projectId?: string | null,
+    asOf?: string,
+    signal?: AbortSignal,
+  ): Promise<ApiMaterialOverviewV2> {
+    const query = new URLSearchParams({ workspaceId });
+    if (projectId) query.set('projectId', projectId);
+    if (asOf) query.set('asOf', asOf);
+    return request<ApiMaterialOverviewV2>(`/api/v1/material-engine-v2/overview?${query.toString()}`, { signal });
+  },
+  backfillMaterialEngineV2(workspaceId: string, dryRun = true): Promise<MaterialEngineBackfillV2Response> {
+    return request<MaterialEngineBackfillV2Response>('/api/v1/material-engine-v2/backfill', {
+      method: 'POST', body: JSON.stringify({ workspaceId, dryRun }),
+    });
+  },
+  syncMaterialMasterV2(input: {
+    materialObjectId: string;
+    code: string;
+    uomCode?: string;
+    uomName?: string;
+    decimalPlaces?: number;
+    unitCost?: number;
+    currency?: string;
+  }): Promise<ApiMaterialMasterV2> {
+    return request<ApiMaterialMasterV2>('/api/v1/material-engine-v2/materials/sync', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  createWarehouseV2(input: { workspaceId: string; code: string; name: string }): Promise<ApiWarehouseV2> {
+    return request<ApiWarehouseV2>('/api/v1/material-engine-v2/warehouses', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  createSupplierV2(input: {
+    code: string; name: string; taxId?: string | null; email?: string | null; phone?: string | null;
+  }): Promise<ApiSupplierV2> {
+    return request<ApiSupplierV2>('/api/v1/material-engine-v2/suppliers', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  createMaterialRequirementV2(input: CreateMaterialRequirementV2Input): Promise<{ id: string; status: string }> {
+    return request<{ id: string; status: string }>('/api/v1/material-engine-v2/requirements', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  createReservationV2(input: CreateReservationV2Input): Promise<{ id: string; availableAfter: number }> {
+    return request<{ id: string; availableAfter: number }>('/api/v1/material-engine-v2/reservations', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  createPurchaseOrderV2(input: CreatePurchaseOrderV2Input): Promise<{ id: string; number: string; status: string; lineCount: number }> {
+    return request<{ id: string; number: string; status: string; lineCount: number }>('/api/v1/material-engine-v2/purchase-orders', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  createGoodsReceiptV2(input: CreateGoodsReceiptV2Input): Promise<{ id: string; number: string; status: string; lineCount: number }> {
+    return request<{ id: string; number: string; status: string; lineCount: number }>('/api/v1/material-engine-v2/goods-receipts', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  issueMaterialV2(input: CreateMaterialIssueV2Input): Promise<{ id: string; type: 'ISSUE'; quantity: number }> {
+    return request<{ id: string; type: 'ISSUE'; quantity: number }>('/api/v1/material-engine-v2/issues', {
+      method: 'POST', body: JSON.stringify(input),
     });
   },
   projectForecast(projectId: string, asOf?: string, signal?: AbortSignal): Promise<ApiProjectForecast> {
