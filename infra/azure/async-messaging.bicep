@@ -5,9 +5,12 @@ param environment string
 param tags object
 param runtimeIdentityPrincipalId string
 param automationIdentityPrincipalId string
+param notificationIdentityPrincipalId string
 param topicName string = 'bridata-domain-events'
 param automationSubscriptionName string = 'automation-v1'
+param notificationSubscriptionName string = 'notifications-v1'
 param deployAutomationConsumer bool = false
+param deployNotificationConsumer bool = false
 
 var baseName = 'nexus-${environment}'
 var suffix = uniqueString(resourceGroup().id)
@@ -77,6 +80,19 @@ resource automationSubscription 'Microsoft.ServiceBus/namespaces/topics/subscrip
   }
 }
 
+resource notificationSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2024-01-01' = if (deployNotificationConsumer) {
+  parent: domainEventsTopic
+  name: notificationSubscriptionName
+  properties: {
+    deadLetteringOnMessageExpiration: true
+    defaultMessageTimeToLive: 'P14D'
+    enableBatchedOperations: true
+    lockDuration: 'PT1M'
+    maxDeliveryCount: 10
+    requiresSession: false
+  }
+}
+
 resource runtimeSenderRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: domainEventsTopic
   name: guid(domainEventsTopic.id, runtimeIdentityPrincipalId, serviceBusDataSenderRoleId)
@@ -97,8 +113,19 @@ resource automationReceiverRole 'Microsoft.Authorization/roleAssignments@2022-04
   }
 }
 
+resource notificationReceiverRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployNotificationConsumer) {
+  scope: notificationSubscription
+  name: guid(notificationSubscription.id, notificationIdentityPrincipalId, serviceBusDataReceiverRoleId)
+  properties: {
+    principalId: notificationIdentityPrincipalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: serviceBusDataReceiverRoleId
+  }
+}
+
 output namespaceName string = serviceBus.name
 output namespaceFqdn string = '${serviceBus.name}.servicebus.windows.net'
 output topicName string = domainEventsTopic.name
 output coreSubscriptionName string = platformCoreSubscription.name
 output automationSubscriptionName string = automationSubscription.?name ?? ''
+output notificationSubscriptionName string = notificationSubscription.?name ?? ''
