@@ -9,6 +9,15 @@ function dateOnly(value: string): Date {
   return new Date(`${value.slice(0, 10)}T00:00:00Z`);
 }
 
+function barClass(item: ApiBoardTemporalItemV1): string {
+  const normalized = (item.colorValue || item.status || item.priority).trim().toUpperCase();
+  if (['BLOCKED', 'REJECTED', 'CRITICAL'].includes(normalized)) return 'border-rose-200 bg-rose-100 text-rose-900 hover:bg-rose-200';
+  if (['HIGH', 'AT_RISK', 'LATE'].includes(normalized)) return 'border-amber-200 bg-amber-100 text-amber-900 hover:bg-amber-200';
+  if (['COMPLETED', 'APPROVED', 'DONE', 'LOW'].includes(normalized)) return 'border-emerald-200 bg-emerald-100 text-emerald-900 hover:bg-emerald-200';
+  if (['IN_PROGRESS', 'ACTIVE', 'MEDIUM'].includes(normalized)) return 'border-green-200 bg-green-100 text-green-900 hover:bg-green-200';
+  return 'border-slate-200 bg-slate-100 text-slate-800 hover:bg-slate-200';
+}
+
 export function BoardTimelineV1({
   items,
   onOpen,
@@ -55,20 +64,21 @@ export function BoardTimelineV1({
             const endOffset = dayDiff(range.start, dateOnly(item.end));
             const left = (startOffset / range.totalDays) * 100;
             const width = (Math.max(1, endOffset - startOffset + 1) / range.totalDays) * 100;
+            const label = item.displayTitle || item.title;
             return (
               <div key={item.objectId} className="grid grid-cols-[280px_minmax(680px,1fr)] border-b border-slate-100 hover:bg-green-50/20">
                 <button onClick={() => onOpen(item.objectId)} className="min-w-0 border-r border-slate-100 px-4 py-3 text-left">
-                  <p className="truncate text-[10px] font-bold text-slate-900">{item.title}</p>
+                  <p className="truncate text-[10px] font-bold text-slate-900">{label}</p>
                   <p className="mt-1 truncate text-[8px] font-semibold text-slate-400">{item.assignee?.fullName ?? 'Sin responsable'} · {item.progress}%</p>
                 </button>
                 <div className="relative h-12 bg-[linear-gradient(to_right,rgba(226,232,240,0.45)_1px,transparent_1px)] bg-[size:8.333%_100%]">
                   <button
                     onClick={() => onOpen(item.objectId)}
-                    className="absolute top-2 h-8 min-w-[18px] overflow-hidden rounded-lg border border-green-200 bg-green-100 px-2 text-left text-[8px] font-bold text-green-900 shadow-sm hover:bg-green-200"
+                    className={`absolute top-2 h-8 min-w-[18px] overflow-hidden rounded-lg border px-2 text-left text-[8px] font-bold shadow-sm ${barClass(item)}`}
                     style={{ left: `${left}%`, width: `${Math.max(width, 1.5)}%` }}
                     title={`${item.title} · ${item.start.slice(0, 10)} → ${item.end.slice(0, 10)}`}
                   >
-                    <span className="block truncate">{item.title}</span>
+                    <span className="block truncate">{label}</span>
                   </button>
                 </div>
               </div>
