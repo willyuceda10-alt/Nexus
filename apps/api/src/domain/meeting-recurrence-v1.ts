@@ -25,6 +25,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DAY_NAMES: RecurrenceDayV1[] = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 const MAX_OCCURRENCES_V1 = 120;
 const MAX_RANGE_DAYS_V1 = 366;
+const MAX_ABSOLUTE_MONTHLY_DAY_V1 = 28;
 
 function pad(value: number): string { return String(value).padStart(2, '0'); }
 function dateKey(year: number, monthIndex: number, day: number): string { return `${year}-${pad(monthIndex + 1)}-${pad(day)}`; }
@@ -35,7 +36,6 @@ function localClock(date: Date) {
 function limaDateTime(year: number, monthIndex: number, day: number, clock: ReturnType<typeof localClock>): Date {
   return new Date(Date.UTC(year, monthIndex, day, clock.hour, clock.minute, clock.second, clock.millisecond) + LIMA_OFFSET_MS);
 }
-function daysInMonth(year: number, monthIndex: number): number { return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate(); }
 function parseDateKey(value: string): { year: number; monthIndex: number; day: number } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('endDate must use YYYY-MM-DD.');
   const [yearText, monthText, dayText] = value.split('-');
@@ -107,15 +107,16 @@ export function expandMeetingRecurrenceV1(startAt: Date, endAt: Date, rule: Meet
     }
   } else {
     const dayOfMonth = rule.dayOfMonth;
-    if (!Number.isInteger(dayOfMonth) || (dayOfMonth ?? 0) < 1 || (dayOfMonth ?? 0) > 31) throw new Error('dayOfMonth must be between 1 and 31 for ABSOLUTE_MONTHLY recurrence.');
+    if (!Number.isInteger(dayOfMonth) || (dayOfMonth ?? 0) < 1 || (dayOfMonth ?? 0) > MAX_ABSOLUTE_MONTHLY_DAY_V1) {
+      throw new Error(`dayOfMonth must be between 1 and ${MAX_ABSOLUTE_MONTHLY_DAY_V1} for ABSOLUTE_MONTHLY recurrence in V1.`);
+    }
     if (first.day !== dayOfMonth) throw new Error('The first meeting day must match dayOfMonth for ABSOLUTE_MONTHLY recurrence in V1.');
     for (let step = 0; result.length < MAX_OCCURRENCES_V1; step += 1) {
       const monthNumber = first.monthIndex + step * rule.interval;
       const year = first.year + Math.floor(monthNumber / 12);
       const monthIndex = ((monthNumber % 12) + 12) % 12;
-      const effectiveDay = Math.min(dayOfMonth!, daysInMonth(year, monthIndex));
-      if (!push(year, monthIndex, effectiveDay)) break;
-      if (endDayIndex != null && dayIndexFromDateKey(dateKey(year, monthIndex, effectiveDay)) >= endDayIndex) break;
+      if (!push(year, monthIndex, dayOfMonth!)) break;
+      if (endDayIndex != null && dayIndexFromDateKey(dateKey(year, monthIndex, dayOfMonth!)) >= endDayIndex) break;
     }
   }
   if (!result.length) throw new Error('The recurrence rule produced no occurrences.');
