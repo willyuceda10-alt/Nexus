@@ -12,6 +12,7 @@ import { forecastRoutes } from './routes/forecast.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { objectRoutes } from './routes/objects.js';
+import { relationRoutes } from './routes/relations.js';
 import { resourceCapacityRoutes } from './routes/resource-capacity.js';
 import { scheduleAnalysisRoutes } from './routes/schedule-analysis.js';
 import { sessionRoutes } from './routes/session.js';
@@ -80,6 +81,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(meRoutes);
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
+  await app.register(relationRoutes);
   await app.register(dependencyRoutes);
   await app.register(scheduleAnalysisRoutes);
   await app.register(forecastRoutes);
