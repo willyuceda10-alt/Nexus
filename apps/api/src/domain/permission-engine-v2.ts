@@ -7,6 +7,7 @@ export const PERMISSIONS_V2 = [
   'workspace.read',
   'workspace.manage',
   'workspace.manage_permissions',
+  'workspace.manage_automation',
   'project.read',
   'project.manage',
   'project.schedule.read',
@@ -66,22 +67,24 @@ const TENANT_ROLE_GRANTS: Record<string, ReadonlySet<PermissionKeyV2>> = {
 
 const WORKSPACE_ROLE_GRANTS: Record<string, ReadonlySet<PermissionKeyV2>> = {
   OWNER: new Set<PermissionKeyV2>([
-    'workspace.read', 'workspace.manage', 'workspace.manage_permissions', 'project.read', 'project.manage',
-    'project.schedule.read', 'project.schedule.write', 'project.material.read', 'project.material.write',
-    'project.cost.read', 'project.cost.write', 'project.baseline.create', 'governance.read', 'governance.write',
-    'meetings.read', 'meetings.write', 'documents.read', 'documents.write',
-  ]),
-  ADMIN: new Set<PermissionKeyV2>([
-    'workspace.read', 'workspace.manage', 'workspace.manage_permissions', 'project.read', 'project.manage',
-    'project.schedule.read', 'project.schedule.write', 'project.material.read', 'project.material.write',
-    'project.cost.read', 'project.cost.write', 'project.baseline.create', 'governance.read', 'governance.write',
-    'meetings.read', 'meetings.write', 'documents.read', 'documents.write',
-  ]),
-  MANAGER: new Set<PermissionKeyV2>([
-    'workspace.read', 'workspace.manage', 'project.read', 'project.manage', 'project.schedule.read', 'project.schedule.write',
+    'workspace.read', 'workspace.manage', 'workspace.manage_permissions', 'workspace.manage_automation',
+    'project.read', 'project.manage', 'project.schedule.read', 'project.schedule.write',
     'project.material.read', 'project.material.write', 'project.cost.read', 'project.cost.write',
     'project.baseline.create', 'governance.read', 'governance.write', 'meetings.read', 'meetings.write',
     'documents.read', 'documents.write',
+  ]),
+  ADMIN: new Set<PermissionKeyV2>([
+    'workspace.read', 'workspace.manage', 'workspace.manage_permissions', 'workspace.manage_automation',
+    'project.read', 'project.manage', 'project.schedule.read', 'project.schedule.write',
+    'project.material.read', 'project.material.write', 'project.cost.read', 'project.cost.write',
+    'project.baseline.create', 'governance.read', 'governance.write', 'meetings.read', 'meetings.write',
+    'documents.read', 'documents.write',
+  ]),
+  MANAGER: new Set<PermissionKeyV2>([
+    'workspace.read', 'workspace.manage', 'workspace.manage_automation', 'project.read', 'project.manage',
+    'project.schedule.read', 'project.schedule.write', 'project.material.read', 'project.material.write',
+    'project.cost.read', 'project.cost.write', 'project.baseline.create', 'governance.read', 'governance.write',
+    'meetings.read', 'meetings.write', 'documents.read', 'documents.write',
   ]),
   MEMBER: new Set<PermissionKeyV2>([
     'workspace.read', 'project.read', 'project.schedule.read', 'project.material.read', 'project.cost.read',
@@ -121,9 +124,6 @@ export function evaluatePermissionV2(input: PermissionDecisionInputV2): Permissi
     policy.permissionKey === input.permission && policyScopeMatches(input, policy) && policySubjectMatches(input, policy),
   );
 
-  // The tenant OWNER is the recovery principal for permission administration.
-  // This one capability cannot be removed by a policy, otherwise a bad rule could
-  // permanently lock the tenant out of its own authorization control plane.
   if (input.tenantRole === 'OWNER' && input.permission === 'tenant.manage_permissions') {
     return { allowed: true, source: 'BREAK_GLASS_OWNER', matchedPolicies };
   }
