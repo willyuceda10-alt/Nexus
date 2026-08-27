@@ -20,7 +20,8 @@ export interface MaterialAvailabilityV2Input {
   requiredQty: number;
   issuedQty: number;
   onHandQty: number;
-  reservedQty: number;
+  ownReservedQty: number;
+  otherReservedQty: number;
   requiredDate: string;
   today: string;
   openPurchaseSupply: OpenPurchaseSupplyV2[];
@@ -42,6 +43,7 @@ export interface MaterialAvailabilityV2Result {
   remainingQty: number;
   onHandQty: number;
   reservedQty: number;
+  competingReservedQty: number;
   availableQty: number;
   onOrderQty: number;
   projectedQty: number;
@@ -112,12 +114,15 @@ export function calculateMaterialAvailabilityV2(
   const requiredQty = finiteNonNegative(input.requiredQty, 'requiredQty');
   const issuedQty = finiteNonNegative(input.issuedQty, 'issuedQty');
   const onHandQty = finiteNonNegative(input.onHandQty, 'onHandQty');
-  const reservedQty = finiteNonNegative(input.reservedQty, 'reservedQty');
+  const ownReservedQty = finiteNonNegative(input.ownReservedQty, 'ownReservedQty');
+  const otherReservedQty = finiteNonNegative(input.otherReservedQty, 'otherReservedQty');
   const requiredDate = dateOnly(input.requiredDate, 'requiredDate');
   const today = dateOnly(input.today, 'today');
 
   const remainingQty = roundQty(Math.max(0, requiredQty - issuedQty));
-  const availableQty = roundQty(Math.max(0, onHandQty - reservedQty));
+  const effectiveOwnReservation = roundQty(Math.min(remainingQty, ownReservedQty));
+  const unreservedRemainingQty = roundQty(Math.max(0, remainingQty - effectiveOwnReservation));
+  const freeAvailableQty = roundQty(Math.max(0, onHandQty - effectiveOwnReservation - otherReservedQty));
   const supplies = input.openPurchaseSupply
     .map((supply) => ({
       quantity: finiteNonNegative(supply.quantity, 'openPurchaseSupply.quantity'),
@@ -132,64 +137,42 @@ export function calculateMaterialAvailabilityV2(
     });
 
   const onOrderQty = roundQty(supplies.reduce((sum, supply) => sum + supply.quantity, 0));
-  const projectedQty = roundQty(availableQty + onOrderQty);
+  const projectedQty = roundQty(effectiveOwnReservation + freeAvailableQty + onOrderQty);
   const deficitQty = roundQty(Math.max(0, remainingQty - projectedQty));
+
+  const common = {
+    remainingQty,
+    onHandQty,
+    reservedQty: effectiveOwnReservation,
+    competingReservedQty: otherReservedQty,
+    availableQty: freeAvailableQty,
+    onOrderQty,
+    projectedQty,
+    requiredDate,
+  };
 
   if (remainingQty === 0) {
     return {
-      state: 'FULFILLED',
-      riskLevel: 'NONE',
-      remainingQty,
-      onHandQty,
-      reservedQty,
-      availableQty,
-      onOrderQty,
-      projectedQty,
-      deficitQty,
-      projectedAvailabilityDate: today,
-      requiredDate,
-      lateByDays: 0,
-      taskAtRisk: false,
+      state: 'FULFILLED', riskLevel: 'NONE', ...common, deficitQty: 0,
+      projectedAvailabilityDate: today, lateByDays: 0, taskAtRisk: false,
     };
   }
 
-  if (reservedQty >= remainingQty) {
+  if (effectiveOwnReservation >= remainingQty) {
     return {
-      state: 'RESERVED',
-      riskLevel: 'NONE',
-      remainingQty,
-      onHandQty,
-      reservedQty,
-      availableQty,
-      onOrderQty,
-      projectedQty,
-      deficitQty: 0,
-      projectedAvailabilityDate: today,
-      requiredDate,
-      lateByDays: 0,
-      taskAtRisk: false,
+      state: 'RESERVED', riskLevel: 'NONE', ...common, deficitQty: 0,
+      projectedAvailabilityDate: today, lateByDays: 0, taskAtRisk: false,
     };
   }
 
-  if (availableQty >= remainingQty) {
+  if (freeAvailableQty >= unreservedRemainingQty) {
     return {
-      state: 'AVAILABLE',
-      riskLevel: 'NONE',
-      remainingQty,
-      onHandQty,
-      reservedQty,
-      availableQty,
-      onOrderQty,
-      projectedQty,
-      deficitQty: 0,
-      projectedAvailabilityDate: today,
-      requiredDate,
-      lateByDays: 0,
-      taskAtRisk: false,
+      state: 'AVAILABLE', riskLevel: 'NONE', ...common, deficitQty: 0,
+      projectedAvailabilityDate: today, lateByDays: 0, taskAtRisk: false,
     };
   }
 
-  const shortageAfterStock = roundQty(Math.max(0, remainingQty - availableQty));
+  const shortageAfterStock = roundQty(Math.max(0, unreservedRemainingQty - freeAvailableQty));
   let cumulative = 0;
   let projectedAvailabilityDate: string | null = null;
   for (const supply of supplies) {
@@ -205,15 +188,9 @@ export function calculateMaterialAvailabilityV2(
     return {
       state: 'SHORTAGE',
       riskLevel: overdue ? 'CRITICAL' : 'HIGH',
-      remainingQty,
-      onHandQty,
-      reservedQty,
-      availableQty,
-      onOrderQty,
-      projectedQty,
+      ...common,
       deficitQty,
       projectedAvailabilityDate,
-      requiredDate,
       lateByDays: overdue ? Math.max(0, dayDiff(requiredDate, today)) : 0,
       taskAtRisk: true,
     };
@@ -224,15 +201,9 @@ export function calculateMaterialAvailabilityV2(
   return {
     state: late ? 'LATE' : 'ON_ORDER',
     riskLevel: late ? (requiredDate < today ? 'CRITICAL' : 'HIGH') : 'WATCH',
-    remainingQty,
-    onHandQty,
-    reservedQty,
-    availableQty,
-    onOrderQty,
-    projectedQty,
+    ...common,
     deficitQty: 0,
     projectedAvailabilityDate,
-    requiredDate,
     lateByDays,
     taskAtRisk: late,
   };
