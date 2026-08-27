@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { config } from './config.js';
 import { registerRequestContext } from './auth.js';
+import { ProjectScheduleV2ValidationError } from './domain/project-schedule-v2.js';
 import { registerHierarchyWriteGuards } from './hierarchy-guard.js';
 import { baselineRoutes } from './routes/baselines.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
@@ -12,6 +13,7 @@ import { forecastRoutes } from './routes/forecast.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { objectRoutes } from './routes/objects.js';
+import { projectScheduleV2Routes } from './routes/project-schedule-v2.js';
 import { resourceCapacityRoutes } from './routes/resource-capacity.js';
 import { scheduleAnalysisRoutes } from './routes/schedule-analysis.js';
 import { sessionRoutes } from './routes/session.js';
@@ -62,6 +64,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
+    if (error instanceof ProjectScheduleV2ValidationError) {
+      request.log.info({ err: error }, 'Project Engine V2 validation rejected request');
+      void reply.code(400).send({
+        error: 'invalid_project_schedule',
+        message: error.message,
+        correlationId: request.id,
+      });
+      return;
+    }
+
     request.log.error({ err: error }, 'Unhandled Bridata Project API error');
     const statusCode = error.statusCode && error.statusCode < 500 ? error.statusCode : 500;
     void reply.code(statusCode).send({
@@ -82,6 +94,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(objectRoutes);
   await app.register(dependencyRoutes);
   await app.register(scheduleAnalysisRoutes);
+  await app.register(projectScheduleV2Routes);
   await app.register(forecastRoutes);
   await app.register(resourceCapacityRoutes);
   await app.register(baselineRoutes);
