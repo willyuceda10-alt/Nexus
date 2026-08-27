@@ -11,6 +11,7 @@ import { CommandPalette } from './components/layout/CommandPalette';
 import { WorkspaceHome } from './components/views/WorkspaceHome';
 import { ProjectsOverviewView } from './components/views/ProjectsOverviewView';
 import { ProjectCenter } from './components/views/ProjectCenter';
+import { WorkBoardsV1View } from './components/views/WorkBoardsV1View';
 import { PortfoliosView } from './components/views/PortfoliosView';
 import { ResourceManagementView } from './components/views/ResourceManagementView';
 import { MaterialsInventoryV2View } from './components/views/MaterialsInventoryV2View';
@@ -28,38 +29,23 @@ const MainContentRouter: React.FC = () => {
   const { activeTab } = useNexus();
 
   switch (activeTab) {
-    case 'home':
-      return <WorkspaceHome />;
-    case 'projects':
-      return <ProjectsOverviewView />;
-    case 'project':
-      return <ProjectCenter />;
-    case 'portfolios':
-      return <PortfoliosView />;
-    case 'resources':
-      return <ResourceManagementView />;
-    case 'materials':
-      return <MaterialsInventoryV2View />;
-    case 'costs':
-      return <CostControlV2View />;
-    case 'automations':
-      return <AutomationsV2View />;
-    case 'governance':
-      return <GovernanceRiskView />;
-    case 'meetings':
-      return <MeetingsDecisionsView />;
-    case 'documents':
-      return <DocumentsApprovalsView />;
-    case 'timeline':
-      return <TimelineView />;
-    case 'reports':
-      return <ExecutiveDashboard />;
-    case 'settings':
-      return <SettingsV2View />;
-    case 'inbox':
-      return <InboxV1View />;
-    default:
-      return <WorkspaceHome />;
+    case 'home': return <WorkspaceHome />;
+    case 'projects': return <ProjectsOverviewView />;
+    case 'project': return <ProjectCenter />;
+    case 'boards': return <WorkBoardsV1View />;
+    case 'portfolios': return <PortfoliosView />;
+    case 'resources': return <ResourceManagementView />;
+    case 'materials': return <MaterialsInventoryV2View />;
+    case 'costs': return <CostControlV2View />;
+    case 'automations': return <AutomationsV2View />;
+    case 'governance': return <GovernanceRiskView />;
+    case 'meetings': return <MeetingsDecisionsView />;
+    case 'documents': return <DocumentsApprovalsView />;
+    case 'timeline': return <TimelineView />;
+    case 'reports': return <ExecutiveDashboard />;
+    case 'settings': return <SettingsV2View />;
+    case 'inbox': return <InboxV1View />;
+    default: return <WorkspaceHome />;
   }
 };
 
@@ -70,15 +56,12 @@ export function App() {
         <SchedulingProvider>
           <div className="flex h-screen w-screen overflow-hidden bg-[#F4F7F5] font-sans text-slate-900 selection:bg-green-200 selection:text-green-950">
             <Sidebar />
-
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#F4F7F5]">
               <Header />
-
               <main className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#F7FAF8_0%,#F3F6F4_100%)]">
                 <MainContentRouter />
               </main>
             </div>
-
             <UniversalObjectDrawer />
             <CreateObjectModal />
             <CommandPalette />
