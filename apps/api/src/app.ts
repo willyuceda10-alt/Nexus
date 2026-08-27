@@ -33,6 +33,8 @@ import { scheduleAnalysisV2Routes } from './routes/schedule-analysis-v2.js';
 import { sessionRoutes } from './routes/session.js';
 import { wbsV2Routes } from './routes/wbs-v2.js';
 import { workCalendarV2Routes } from './routes/work-calendars-v2.js';
+import { workOsBoardComputedV1Routes } from './routes/work-os-board-computed-v1.js';
+import { workOsBoardConfigOptionsV1Routes } from './routes/work-os-board-config-options-v1.js';
 import { workOsBoardEditorV1Routes } from './routes/work-os-board-editor-v1.js';
 import { workOsBoardsV1Routes } from './routes/work-os-boards-v1.js';
 
@@ -133,6 +135,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(objectRoutes);
   await app.register(workOsBoardsV1Routes);
   await app.register(workOsBoardEditorV1Routes);
+  await app.register(workOsBoardConfigOptionsV1Routes);
+  await app.register(workOsBoardComputedV1Routes);
   await app.register(dependencyRoutes);
   await app.register(scheduleAnalysisRoutes);
   await app.register(projectScheduleV2Routes);
