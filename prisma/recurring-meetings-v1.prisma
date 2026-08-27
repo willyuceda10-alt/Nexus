@@ -43,6 +43,7 @@ model MeetingRecurrenceOccurrenceV1 {
   originalStartAt     DateTime                  @map("original_start_at") @db.Timestamptz(6)
   startAt             DateTime                  @map("start_at") @db.Timestamptz(6)
   endAt               DateTime                  @map("end_at") @db.Timestamptz(6)
+  version             Int                       @default(1)
   lifecycleStatus     MeetingLifecycleStatusV2  @default(SCHEDULED) @map("lifecycle_status")
   isException         Boolean                   @default(false) @map("is_exception")
   graphEventId        String?                   @map("graph_event_id") @db.VarChar(1024)
@@ -51,7 +52,7 @@ model MeetingRecurrenceOccurrenceV1 {
   createdAt           DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  series MeetingRecurrenceSeriesV1 @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  series           MeetingRecurrenceSeriesV1            @relation(fields: [seriesId], references: [id], onDelete: Cascade)
   resourceBookings MeetingOccurrenceResourceBookingV1[]
 
   @@unique([seriesId, sequence])
