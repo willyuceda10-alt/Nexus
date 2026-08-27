@@ -30,7 +30,7 @@ export type ApiAuthorizationEffectV2 = 'ALLOW' | 'DENY';
 export interface ApiEffectivePermissionDecisionV2 {
   permission: ApiPermissionKeyV2;
   allowed: boolean;
-  source: 'EXPLICIT_DENY' | 'EXPLICIT_ALLOW' | 'BASE_ROLE' | 'DEFAULT_DENY';
+  source: 'BREAK_GLASS_OWNER' | 'EXPLICIT_DENY' | 'EXPLICIT_ALLOW' | 'BASE_ROLE' | 'DEFAULT_DENY';
   matchedPolicyCount: number;
 }
 
