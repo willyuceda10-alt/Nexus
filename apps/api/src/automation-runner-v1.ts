@@ -1,4 +1,6 @@
 import { Prisma } from '@prisma/client';
+import type { ActorContext } from './auth.js';
+import { authorizePermission } from './authorization.js';
 import { withTenant } from './tenant-transaction.js';
 import {
   automationRecursionBlockedV1,
@@ -80,6 +82,28 @@ function commonPayloadProjectId(event: AutomationEventEnvelopeV1): string | null
 
 function commonPayloadWorkspaceId(event: AutomationEventEnvelopeV1): string | null {
   return stringValue(record(event.payload).workspaceId);
+}
+
+async function automationOwnerActor(
+  tx: Prisma.TransactionClient,
+  definition: DefinitionRow,
+  tenantId: string,
+): Promise<ActorContext> {
+  const membership = await tx.tenantMembership.findUnique({
+    where: { tenantId_userId: { tenantId, userId: definition.created_by_user_id } },
+    include: { user: { select: { email: true, fullName: true, isActive: true } } },
+  });
+  if (!membership || membership.status !== 'ACTIVE' || !membership.user.isActive) {
+    throw new Error('Automation owner is no longer an active tenant member.');
+  }
+  return {
+    tenantId,
+    userId: definition.created_by_user_id,
+    membershipId: membership.id,
+    role: membership.role,
+    email: membership.user.email,
+    name: membership.user.fullName,
+  };
 }
 
 async function definitionScopeMatches(
@@ -317,6 +341,7 @@ async function executeEmitEvent(
   action: Extract<AutomationActionV1, { type: 'EMIT_EVENT' }>,
   event: AutomationEventEnvelopeV1,
 ): Promise<{ eventId: string }> {
+  await automationOwnerActor(tx, definition, event.tenantId);
   const aggregateId = optionalString(resolvedActionScalarV1(action.aggregateId, event)) ?? event.aggregateId;
   if (!UUID_RE.test(aggregateId)) throw new Error('EMIT_EVENT aggregateId must resolve to a UUID.');
   const trace = nextAutomationTraceV1(automationTraceFromEventV1(event), definition.id);
@@ -365,6 +390,12 @@ async function executeCreateTask(
     throw new Error('CREATE_TASK cannot escape the automation project scope.');
   }
 
+  const owner = await automationOwnerActor(tx, definition, event.tenantId);
+  const taskPermission = await authorizePermission(tx, owner, 'project.manage', { projectId });
+  if (!taskPermission.allowed) {
+    throw new Error('Automation owner no longer has project.manage permission for CREATE_TASK.');
+  }
+
   const requestedWorkspaceId = optionalString(resolvedActionScalarV1(action.workspaceId, event));
   if (requestedWorkspaceId && requestedWorkspaceId !== project.workspaceId) {
     throw new Error('CREATE_TASK workspace does not match the project workspace.');
@@ -375,14 +406,6 @@ async function executeCreateTask(
     select: { id: true },
   });
   if (!objectDefinition) throw new Error('TASK object definition is not configured.');
-
-  const creator = await tx.tenantMembership.findUnique({
-    where: { tenantId_userId: { tenantId: event.tenantId, userId: definition.created_by_user_id } },
-    include: { user: { select: { isActive: true } } },
-  });
-  if (!creator || creator.status !== 'ACTIVE' || !creator.user.isActive) {
-    throw new Error('Automation owner is no longer an active tenant member.');
-  }
 
   const assigneeId = optionalString(resolvedActionScalarV1(action.assigneeId, event));
   if (assigneeId) {
@@ -409,7 +432,7 @@ async function executeCreateTask(
       status: 'DRAFT',
       priority: action.priority ?? 'MEDIUM',
       progress: 0,
-      ownerId: definition.created_by_user_id,
+      ownerId: owner.userId,
       assigneeId,
       dueDate,
       metadata: {
@@ -441,7 +464,7 @@ async function executeCreateTask(
     tx.auditLog.create({
       data: {
         tenantId: event.tenantId,
-        userId: definition.created_by_user_id,
+        userId: owner.userId,
         action: 'AUTOMATION_TASK_CREATED',
         resource: 'NEXUS_OBJECT',
         resourceId: created.id,
@@ -460,6 +483,7 @@ async function executeRequestApproval(
   action: Extract<AutomationActionV1, { type: 'REQUEST_APPROVAL' }>,
   event: AutomationEventEnvelopeV1,
 ): Promise<'WAITING_APPROVAL' | 'APPROVED' | 'REJECTED'> {
+  await automationOwnerActor(tx, definition, event.tenantId);
   const existing = await tx.$queryRaw<Array<{ status: string }>>(Prisma.sql`
     SELECT status FROM automation_approval_requests_v1
     WHERE tenant_id = ${event.tenantId}::uuid AND run_id = ${run.id}::uuid AND step_index = ${step.step_index}
