@@ -27,6 +27,7 @@ type MeetingSyncRow = {
   is_online: boolean;
   graph_event_id: string | null;
   sync_status: 'LOCAL_ONLY' | 'PENDING' | 'SYNCED' | 'FAILED';
+  lifecycle_status: 'SCHEDULED' | 'CANCEL_PENDING' | 'CANCELLED';
   last_synced_event_id: string | null;
   title: string;
   description: string | null;
@@ -71,7 +72,7 @@ export async function processMeetingCalendarSyncEventV1(
   const prepared = await withTenant(event.tenantId, async (tx) => {
     const rows = await tx.$queryRaw<MeetingSyncRow[]>(Prisma.sql`
       SELECT c.id, c.meeting_object_id, c.organizer_graph_user, c.start_at, c.end_at, c.location,
-             c.is_online, c.graph_event_id, c.sync_status, c.last_synced_event_id,
+             c.is_online, c.graph_event_id, c.sync_status, c.lifecycle_status, c.last_synced_event_id,
              o.title, o.description
       FROM meeting_collaboration_v1 c
       JOIN nexus_objects o ON o.id = c.meeting_object_id AND o.deleted_at IS NULL
@@ -81,7 +82,9 @@ export async function processMeetingCalendarSyncEventV1(
     `);
     const row = rows[0];
     if (!row) return { kind: 'missing' as const };
-
+    if (row.lifecycle_status !== 'SCHEDULED') {
+      return { kind: 'lifecycle-blocked' as const, row };
+    }
     if (
       sourceEventId
       && row.sync_status === 'SYNCED'
@@ -123,6 +126,9 @@ export async function processMeetingCalendarSyncEventV1(
   if (prepared.kind === 'missing') {
     return { handled: true, synced: false, retryableFailure: false, terminal: true };
   }
+  if (prepared.kind === 'lifecycle-blocked') {
+    return { handled: true, synced: false, retryableFailure: false, terminal: true };
+  }
   if (prepared.kind === 'already-synced') {
     return { handled: true, synced: true, retryableFailure: false, terminal: true };
   }
@@ -161,6 +167,12 @@ export async function processMeetingCalendarSyncEventV1(
       : await graph.createEvent(input);
 
     await withTenant(event.tenantId, async (tx) => {
+      const state = await tx.$queryRaw<Array<{ lifecycle_status: string }>>(Prisma.sql`
+        SELECT lifecycle_status FROM meeting_collaboration_v1
+        WHERE tenant_id = ${event.tenantId}::uuid AND id = ${collaborationId}::uuid
+        FOR UPDATE
+      `);
+      if (state[0]?.lifecycle_status !== 'SCHEDULED') return;
       await tx.$executeRaw(Prisma.sql`
         UPDATE meeting_collaboration_v1
         SET sync_status = 'SYNCED'::"MeetingM365SyncStatusV1",
@@ -207,8 +219,14 @@ export async function processMeetingCalendarSyncEventV1(
     await withTenant(event.tenantId, async (tx) => {
       await tx.$executeRaw(Prisma.sql`
         UPDATE meeting_collaboration_v1
-        SET sync_status = 'FAILED'::"MeetingM365SyncStatusV1",
-            sync_error = ${message},
+        SET sync_status = CASE
+              WHEN lifecycle_status = 'SCHEDULED'::"MeetingLifecycleStatusV2" THEN 'FAILED'::"MeetingM365SyncStatusV1"
+              ELSE sync_status
+            END,
+            sync_error = CASE
+              WHEN lifecycle_status = 'SCHEDULED'::"MeetingLifecycleStatusV2" THEN ${message}
+              ELSE sync_error
+            END,
             updated_at = CURRENT_TIMESTAMP
         WHERE tenant_id = ${event.tenantId}::uuid
           AND id = ${collaborationId}::uuid
