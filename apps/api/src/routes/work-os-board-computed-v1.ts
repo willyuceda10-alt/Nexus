@@ -20,6 +20,14 @@ type ColumnRow = {
   config: Record<string, unknown> | null;
 };
 
+type RelationProjectionRow = {
+  source_object_id: string;
+  target_id: string;
+  target_title: string;
+  target_status: string;
+  target_object_type_key: string;
+};
+
 export async function workOsBoardComputedV1Routes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/work-os/boards-v1/:boardId/computed-values', { preHandler: [authenticate, resolveActor] }, async (request, reply) => {
     const params = paramsSchema.safeParse(request.params);
@@ -54,7 +62,13 @@ export async function workOsBoardComputedV1Routes(app: FastifyInstance): Promise
       if (!objectIds.length) return { valuesByObjectId: {} };
 
       const objects = await tx.nexusObject.findMany({
-        where: { tenantId: actor.tenantId, id: { in: objectIds }, deletedAt: null },
+        where: {
+          tenantId: actor.tenantId,
+          workspaceId: board.workspace_id,
+          objectDefinitionId: board.object_definition_id,
+          id: { in: objectIds },
+          deletedAt: null,
+        },
         select: {
           id: true,
           progress: true,
@@ -68,9 +82,12 @@ export async function workOsBoardComputedV1Routes(app: FastifyInstance): Promise
         const raw = new Map<string, unknown>();
         raw.set('progress', object.progress);
         for (const field of object.fieldValues) {
-          raw.set(field.fieldKey,
-            field.valueNumber !== null ? Number(field.valueNumber)
-              : field.valueText ?? field.valueBoolean ?? field.valueDate ?? field.valueJson ?? null);
+          raw.set(
+            field.fieldKey,
+            field.valueNumber !== null
+              ? Number(field.valueNumber)
+              : field.valueText ?? field.valueBoolean ?? field.valueDate ?? field.valueJson ?? null,
+          );
         }
         for (const column of formulaColumns) {
           const config = (column.config ?? {}) as {
@@ -93,26 +110,48 @@ export async function workOsBoardComputedV1Routes(app: FastifyInstance): Promise
       }
 
       for (const column of columns.filter((item) => item.data_type === 'RELATION')) {
-        const config = (column.config ?? {}) as { relationType?: string };
-        if (!config.relationType) continue;
-        const relations = await tx.objectRelation.findMany({
-          where: {
-            tenantId: actor.tenantId,
-            sourceObjectId: { in: objectIds },
-            relationType: config.relationType,
-          },
-          select: {
-            sourceObjectId: true,
-            targetObject: { select: { id: true, title: true, status: true, objectTypeKey: true } },
-          },
-          orderBy: { createdAt: 'asc' },
-        });
+        const config = (column.config ?? {}) as { relationType?: string; targetBoardId?: string };
+        if (!config.relationType || !config.targetBoardId) continue;
+
+        const relations = await tx.$queryRaw<RelationProjectionRow[]>(Prisma.sql`
+          SELECT
+            r.source_object_id,
+            target.id AS target_id,
+            target.title AS target_title,
+            target.status AS target_status,
+            target.object_type_key AS target_object_type_key
+          FROM object_relations r
+          JOIN work_board_item_placements_v1 target_placement
+            ON target_placement.tenant_id = r.tenant_id
+           AND target_placement.board_id = ${config.targetBoardId}::uuid
+           AND target_placement.object_id = r.target_object_id
+          JOIN nexus_objects target
+            ON target.id = r.target_object_id
+           AND target.tenant_id = r.tenant_id
+           AND target.workspace_id = ${board.workspace_id}::uuid
+           AND target.deleted_at IS NULL
+          WHERE r.tenant_id = ${actor.tenantId}::uuid
+            AND r.source_object_id = ANY(${objectIds}::uuid[])
+            AND r.relation_type = ${config.relationType}
+          ORDER BY r.created_at
+        `);
+
         for (const relation of relations) {
-          const targetList = (valuesByObjectId[relation.sourceObjectId]?.[column.field_key] as unknown[] | undefined) ?? [];
-          valuesByObjectId[relation.sourceObjectId]![column.field_key] = [...targetList, relation.targetObject];
+          const targetList = (valuesByObjectId[relation.source_object_id]?.[column.field_key] as unknown[] | undefined) ?? [];
+          valuesByObjectId[relation.source_object_id]![column.field_key] = [
+            ...targetList,
+            {
+              id: relation.target_id,
+              title: relation.target_title,
+              status: relation.target_status,
+              objectTypeKey: relation.target_object_type_key,
+            },
+          ];
         }
         for (const objectId of objectIds) {
-          if (valuesByObjectId[objectId]![column.field_key] === undefined) valuesByObjectId[objectId]![column.field_key] = [];
+          if (valuesByObjectId[objectId]?.[column.field_key] === undefined) {
+            valuesByObjectId[objectId]![column.field_key] = [];
+          }
         }
       }
 
