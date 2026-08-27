@@ -38,6 +38,12 @@ type AttendeeRow = {
   attendee_type: 'REQUIRED' | 'OPTIONAL';
 };
 
+type ResourceRow = {
+  email: string;
+  name: string;
+  resource_type: 'ROOM' | 'EQUIPMENT';
+};
+
 function collaborationIdFromEvent(event: AutomationEventEnvelopeV1): string | null {
   if (event.eventType !== 'bridata.meeting.m365.sync.requested') return null;
   const payload = event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload)
@@ -92,6 +98,16 @@ export async function processMeetingCalendarSyncEventV1(
       ORDER BY created_at, id
     `);
 
+    const resources = await tx.$queryRaw<ResourceRow[]>(Prisma.sql`
+      SELECT r.email, r.name, r.resource_type
+      FROM meeting_resource_bookings_v1 b
+      JOIN meeting_resources_v1 r ON r.id = b.meeting_resource_id
+      WHERE b.tenant_id = ${event.tenantId}::uuid
+        AND b.meeting_collaboration_id = ${row.id}::uuid
+        AND r.is_active = true
+      ORDER BY r.resource_type, r.name, r.id
+    `);
+
     await tx.$executeRaw(Prisma.sql`
       UPDATE meeting_collaboration_v1
       SET sync_status = 'PENDING'::"MeetingM365SyncStatusV1",
@@ -102,7 +118,7 @@ export async function processMeetingCalendarSyncEventV1(
         AND id = ${row.id}::uuid
     `);
 
-    return { kind: 'ready' as const, row, attendees };
+    return { kind: 'ready' as const, row, attendees, resources };
   });
 
   if (prepared.kind === 'missing') {
@@ -113,6 +129,22 @@ export async function processMeetingCalendarSyncEventV1(
   }
 
   try {
+    const attendeeMap = new Map<string, { email: string; displayName: string; type: 'required' | 'optional' | 'resource' }>();
+    for (const attendee of prepared.attendees) {
+      attendeeMap.set(attendee.email.trim().toLowerCase(), {
+        email: attendee.email,
+        displayName: attendee.display_name,
+        type: attendee.attendee_type === 'OPTIONAL' ? 'optional' : 'required',
+      });
+    }
+    for (const resource of prepared.resources) {
+      attendeeMap.set(resource.email.trim().toLowerCase(), {
+        email: resource.email,
+        displayName: resource.name,
+        type: 'resource',
+      });
+    }
+
     const input = {
       collaborationId,
       organizerGraphUser: prepared.row.organizer_graph_user,
@@ -121,11 +153,7 @@ export async function processMeetingCalendarSyncEventV1(
       startAt: prepared.row.start_at,
       endAt: prepared.row.end_at,
       location: prepared.row.location,
-      attendees: prepared.attendees.map((attendee) => ({
-        email: attendee.email,
-        displayName: attendee.display_name,
-        type: attendee.attendee_type === 'OPTIONAL' ? 'optional' as const : 'required' as const,
-      })),
+      attendees: [...attendeeMap.values()],
       isOnline: prepared.row.is_online,
     };
 
@@ -161,6 +189,8 @@ export async function processMeetingCalendarSyncEventV1(
             graphEventId: result.id,
             hasJoinUrl: Boolean(result.joinUrl),
             sourceEventId,
+            attendeeCount: prepared.attendees.length,
+            resourceCount: prepared.resources.length,
           },
         },
       });
