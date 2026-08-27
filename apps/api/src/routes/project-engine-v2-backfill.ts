@@ -16,6 +16,8 @@ const bodySchema = z.object({
 });
 const dependencyTypeSchema = z.enum(['FS', 'SS', 'FF', 'SF']);
 
+type BackfillState = 'existing' | 'planned' | 'created' | 'updated';
+
 function asRecord(value: Prisma.JsonValue | null): Record<string, Prisma.JsonValue> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return value as Record<string, Prisma.JsonValue>;
@@ -90,8 +92,8 @@ export async function projectEngineV2BackfillRoutes(app: FastifyInstance): Promi
         const summaries: Array<{
           projectId: string;
           projectTitle: string;
-          calendar: 'existing' | 'planned' | 'created';
-          profile: 'existing' | 'planned' | 'created';
+          calendar: BackfillState;
+          profile: BackfillState;
           workItemsPlanned: number;
           workItemsCreated: number;
           workItemsSkippedExisting: number;
@@ -116,17 +118,24 @@ export async function projectEngineV2BackfillRoutes(app: FastifyInstance): Promi
 
           let calendar = currentProfile?.calendarId
             ? await tx.workCalendar.findFirst({
-                where: { id: currentProfile.calendarId, tenantId: actor.tenantId },
-              })
-            : await tx.workCalendar.findFirst({
                 where: {
+                  id: currentProfile.calendarId,
                   tenantId: actor.tenantId,
                   workspaceId: project.workspaceId,
-                  name: calendarName,
                 },
-              });
+              })
+            : null;
+          if (!calendar) {
+            calendar = await tx.workCalendar.findFirst({
+              where: {
+                tenantId: actor.tenantId,
+                workspaceId: project.workspaceId,
+                name: calendarName,
+              },
+            });
+          }
 
-          let calendarState: 'existing' | 'planned' | 'created' = calendar ? 'existing' : 'planned';
+          let calendarState: BackfillState = calendar ? 'existing' : 'planned';
           if (!calendar && !dryRun) {
             calendar = await tx.workCalendar.create({
               data: {
@@ -160,7 +169,7 @@ export async function projectEngineV2BackfillRoutes(app: FastifyInstance): Promi
             }
           }
 
-          let profileState: 'existing' | 'planned' | 'created' = currentProfile ? 'existing' : 'planned';
+          let profileState: BackfillState = currentProfile ? 'existing' : 'planned';
           if (!currentProfile && !dryRun) {
             await tx.projectScheduleProfile.create({
               data: {
@@ -171,12 +180,25 @@ export async function projectEngineV2BackfillRoutes(app: FastifyInstance): Promi
                 progressMethod: 'DURATION',
                 timezone: calendar?.timezone ?? 'UTC',
                 minutesPerDay,
-                minutesPerWeek: minutesPerDay * Math.max(1, legacy.mode === 'CALENDAR_DAYS_V1' ? 7 : legacy.workingWeekdays.length),
+                minutesPerWeek: minutesPerDay * Math.max(
+                  1,
+                  legacy.mode === 'CALENDAR_DAYS_V1' ? 7 : legacy.workingWeekdays.length,
+                ),
                 plannedStart: project.startDate,
                 targetFinish: project.dueDate,
               },
             });
             profileState = 'created';
+          } else if (currentProfile && calendar && currentProfile.calendarId !== calendar.id) {
+            if (dryRun) {
+              profileState = 'planned';
+            } else {
+              await tx.projectScheduleProfile.update({
+                where: { id: currentProfile.id },
+                data: { calendarId: calendar.id },
+              });
+              profileState = 'updated';
+            }
           }
 
           const candidates = await tx.nexusObject.findMany({
