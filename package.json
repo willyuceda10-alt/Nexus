@@ -6,6 +6,9 @@
   "workspaces": [
     "apps/api"
   ],
+  "prisma": {
+    "schema": "./prisma"
+  },
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "dev:web": "vite --port=3000 --host=0.0.0.0",
