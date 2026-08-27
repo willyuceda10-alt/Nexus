@@ -43,6 +43,8 @@ DECLARE
   linked_project uuid;
   linked_workspace uuid;
   dimension_tenant uuid;
+  material_uuid uuid;
+  supplier_uuid uuid;
 BEGIN
   SELECT workspace_id INTO project_workspace
   FROM nexus_objects
@@ -76,31 +78,35 @@ BEGIN
     END IF;
   END IF;
 
-  IF TG_TABLE_NAME = 'project_actual_costs' AND NEW.material_id IS NOT NULL THEN
-    SELECT tenant_id, workspace_id INTO dimension_tenant, linked_workspace
-    FROM material_masters WHERE id = NEW.material_id AND is_active = TRUE;
-    IF dimension_tenant IS DISTINCT FROM NEW.tenant_id OR linked_workspace IS DISTINCT FROM NEW.workspace_id THEN
-      RAISE EXCEPTION 'cost_material_workspace_mismatch' USING ERRCODE = 'P0001';
+  IF TG_TABLE_NAME = 'project_actual_costs' THEN
+    material_uuid := NULLIF(to_jsonb(NEW)->>'material_id', '')::uuid;
+    IF material_uuid IS NOT NULL THEN
+      SELECT tenant_id, workspace_id INTO dimension_tenant, linked_workspace
+      FROM material_masters WHERE id = material_uuid AND is_active = TRUE;
+      IF dimension_tenant IS DISTINCT FROM NEW.tenant_id OR linked_workspace IS DISTINCT FROM NEW.workspace_id THEN
+        RAISE EXCEPTION 'cost_material_workspace_mismatch' USING ERRCODE = 'P0001';
+      END IF;
     END IF;
   END IF;
 
-  IF TG_TABLE_NAME = 'project_commitments' AND NEW.supplier_id IS NOT NULL THEN
-    SELECT tenant_id INTO dimension_tenant FROM suppliers WHERE id = NEW.supplier_id AND is_active = TRUE;
-    IF dimension_tenant IS DISTINCT FROM NEW.tenant_id THEN
-      RAISE EXCEPTION 'cost_supplier_tenant_mismatch' USING ERRCODE = 'P0001';
+  IF TG_TABLE_NAME = 'project_commitments' THEN
+    supplier_uuid := NULLIF(to_jsonb(NEW)->>'supplier_id', '')::uuid;
+    IF supplier_uuid IS NOT NULL THEN
+      SELECT tenant_id INTO dimension_tenant FROM suppliers WHERE id = supplier_uuid AND is_active = TRUE;
+      IF dimension_tenant IS DISTINCT FROM NEW.tenant_id THEN
+        RAISE EXCEPTION 'cost_supplier_tenant_mismatch' USING ERRCODE = 'P0001';
+      END IF;
     END IF;
   END IF;
 
-  IF TG_TABLE_NAME IN ('project_commitments','project_actual_costs') THEN
-    SELECT currency INTO profile_currency
-    FROM project_cost_profiles
-    WHERE tenant_id = NEW.tenant_id AND project_object_id = NEW.project_object_id;
-    IF profile_currency IS NULL THEN
-      RAISE EXCEPTION 'project_cost_profile_required' USING ERRCODE = 'P0001';
-    END IF;
-    IF NEW.currency <> profile_currency THEN
-      RAISE EXCEPTION 'cost_currency_mismatch' USING ERRCODE = 'P0001';
-    END IF;
+  SELECT currency INTO profile_currency
+  FROM project_cost_profiles
+  WHERE tenant_id = NEW.tenant_id AND project_object_id = NEW.project_object_id;
+  IF profile_currency IS NULL THEN
+    RAISE EXCEPTION 'project_cost_profile_required' USING ERRCODE = 'P0001';
+  END IF;
+  IF NEW.currency <> profile_currency THEN
+    RAISE EXCEPTION 'cost_currency_mismatch' USING ERRCODE = 'P0001';
   END IF;
 
   RETURN NEW;
