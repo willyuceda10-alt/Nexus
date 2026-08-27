@@ -52,7 +52,13 @@ type PrismaWrappedDatabaseError = FastifyError & {
   meta?: { code?: string; message?: string };
 };
 
+type MeetingSchedulingV2PolicyBody = {
+  requestM365Sync?: unknown;
+  validateAvailability?: unknown;
+};
+
 const legacyBoardOptionsPath = /^\/api\/v1\/work-os\/boards-v1\/[^/]+\/columns\/[^/]+\/options(?:\?|$)/;
+const meetingSchedulingV2Path = /^\/api\/v1\/meetings-v2\/schedule(?:\?|$)/;
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -97,6 +103,19 @@ export async function buildApp(): Promise<FastifyInstance> {
       });
     }
   });
+
+  app.addHook('preValidation', async (request, reply) => {
+    if (request.method !== 'POST' || !meetingSchedulingV2Path.test(request.raw.url ?? '')) return;
+    const body = request.body as MeetingSchedulingV2PolicyBody | null | undefined;
+    if (body?.requestM365Sync === true && body.validateAvailability === false) {
+      return reply.code(400).send({
+        error: 'm365_sync_requires_availability_validation',
+        message: 'Meeting Scheduling V2 requires availability validation when Outlook/M365 synchronization is requested.',
+        correlationId: request.id,
+      });
+    }
+  });
+
   app.addHook('onSend', async (request, reply, payload) => {
     reply.header('x-correlation-id', request.id);
     return payload;
