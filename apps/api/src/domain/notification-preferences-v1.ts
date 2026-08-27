@@ -24,6 +24,37 @@ const PRIORITY_RANK: Record<NotificationPriorityV1, number> = {
   CRITICAL: 4,
 };
 
+function localMinutes(date: Date, timezone: string): number {
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+  const parts = formatter.formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? '0');
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value ?? '0');
+  return hour * 60 + minute;
+}
+
+function hhmmMinutes(value: string): number {
+  const [hour, minute] = value.split(':').map(Number);
+  return (hour ?? 0) * 60 + (minute ?? 0);
+}
+
+export function isQuietHoursV1(
+  date: Date,
+  timezone: string,
+  start: string | null,
+  end: string | null,
+): boolean {
+  if (!start || !end) return false;
+  const current = localMinutes(date, timezone);
+  const from = hhmmMinutes(start);
+  const to = hhmmMinutes(end);
+  return from < to ? current >= from && current < to : current >= from || current < to;
+}
+
 export function externalDeliveryDecisionV1(
   preference: ExternalNotificationPreferenceV1,
   intent: NotificationIntentV1,
@@ -34,6 +65,9 @@ export function externalDeliveryDecisionV1(
   }
   if (preference.onlyRequiresAction && !intent.requiresAction) {
     return { queue: false, reason: 'ACTION_ONLY' };
+  }
+  if (isQuietHoursV1(intent.occurredAt, preference.timezone, preference.quietHoursStart, preference.quietHoursEnd)) {
+    return { queue: false, reason: 'QUIET_HOURS' };
   }
   return { queue: true, reason: 'ENABLED' };
 }
