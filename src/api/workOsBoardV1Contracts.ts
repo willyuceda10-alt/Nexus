@@ -2,7 +2,7 @@ export type ApiWorkViewTypeV1 = 'TABLE' | 'KANBAN' | 'CALENDAR' | 'GANTT' | 'TIM
 export type ApiWorkBoardColumnSourceV1 = 'CORE' | 'CUSTOM';
 export type ApiWorkBoardColumnTypeV1 =
   | 'TEXT' | 'LONG_TEXT' | 'NUMBER' | 'CURRENCY' | 'DATE' | 'BOOLEAN'
-  | 'STATUS' | 'PRIORITY' | 'PROGRESS' | 'PERSON' | 'TAGS' | 'LINK' | 'FILE' | 'FORMULA';
+  | 'STATUS' | 'PRIORITY' | 'PROGRESS' | 'PERSON' | 'TAGS' | 'LINK' | 'FILE' | 'FORMULA' | 'RELATION';
 
 export interface ApiWorkBoardSummaryV1 {
   id: string;
