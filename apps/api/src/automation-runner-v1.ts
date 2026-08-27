@@ -166,14 +166,16 @@ async function ensureRun(
   event: AutomationEventEnvelopeV1,
 ): Promise<{ run: RunRow; created: boolean }> {
   const trace = automationTraceFromEventV1(event);
+  const rootEventId = UUID_RE.test(trace.rootEventId) ? trace.rootEventId : event.eventId;
+  const safeDepth = Math.min(10, Math.max(0, trace.depth));
   const rows = await tx.$queryRaw<RunRow[]>(Prisma.sql`
     INSERT INTO automation_runs_v1
       (tenant_id, definition_id, version_id, source_event_id, source_event_type,
        root_event_id, depth, status, attempts, context_json)
     VALUES
       (${event.tenantId}::uuid, ${definition.id}::uuid, ${version.id}::uuid,
-       ${event.eventId}::uuid, ${event.eventType}, ${trace.rootEventId}::uuid,
-       ${trace.depth}, 'RUNNING', 1, ${JSON.stringify(event)}::jsonb)
+       ${event.eventId}::uuid, ${event.eventType}, ${rootEventId}::uuid,
+       ${safeDepth}, 'RUNNING', 1, ${JSON.stringify(event)}::jsonb)
     ON CONFLICT (definition_id, source_event_id) DO NOTHING
     RETURNING id, definition_id, version_id, source_event_id, source_event_type,
               root_event_id, depth, status, attempts, context_json
@@ -384,6 +386,7 @@ async function executeCreateTask(
 
   const assigneeId = optionalString(resolvedActionScalarV1(action.assigneeId, event));
   if (assigneeId) {
+    if (!UUID_RE.test(assigneeId)) throw new Error('CREATE_TASK assigneeId must resolve to a UUID.');
     const assignee = await tx.tenantMembership.findUnique({
       where: { tenantId_userId: { tenantId: event.tenantId, userId: assigneeId } },
       select: { status: true },
@@ -500,7 +503,10 @@ async function executeRunActions(
     if (step.status === 'SUCCEEDED') continue;
 
     if (step.status === 'WAITING_APPROVAL') {
-      const approval = await executeRequestApproval(tx, definition, run, step, action as Extract<AutomationActionV1, { type: 'REQUEST_APPROVAL' }>, event);
+      if (action.type !== 'REQUEST_APPROVAL') {
+        throw new Error(`Step ${stepIndex} is WAITING_APPROVAL but action type is ${action.type}.`);
+      }
+      const approval = await executeRequestApproval(tx, definition, run, step, action, event);
       if (approval === 'WAITING_APPROVAL') return 'WAITING_APPROVAL';
       if (approval === 'REJECTED') return 'CANCELLED';
       await completeStep(tx, event.tenantId, step.id, { approval: 'APPROVED' });
@@ -535,7 +541,8 @@ async function processOneAutomation(
   const ensured = await ensureRun(tx, definition, version, event);
   const run = ensured.run;
   if (!ensured.created && ['SUCCEEDED', 'SKIPPED', 'CANCELLED', 'WAITING_APPROVAL'].includes(run.status)) {
-    return run.status === 'WAITING_APPROVAL' ? 'WAITING_APPROVAL' : run.status as 'SUCCEEDED' | 'SKIPPED';
+    if (run.status === 'WAITING_APPROVAL') return 'WAITING_APPROVAL';
+    return run.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'SKIPPED';
   }
   if (!ensured.created && run.status === 'FAILED' && run.attempts >= MAX_RUN_ATTEMPTS) return 'FAILED_TERMINAL';
 
@@ -620,12 +627,13 @@ export async function resumeAutomationApprovalRunV1(event: AutomationEventEnvelo
       WHERE tenant_id = ${event.tenantId}::uuid AND id = ${runId}::uuid
       FOR UPDATE
     `);
-    const run = runs[0];
-    if (!run || run.status !== 'WAITING_APPROVAL') return;
+    let run = runs[0];
+    if (!run || !['WAITING_APPROVAL', 'FAILED'].includes(run.status)) return;
     if (decision === 'REJECTED') {
       await markRun(tx, event.tenantId, run.id, 'CANCELLED', 'Human approval rejected.');
       return;
     }
+    if (run.status === 'FAILED' && run.attempts >= MAX_RUN_ATTEMPTS) return;
 
     const definitions = await tx.$queryRaw<DefinitionRow[]>(Prisma.sql`
       SELECT id, workspace_id, project_object_id, name, active_version, max_runs_per_hour,
@@ -644,14 +652,27 @@ export async function resumeAutomationApprovalRunV1(event: AutomationEventEnvelo
       await markRun(tx, event.tenantId, run.id, 'FAILED', 'Automation definition/version missing during approval resume.');
       return;
     }
-    const original = run.context_json as unknown as AutomationEventEnvelopeV1;
-    await tx.$executeRaw(Prisma.sql`
-      UPDATE automation_runs_v1 SET status = 'RUNNING', finished_at = NULL, last_error = NULL,
-             updated_at = CURRENT_TIMESTAMP
+
+    const incrementAttempt = run.status === 'FAILED';
+    const updated = await tx.$queryRaw<RunRow[]>(Prisma.sql`
+      UPDATE automation_runs_v1
+      SET status = 'RUNNING',
+          attempts = attempts + ${incrementAttempt ? 1 : 0},
+          finished_at = NULL, last_error = NULL, updated_at = CURRENT_TIMESTAMP
       WHERE tenant_id = ${event.tenantId}::uuid AND id = ${run.id}::uuid
+      RETURNING id, definition_id, version_id, source_event_id, source_event_type,
+                root_event_id, depth, status, attempts, context_json
     `);
-    const result = await executeRunActions(tx, definition, version, run, original);
-    await markRun(tx, event.tenantId, run.id, result, null);
+    run = updated[0]!;
+    const original = run.context_json as unknown as AutomationEventEnvelopeV1;
+    try {
+      const result = await executeRunActions(tx, definition, version, run, original);
+      await markRun(tx, event.tenantId, run.id, result, null);
+    } catch (error) {
+      const message = (error instanceof Error ? error.message : String(error)).slice(0, 8000);
+      await markRun(tx, event.tenantId, run.id, 'FAILED', message);
+      if (run.attempts < MAX_RUN_ATTEMPTS) throw error;
+    }
   });
   return true;
 }
