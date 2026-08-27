@@ -45,6 +45,15 @@ param postgresRuntimePassword string = ''
 @description('Creates the API Container App and manual migration job. Kept false until images, Entra registrations, Key Vault secrets and RBAC prerequisites exist.')
 param deployApiRuntime bool = false
 
+@description('Creates Azure Service Bus Standard and the domain-events topic. Defaults to false to avoid accidental Azure spend.')
+param deployAsyncMessaging bool = false
+
+@description('Creates the standalone outbox dispatcher Container App. Requires deployApiRuntime and deployAsyncMessaging.')
+param deployOutboxWorker bool = false
+
+@description('Service Bus topic that receives versioned Bridata domain event envelopes.')
+param domainEventsTopicName string = 'bridata-domain-events'
+
 @description('Immutable API runtime image reference, preferably ACR repo@sha256:digest.')
 param apiImage string = 'not-configured'
 
@@ -335,6 +344,17 @@ resource runtimeDatabaseSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = 
   ]
 }
 
+module asyncMessaging './async-messaging.bicep' = if (deployAsyncMessaging) {
+  name: '${baseName}-async-messaging'
+  params: {
+    location: location
+    environment: environment
+    tags: tags
+    runtimeIdentityPrincipalId: apiIdentity.properties.principalId
+    topicName: domainEventsTopicName
+  }
+}
+
 module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
   name: '${baseName}-api-runtime'
   params: {
@@ -344,6 +364,7 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     managedEnvironmentId: containerEnvironment.id
     registryServer: registry.properties.loginServer
     apiIdentityResourceId: apiIdentity.id
+    apiIdentityClientId: apiIdentity.properties.clientId
     apiImage: apiImage
     migrationImage: migrationImage
     runtimeDatabaseSecretUri: runtimeDatabaseSecretUri
@@ -351,6 +372,9 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     entraApiClientId: entraApiClientId
     entraTenantId: entraTenantId
     corsOrigins: apiCorsOrigins
+    deployOutboxWorker: deployOutboxWorker && deployAsyncMessaging
+    serviceBusNamespaceFqdn: deployAsyncMessaging ? asyncMessaging!.outputs.namespaceFqdn : ''
+    serviceBusTopicName: domainEventsTopicName
   }
 }
 
@@ -368,10 +392,15 @@ output containerRegistryName string = registry.name
 output containerRegistryLoginServer string = registry.properties.loginServer
 output apiManagedIdentityName string = apiIdentity.name
 output apiManagedIdentityPrincipalId string = apiIdentity.properties.principalId
+output apiManagedIdentityClientId string = apiIdentity.properties.clientId
 output containerAppsEnvironmentName string = containerEnvironment.name
 output postgresDeployed bool = deployPostgres
 output deployedPostgresServerName string = deployPostgres ? postgresServerResourceName : ''
 output postgresFqdn string = deployPostgres ? postgresFqdnValue : ''
 output applicationDatabaseName string = deployPostgres ? postgresDatabaseName : ''
 output databaseSecretsStored bool = deployPostgres && storeDatabaseSecrets
+output asyncMessagingDeployed bool = deployAsyncMessaging
+output serviceBusNamespaceName string = deployAsyncMessaging ? asyncMessaging!.outputs.namespaceName : ''
+output domainEventsTopic string = deployAsyncMessaging ? asyncMessaging!.outputs.topicName : ''
 output apiRuntimeDeployed bool = deployApiRuntime
+output outboxWorkerDeployed bool = deployApiRuntime && deployOutboxWorker && deployAsyncMessaging
