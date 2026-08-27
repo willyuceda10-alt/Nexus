@@ -2,6 +2,10 @@
 -- This table intentionally stores only tenant ids and scan timestamps. It has no
 -- business payload and is not tenant-RLS protected; workers use it only to discover
 -- which tenant context to enter next via withTenant().
+--
+-- Existing DomainEvent rows are intentionally NOT scanned here because domain_events
+-- already uses FORCE RLS. Pre-existing events are registered later through a
+-- tenant-scoped, idempotent application backfill.
 
 CREATE TABLE "outbox_tenant_partitions" (
   "tenant_id" UUID NOT NULL,
@@ -35,13 +39,3 @@ DROP TRIGGER IF EXISTS domain_events_signal_outbox_partition ON domain_events;
 CREATE TRIGGER domain_events_signal_outbox_partition
 AFTER INSERT ON domain_events
 FOR EACH ROW EXECUTE FUNCTION bridata_signal_outbox_tenant_partition();
-
--- Seed the registry for tenants that already have pending/processing events.
-INSERT INTO outbox_tenant_partitions (tenant_id, next_scan_at, last_event_at)
-SELECT tenant_id, CURRENT_TIMESTAMP, MAX(created_at)
-FROM domain_events
-WHERE status IN ('PENDING', 'PROCESSING')
-GROUP BY tenant_id
-ON CONFLICT (tenant_id) DO UPDATE
-SET next_scan_at = CURRENT_TIMESTAMP,
-    last_event_at = GREATEST(outbox_tenant_partitions.last_event_at, EXCLUDED.last_event_at);
