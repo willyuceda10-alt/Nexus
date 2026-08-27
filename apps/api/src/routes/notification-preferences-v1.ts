@@ -66,7 +66,7 @@ export async function notificationPreferencesV1Routes(app: FastifyInstance): Pro
         AND channel IN ('OUTLOOK_EMAIL'::"NotificationChannelV1", 'TEAMS_ACTIVITY'::"NotificationChannelV1")
     `));
 
-    const defaults = defaultExternalNotificationPreferencesV1('America/Lima');
+    const defaults = defaultExternalNotificationPreferencesV1('UTC');
     const outlook = rows.find((row) => row.channel === 'OUTLOOK_EMAIL');
     const teams = rows.find((row) => row.channel === 'TEAMS_ACTIVITY');
     const defaultOutlook = defaults.find((item) => item.channel === 'OUTLOOK_EMAIL')!;
