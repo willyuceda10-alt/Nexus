@@ -27,6 +27,14 @@ export interface GraphCalendarEventResultV1 {
   webLink: string | null;
 }
 
+export interface GraphRecurringInstanceV1 {
+  id: string;
+  type: 'occurrence' | 'exception';
+  seriesMasterId: string | null;
+  startAt: Date;
+  endAt: Date;
+}
+
 export interface GraphCalendarEventInputV1 {
   collaborationId: string;
   organizerGraphUser: string;
@@ -37,6 +45,7 @@ export interface GraphCalendarEventInputV1 {
   location: string | null;
   attendees: Array<{ email: string; displayName: string; type: 'required' | 'optional' | 'resource' }>;
   isOnline: boolean;
+  recurrence?: Record<string, unknown> | null;
 }
 
 export class MicrosoftGraphCalendarClient {
@@ -76,6 +85,7 @@ export class MicrosoftGraphCalendarClient {
       })),
       isOnlineMeeting: input.isOnline,
       ...(input.isOnline ? { onlineMeetingProvider: 'teamsForBusiness' } : {}),
+      recurrence: input.recurrence ?? undefined,
       transactionId: `bridata-meeting-${input.collaborationId}`,
     };
   }
@@ -128,6 +138,62 @@ export class MicrosoftGraphCalendarClient {
       throw new MicrosoftGraphCalendarError(patch.status, `Graph calendar update failed (${patch.status}): ${text}`);
     }
     return this.readEvent(input.organizerGraphUser, graphEventId);
+  }
+
+  async listInstances(
+    organizerGraphUser: string,
+    seriesMasterId: string,
+    startAt: Date,
+    endAt: Date,
+  ): Promise<GraphRecurringInstanceV1[]> {
+    const query = new URLSearchParams({
+      startDateTime: startAt.toISOString(),
+      endDateTime: endAt.toISOString(),
+      '$select': 'id,type,seriesMasterId,start,end',
+    });
+    const path = `/users/${encodeURIComponent(organizerGraphUser)}/events/${encodeURIComponent(seriesMasterId)}/instances?${query.toString()}`;
+    const response = await this.graphFetch(path, { method: 'GET' });
+    if (!response.ok) {
+      const text = (await response.text()).slice(0, 5000);
+      throw new MicrosoftGraphCalendarError(response.status, `Graph recurring instances request failed (${response.status}): ${text}`);
+    }
+    const payload = await response.json() as {
+      value?: Array<{
+        id?: string;
+        type?: string;
+        seriesMasterId?: string | null;
+        start?: { dateTime?: string; timeZone?: string };
+        end?: { dateTime?: string; timeZone?: string };
+      }>;
+    };
+    return (payload.value ?? []).flatMap((item) => {
+      if (!item.id || (item.type !== 'occurrence' && item.type !== 'exception') || !item.start?.dateTime || !item.end?.dateTime) return [];
+      const normalize = (value: string) => new Date(value.endsWith('Z') ? value : `${value}Z`);
+      const start = normalize(item.start.dateTime);
+      const end = normalize(item.end.dateTime);
+      if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return [];
+      return [{ id: item.id, type: item.type, seriesMasterId: item.seriesMasterId ?? null, startAt: start, endAt: end }];
+    });
+  }
+
+  async updateOccurrence(
+    organizerGraphUser: string,
+    occurrenceEventId: string,
+    input: { startAt: Date; endAt: Date; location: string | null },
+  ): Promise<void> {
+    const path = `/users/${encodeURIComponent(organizerGraphUser)}/events/${encodeURIComponent(occurrenceEventId)}`;
+    const response = await this.graphFetch(path, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        start: { dateTime: input.startAt.toISOString().replace(/Z$/, ''), timeZone: 'UTC' },
+        end: { dateTime: input.endAt.toISOString().replace(/Z$/, ''), timeZone: 'UTC' },
+        location: input.location ? { displayName: input.location } : { displayName: '' },
+      }),
+    });
+    if (!response.ok) {
+      const text = (await response.text()).slice(0, 5000);
+      throw new MicrosoftGraphCalendarError(response.status, `Graph recurring occurrence update failed (${response.status}): ${text}`);
+    }
   }
 
   async cancelEvent(organizerGraphUser: string, graphEventId: string, comment: string | null): Promise<void> {
