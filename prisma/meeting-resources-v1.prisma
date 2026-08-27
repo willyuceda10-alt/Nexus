@@ -13,7 +13,8 @@ model MeetingResourceV1 {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  bookings MeetingResourceBookingV1[]
+  bookings           MeetingResourceBookingV1[]
+  occurrenceBookings MeetingOccurrenceResourceBookingV1[]
 
   @@index([tenantId, workspaceId, isActive, resourceType, name])
   @@map("meeting_resources_v1")
