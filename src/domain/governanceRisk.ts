@@ -57,11 +57,24 @@ export interface ProjectRiskExposure {
   mitigationCoveragePct: number;
 }
 
+export interface PortfolioRiskExposure {
+  portfolioId: string;
+  portfolioName: string;
+  projectCount: number;
+  openRiskCount: number;
+  ratedRiskCount: number;
+  criticalRiskCount: number;
+  realizedRiskCount: number;
+  exposureScore: number;
+  mitigationCoveragePct: number;
+}
+
 export interface GovernanceProjection {
   risks: GovernanceRiskRow[];
   changes: GovernanceChangeRow[];
   matrix: RiskMatrixCell[];
   projectExposure: ProjectRiskExposure[];
+  portfolioExposure: PortfolioRiskExposure[];
   summary: {
     openRiskCount: number;
     ratedRiskCount: number;
@@ -267,6 +280,34 @@ export function buildGovernanceProjection(
     })
     .sort((a, b) => b.exposureScore - a.exposureScore || b.criticalRiskCount - a.criticalRiskCount);
 
+  const groupedByPortfolio = new Map<string, GovernanceRiskRow[]>();
+  for (const risk of openRisks) {
+    const key = risk.portfolioId ?? '__unassigned__';
+    const current = groupedByPortfolio.get(key) ?? [];
+    current.push(risk);
+    groupedByPortfolio.set(key, current);
+  }
+
+  const portfolioExposure: PortfolioRiskExposure[] = [...groupedByPortfolio.entries()]
+    .map(([key, portfolioRisks]) => {
+      const portfolio = key === '__unassigned__' ? undefined : portfolioById.get(key);
+      const rated = portfolioRisks.filter((risk) => risk.score !== undefined);
+      const mitigated = portfolioRisks.filter((risk) => Boolean(risk.mitigationPlan?.trim()));
+      const projectIds = new Set(portfolioRisks.map((risk) => risk.projectId).filter((value): value is string => Boolean(value)));
+      return {
+        portfolioId: key,
+        portfolioName: portfolio?.title ?? 'Sin portafolio',
+        projectCount: projectIds.size,
+        openRiskCount: portfolioRisks.length,
+        ratedRiskCount: rated.length,
+        criticalRiskCount: portfolioRisks.filter((risk) => risk.band === 'CRITICAL').length,
+        realizedRiskCount: portfolioRisks.filter((risk) => risk.realized).length,
+        exposureScore: rated.reduce((sum, risk) => sum + (risk.score ?? 0), 0),
+        mitigationCoveragePct: pct(mitigated.length, portfolioRisks.length),
+      };
+    })
+    .sort((a, b) => b.exposureScore - a.exposureScore || b.criticalRiskCount - a.criticalRiskCount);
+
   const pendingChanges = changes.filter((change) => PENDING_CHANGE_STATUSES.has(change.status));
   const approvedChanges = changes.filter((change) => change.status === 'APPROVED');
   const currentImpactChanges = changes.filter((change) => !EXCLUDED_CHANGE_IMPACT_STATUSES.has(change.status));
@@ -283,6 +324,7 @@ export function buildGovernanceProjection(
     changes,
     matrix,
     projectExposure,
+    portfolioExposure,
     summary: {
       openRiskCount: openRisks.length,
       ratedRiskCount: ratedOpenRisks.length,
