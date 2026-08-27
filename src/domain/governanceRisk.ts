@@ -30,8 +30,8 @@ export interface GovernanceChangeRow {
   projectName: string;
   status: NexusObject['status'];
   ownerName: string;
-  costImpact: number;
-  timeImpactDays: number;
+  costImpact?: number;
+  timeImpactDays?: number;
   reason?: string;
   source: NexusObject;
 }
@@ -73,6 +73,7 @@ export interface GovernanceProjection {
     exposureScore: number;
     pendingChangeCount: number;
     approvedChangeCount: number;
+    unestimatedChangeCount: number;
     changeCostImpact: number;
     changeTimeImpactDays: number;
   };
@@ -209,8 +210,8 @@ export function buildGovernanceProjection(
       projectName: project?.title ?? 'Sin proyecto',
       status: change.status,
       ownerName: change.assigneeName ?? change.ownerName,
-      costImpact: Math.max(0, change.costImpact ?? 0),
-      timeImpactDays: Math.max(0, change.timeImpactDays ?? 0),
+      ...(change.costImpact !== undefined ? { costImpact: Math.max(0, change.costImpact) } : {}),
+      ...(change.timeImpactDays !== undefined ? { timeImpactDays: Math.max(0, change.timeImpactDays) } : {}),
       ...(change.changeReason ? { reason: change.changeReason } : {}),
       source: change,
     };
@@ -269,6 +270,9 @@ export function buildGovernanceProjection(
   const pendingChanges = changes.filter((change) => PENDING_CHANGE_STATUSES.has(change.status));
   const approvedChanges = changes.filter((change) => change.status === 'APPROVED');
   const currentImpactChanges = changes.filter((change) => !EXCLUDED_CHANGE_IMPACT_STATUSES.has(change.status));
+  const unestimatedChangeCount = currentImpactChanges.filter(
+    (change) => change.costImpact === undefined || change.timeImpactDays === undefined,
+  ).length;
 
   return {
     risks: [...risks].sort((a, b) => {
@@ -290,8 +294,9 @@ export function buildGovernanceProjection(
       exposureScore: ratedOpenRisks.reduce((sum, risk) => sum + (risk.score ?? 0), 0),
       pendingChangeCount: pendingChanges.length,
       approvedChangeCount: approvedChanges.length,
-      changeCostImpact: currentImpactChanges.reduce((sum, change) => sum + change.costImpact, 0),
-      changeTimeImpactDays: currentImpactChanges.reduce((sum, change) => sum + change.timeImpactDays, 0),
+      unestimatedChangeCount,
+      changeCostImpact: currentImpactChanges.reduce((sum, change) => sum + (change.costImpact ?? 0), 0),
+      changeTimeImpactDays: currentImpactChanges.reduce((sum, change) => sum + (change.timeImpactDays ?? 0), 0),
     },
   };
 }
