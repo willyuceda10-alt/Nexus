@@ -1,0 +1,36 @@
+model MeetingResourceV1 {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  resourceType String   @map("resource_type") @db.VarChar(20)
+  name         String   @db.VarChar(255)
+  email        String   @db.VarChar(320)
+  location     String?  @db.VarChar(500)
+  capacity     Int?
+  features     Json     @default(dbgenerated("'[]'::jsonb")) @db.JsonB
+  isActive     Boolean  @default(true) @map("is_active")
+  createdBy    String   @map("created_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  bookings MeetingResourceBookingV1[]
+
+  @@index([tenantId, workspaceId, isActive, resourceType, name])
+  @@map("meeting_resources_v1")
+}
+
+model MeetingResourceBookingV1 {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String   @map("tenant_id") @db.Uuid
+  meetingCollaborationId String   @map("meeting_collaboration_id") @db.Uuid
+  meetingResourceId      String   @map("meeting_resource_id") @db.Uuid
+  createdBy              String   @map("created_by") @db.Uuid
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  resource MeetingResourceV1 @relation(fields: [meetingResourceId], references: [id], onDelete: Restrict)
+
+  @@unique([meetingCollaborationId, meetingResourceId])
+  @@index([tenantId, meetingCollaborationId])
+  @@index([tenantId, meetingResourceId])
+  @@map("meeting_resource_bookings_v1")
+}
