@@ -156,6 +156,13 @@ Write-Host "Branch       : $branch"
 Write-Host "Commit       : $commit"
 Write-Host "Mode         : $(if ($Apply) { 'APPLY' } else { 'DRY-RUN / WHAT-IF' })"
 
+if ($EnableM365Availability -and -not $GrantGraphAvailability) {
+    throw '-EnableM365Availability requires -GrantGraphAvailability in the same idempotent run.'
+}
+if ($EnableM365CalendarSync -and -not $GrantGraphCalendar) {
+    throw '-EnableM365CalendarSync requires -GrantGraphCalendar in the same idempotent run.'
+}
+
 Step 'Existing DEV foundation'
 $acrName = Required 'ACR' (AzTsv @('acr','list','-g',$ResourceGroup,'--query','[0].name','-o','tsv'))
 $acrId = Required 'ACR resource id' (AzTsv @('acr','show','-g',$ResourceGroup,'-n',$acrName,'--query','id','-o','tsv'))
@@ -168,9 +175,10 @@ $postgresName = Required 'PostgreSQL Flexible Server' (AzTsv @('postgres','flexi
 $publicAccess = AzTsv @('postgres','flexible-server','show','-g',$ResourceGroup,'-n',$postgresName,'--query','network.publicNetworkAccess','-o','tsv')
 if ($publicAccess -ne 'Disabled') { throw "PostgreSQL publicNetworkAccess='$publicAccess'; expected Disabled." }
 
-# ARM metadata only: this proves secret resources exist without reading secret values.
+# ARM metadata only. This proves secret child resources exist and never reads values.
 foreach ($secret in @('admin-database-url','runtime-database-url')) {
-    $id = AzTsv @('resource','show','-g',$ResourceGroup,'--resource-type','Microsoft.KeyVault/vaults/secrets','--name',"$vaultName/$secret",'--api-version','2023-07-01','--query','id','-o','tsv')
+    $secretId = "$vaultId/secrets/$secret"
+    $id = AzTsv @('resource','show','--ids',$secretId,'--api-version','2023-07-01','--query','id','-o','tsv')
     if (-not $id) { throw "Key Vault secret resource '$secret' is missing." }
 }
 Write-Host "[OK] ACR        $acrName" -ForegroundColor Green
@@ -235,7 +243,7 @@ $apiImage = if ($apiDigest) { "$loginServer/bridata-api@$apiDigest" } else { '' 
 $migrateImage = if ($migrateDigest) { "$loginServer/bridata-migrate@$migrateDigest" } else { '' }
 
 $temp = Join-Path ([IO.Path]::GetTempPath()) "bridata-$([guid]::NewGuid().ToString('N'))"
-New-Item -ItemType Directory $temp | Out-Null
+New-Item -ItemType Directory -Path $temp | Out-Null
 try {
     if ($DeployCoreRuntime) {
         if (-not $automationMi -or -not $notificationMi) { throw 'Automation/notification identities are required for core worker deployment.' }
@@ -254,9 +262,9 @@ try {
         WhatIf "bridata-$Environment-async-preflight" 'infra/azure/async-messaging.bicep' $async
         Deploy "bridata-$Environment-async" 'infra/azure/async-messaging.bicep' $async
         if (-not $Apply) {
-            Write-Warning 'Core runtime dry-run stops here because the Service Bus namespace may not exist yet. Apply Service Bus first, then re-run to review runtime what-if.'
+            Write-Warning 'Core runtime dry-run stops after the Service Bus what-if because its namespace may not exist yet. Apply that phase first, then re-run for runtime what-if.'
         } else {
-            $sb = Required 'Service Bus namespace' (AzTsv @('servicebus','namespace','list','-g',$ResourceGroup,'--query','[0].name','-o','tsv'))
+            $sb = Required 'Service Bus namespace' (AzTsv @('deployment','group','show','-g',$ResourceGroup,'-n',"bridata-$Environment-async",'--query','properties.outputs.namespaceName.value','-o','tsv'))
             $runtime = Join-Path $temp 'runtime.json'
             ArmParams $runtime @{
                 location=$location; environment=$Environment; tags=$tags; managedEnvironmentId=$caeId; registryServer=$loginServer
