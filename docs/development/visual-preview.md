@@ -5,7 +5,7 @@ This preview path is intentionally independent from GitHub Actions and Azure dep
 ## GitHub Codespaces
 
 1. Open repository `willyuceda10-alt/Nexus`.
-2. Select branch `feature/meeting-lifecycle-v2`.
+2. Select branch `feature/recurring-meetings-v1`.
 3. Use **Code -> Codespaces -> Create codespace on this branch**.
 4. When the container is ready run:
 
@@ -20,7 +20,7 @@ The preview defaults to `VITE_DATA_MODE=mock`, so visual review does not require
 ## Local Windows
 
 ```powershell
-git checkout feature/meeting-lifecycle-v2
+git checkout feature/recurring-meetings-v1
 npm ci
 $env:VITE_DATA_MODE="mock"
 npm run dev:web
@@ -34,32 +34,38 @@ Open `http://localhost:3000`.
 2. **Proyectos** — workspace project catalog and project context.
 3. **Tableros** — Table/Kanban/Model editor.
 4. **Planificar -> Calendario y Timeline** — generic WorkView temporal projection.
-5. **Colaborar -> Reuniones -> Meeting Lifecycle V2** — new lifecycle layer at the top of the meeting center.
-6. **Reprogramar** — new start/end dialog and M365 self-overlap warning copy.
-7. **Cancelar** — cancellation reason and immediate resource-release explanation.
-8. **Cancelación pendiente** — retry M365 action and lifecycle badge.
-9. **Programación inteligente V2** — people + room + equipment + Teams scheduling flow.
-10. **Sala / Equipamiento** — capacity and resource selection.
-11. **Buscar horarios comunes** — people + room + equipment suggestions. Real lookup requires API mode.
-12. **Salas y recursos** — resource catalog and booking administration.
-13. **Calendario mensual / Próximas reuniones** — agenda, Teams/Outlook actions and sync state. Cancellation clears active join/outlook URLs in API mode.
-14. **Derivar tarea / Decisiones** — collaboration governance continuity.
-15. **Mi trabajo, Materiales, Costos, Automatizaciones, Configuración** — shared shell continuity.
+5. **Colaborar -> Reuniones -> Recurring Meetings V1** — recurring-series layer at the top of the meeting center.
+6. **Crear serie** — title, description, participants, external guests, one room, equipment, start/end and M365 toggle.
+7. **Patrón** — Daily, Weekly or Monthly by day-of-month only.
+8. **Rango** — numbered occurrences or end date only.
+9. **Serie existente** — expand occurrences and inspect sequence/date/status/exception marker.
+10. **Mover esta** — reschedule exactly one occurrence as an exception.
+11. **Cancelar esta** — cancel exactly one occurrence without cancelling the series.
+12. **Reprogramar serie** — series-wide time shift before any exceptions/cancellations exist.
+13. **Cancelar serie** — canonical whole-series lifecycle action.
+14. **Meeting Lifecycle V2** — normal meeting reschedule/cancel continuity.
+15. **Programación inteligente V2** — people + room + equipment + Teams scheduling flow.
+16. **Salas y recursos** — resource catalog and booking administration.
+17. **Calendario mensual / Próximas reuniones** — agenda, Teams/Outlook actions and sync state.
+18. **Derivar tarea / Decisiones** — collaboration governance continuity.
+19. **Mi trabajo, Materiales, Costos, Automatizaciones, Configuración** — shared shell continuity.
 
 ## What mock mode proves
 
-Mock mode proves layout, navigation and browser-local interactions only. Lifecycle dialogs are visible, but reschedule/cancel operations remain API-only.
+Mock mode proves layout, navigation and browser-local interactions only. Recurring Meetings V1 intentionally does not create fake recurring series in mock mode; persistent series creation and occurrence lifecycle operations require API mode.
 
 It does not prove:
 
-- PostgreSQL migrations;
-- FORCE RLS;
+- PostgreSQL recurring migrations;
+- RLS / FORCE RLS;
+- cross-booking concurrency guards;
 - authenticated API calls;
 - Microsoft Graph availability;
-- Exchange room booking;
-- Teams meeting creation/cancellation;
-- Service Bus processing;
-- concurrent resource booking or reschedule guards.
+- Outlook recurring series creation;
+- Graph `/instances` resolution;
+- occurrence exception/cancellation synchronization;
+- Teams recurring meeting behavior;
+- Service Bus processing.
 
 ## API mode prerequisites
 
@@ -72,20 +78,21 @@ Requires:
 - Board/View, Meeting Collaboration and Meeting Resources migrations applied;
 - Meeting Scheduling V2 overlap-guard migration applied;
 - Meeting Lifecycle V2 migrations applied;
+- Recurring Meetings V1 migrations applied, including occurrence version/lifecycle and master-sync guard;
 - valid Bridata/Entra browser authentication;
-- `configureApiSession()` connected to the real access-token provider;
+- `configureApiSession()` connected to the real access-token provider before authenticated browser API review;
 - preview origin allowed by API CORS.
 
 ## Microsoft 365 prerequisites
 
-For free/busy and reschedule validation:
+For free/busy and recurring availability validation:
 
 - API Managed Identity;
 - approved least-privilege Graph calendar-read role for `getSchedule`;
 - approved mailbox/resource scope;
 - `M365_AVAILABILITY_ENABLED=true` only after DEV smoke tests.
 
-For Outlook/Teams create/update/cancel:
+For Outlook/Teams recurring create/update/cancel:
 
 - `meetings-v1` Service Bus subscription;
 - Meeting Calendar Worker;
@@ -94,7 +101,9 @@ For Outlook/Teams create/update/cancel:
 - approved Exchange mailbox/resource scope;
 - `M365_CALENDAR_SYNC_ENABLED=true` only after validation.
 
-Until these are enabled, local-only meetings can still be scheduled, rescheduled and cancelled in Bridata without Graph synchronization.
+Recurring Graph instance resolution requests use `Prefer: outlook.timezone="SA Pacific Standard Time"` so the worker resolves Lima occurrences consistently.
+
+Until M365 is enabled, local-only recurring series can be created and managed inside Bridata. A series that has already entered M365 synchronization cannot create occurrence-level exceptions until its Outlook series master has a Graph event id.
 
 ## Azure shared preview
 
