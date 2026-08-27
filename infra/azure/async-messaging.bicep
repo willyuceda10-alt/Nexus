@@ -44,6 +44,19 @@ resource domainEventsTopic 'Microsoft.ServiceBus/namespaces/topics@2024-01-01' =
   }
 }
 
+resource platformCoreSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2024-01-01' = {
+  parent: domainEventsTopic
+  name: 'platform-core-v1'
+  properties: {
+    deadLetteringOnMessageExpiration: true
+    defaultMessageTimeToLive: 'P14D'
+    enableBatchedOperations: true
+    lockDuration: 'PT1M'
+    maxDeliveryCount: 10
+    requiresSession: false
+  }
+}
+
 resource runtimeSenderRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: serviceBus
   name: guid(serviceBus.id, runtimeIdentityPrincipalId, serviceBusDataSenderRoleId)
@@ -57,3 +70,4 @@ resource runtimeSenderRole 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 output namespaceName string = serviceBus.name
 output namespaceFqdn string = '${serviceBus.name}.servicebus.windows.net'
 output topicName string = domainEventsTopic.name
+output coreSubscriptionName string = platformCoreSubscription.name
