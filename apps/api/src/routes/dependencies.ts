@@ -39,6 +39,12 @@ type StoredMetadata = {
   lagDays?: number;
 };
 
+type DependencyObjectRef = {
+  id: string;
+  workspaceId: string;
+  metadata: Prisma.JsonValue | null;
+};
+
 function isTenantAdmin(actor: ActorContext): boolean {
   return actor.role === 'OWNER' || actor.role === 'TENANT_ADMIN';
 }
@@ -78,6 +84,12 @@ function metadataOf(value: Prisma.JsonValue | null): StoredMetadata {
     result.lagDays = metadata.lagDays;
   }
   return result;
+}
+
+function projectIdFromMetadata(value: Prisma.JsonValue | null): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const metadata = value as Record<string, Prisma.JsonValue>;
+  return typeof metadata.projectId === 'string' ? metadata.projectId : null;
 }
 
 function serializeDependency(row: {
@@ -131,6 +143,58 @@ function wouldCreateCycle(
   return false;
 }
 
+async function syncDependencyToV2(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  relationId: string,
+  predecessor: DependencyObjectRef,
+  successor: DependencyObjectRef,
+  dependencyType: 'FS' | 'SS' | 'FF' | 'SF',
+  lagDays: number,
+  notes: string | null,
+): Promise<{ synced: boolean; projectId?: string; lagMinutes?: number }> {
+  const predecessorProjectId = projectIdFromMetadata(predecessor.metadata);
+  const successorProjectId = projectIdFromMetadata(successor.metadata);
+  if (!predecessorProjectId || predecessorProjectId !== successorProjectId) {
+    return { synced: false };
+  }
+
+  const scheduleProfile = await tx.projectScheduleProfile.findUnique({
+    where: { projectObjectId: successorProjectId },
+    select: { minutesPerDay: true },
+  });
+  const minutesPerDay = scheduleProfile?.minutesPerDay ?? 480;
+  const lagMinutes = lagDays * minutesPerDay;
+
+  await tx.scheduleDependencyV2.upsert({
+    where: {
+      projectObjectId_predecessorObjectId_successorObjectId: {
+        projectObjectId: successorProjectId,
+        predecessorObjectId: predecessor.id,
+        successorObjectId: successor.id,
+      },
+    },
+    update: {
+      dependencyType,
+      lagMinutes,
+      notes,
+      legacyRelationId: relationId,
+    },
+    create: {
+      tenantId,
+      projectObjectId: successorProjectId,
+      predecessorObjectId: predecessor.id,
+      successorObjectId: successor.id,
+      dependencyType,
+      lagMinutes,
+      notes,
+      legacyRelationId: relationId,
+    },
+  });
+
+  return { synced: true, projectId: successorProjectId, lagMinutes };
+}
+
 export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/api/v1/dependencies',
@@ -147,6 +211,8 @@ export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
           return { kind: 'forbidden' as const, items: [] };
         }
 
+        // V1 remains the read source during the transition. New writes are
+        // dual-written to ScheduleDependencyV2 until the V2 read path is cut over.
         const rows = await tx.objectRelation.findMany({
           where: {
             tenantId: actor.tenantId,
@@ -195,11 +261,11 @@ export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
         const [predecessor, successor] = await Promise.all([
           tx.nexusObject.findFirst({
             where: { id: data.predecessorId, tenantId: actor.tenantId, deletedAt: null },
-            select: { id: true, workspaceId: true },
+            select: { id: true, workspaceId: true, metadata: true },
           }),
           tx.nexusObject.findFirst({
             where: { id: data.successorId, tenantId: actor.tenantId, deletedAt: null },
-            select: { id: true, workspaceId: true },
+            select: { id: true, workspaceId: true, metadata: true },
           }),
         ]);
 
@@ -241,6 +307,17 @@ export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
           },
         });
 
+        const v2 = await syncDependencyToV2(
+          tx,
+          actor.tenantId,
+          relation.id,
+          predecessor,
+          successor,
+          data.dependencyType,
+          data.lagDays,
+          relation.notes,
+        );
+
         await Promise.all([
           tx.domainEvent.create({
             data: {
@@ -253,6 +330,9 @@ export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
                 successorId: data.successorId,
                 dependencyType: data.dependencyType,
                 lagDays: data.lagDays,
+                projectEngineV2Synced: v2.synced,
+                ...(v2.projectId ? { projectId: v2.projectId } : {}),
+                ...(v2.lagMinutes !== undefined ? { lagMinutes: v2.lagMinutes } : {}),
                 actorId: actor.userId,
               },
             },
@@ -271,6 +351,7 @@ export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
                 successorId: data.successorId,
                 dependencyType: data.dependencyType,
                 lagDays: data.lagDays,
+                projectEngineV2Synced: v2.synced,
               },
             },
           }),
@@ -284,7 +365,7 @@ export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
       if (result.kind === 'cross_workspace_not_supported') {
         return reply.code(400).send({
           error: 'cross_workspace_dependency_not_supported',
-          message: 'Dependency V1 requires both objects to belong to the same workspace.',
+          message: 'Dependencies require both objects to belong to the same workspace.',
         });
       }
       if (result.kind === 'duplicate') return reply.code(409).send({ error: 'dependency_exists' });
@@ -314,8 +395,8 @@ export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
         const current = await tx.objectRelation.findFirst({
           where: { id: params.data.id, tenantId: actor.tenantId, relationType: 'DEPENDS_ON' },
           include: {
-            sourceObject: { select: { workspaceId: true } },
-            targetObject: { select: { workspaceId: true } },
+            sourceObject: { select: { id: true, workspaceId: true, metadata: true } },
+            targetObject: { select: { id: true, workspaceId: true, metadata: true } },
           },
         });
         if (!current) return { kind: 'not_found' as const };
@@ -325,14 +406,26 @@ export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
 
         const previousMetadata = metadataOf(current.metadata);
         const dependencyType = body.data.dependencyType ?? previousMetadata.dependencyType ?? 'FS';
+        const parsedDependencyType = dependencyTypeSchema.parse(dependencyType);
         const lagDays = body.data.lagDays ?? previousMetadata.lagDays ?? 0;
         const updated = await tx.objectRelation.update({
           where: { id: current.id },
           data: {
             ...(body.data.notes !== undefined ? { notes: body.data.notes } : {}),
-            metadata: dependencyMetadata(dependencyType, lagDays),
+            metadata: dependencyMetadata(parsedDependencyType, lagDays),
           },
         });
+
+        const v2 = await syncDependencyToV2(
+          tx,
+          actor.tenantId,
+          current.id,
+          current.targetObject,
+          current.sourceObject,
+          parsedDependencyType,
+          lagDays,
+          updated.notes,
+        );
 
         await tx.auditLog.create({
           data: {
@@ -343,7 +436,11 @@ export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
             resourceId: updated.id,
             correlationId: request.id,
             ipAddress: request.ip,
-            details: { dependencyType, lagDays },
+            details: {
+              dependencyType: parsedDependencyType,
+              lagDays,
+              projectEngineV2Synced: v2.synced,
+            },
           },
         });
 
@@ -377,7 +474,13 @@ export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
           return { kind: 'forbidden' as const };
         }
 
+        // Delete the typed row first. The V1 relation remains authoritative until
+        // the transaction commits, so a failure cannot leave the engines split.
+        await tx.scheduleDependencyV2.deleteMany({
+          where: { tenantId: actor.tenantId, legacyRelationId: current.id },
+        });
         await tx.objectRelation.delete({ where: { id: current.id } });
+
         await Promise.all([
           tx.domainEvent.create({
             data: {
@@ -388,6 +491,7 @@ export async function dependencyRoutes(app: FastifyInstance): Promise<void> {
                 dependencyId: current.id,
                 predecessorId: current.targetObjectId,
                 successorId: current.sourceObjectId,
+                projectEngineV2Deleted: true,
                 actorId: actor.userId,
               },
             },
