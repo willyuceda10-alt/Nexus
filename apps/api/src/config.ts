@@ -4,6 +4,16 @@ const booleanFromEnv = z
   .enum(['true', 'false'])
   .transform((value) => value === 'true');
 
+const optionalNonEmptyString = z.preprocess(
+  (value) => value === '' ? undefined : value,
+  z.string().trim().min(1).optional(),
+);
+
+const optionalUrlString = z.preprocess(
+  (value) => value === '' ? undefined : value,
+  z.string().url().optional(),
+);
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -32,14 +42,14 @@ const envSchema = z
     NOTIFICATION_WORKER_ENABLED: booleanFromEnv.default('false'),
     NOTIFICATION_RECEIVE_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(55).default(20),
     NOTIFICATION_LOOP_DELAY_MS: z.coerce.number().int().min(50).max(10000).default(250),
-    SERVICE_BUS_NAMESPACE: z.string().trim().min(1).optional(),
+    SERVICE_BUS_NAMESPACE: optionalNonEmptyString,
     SERVICE_BUS_TOPIC: z.string().trim().min(1).default('bridata-domain-events'),
     SERVICE_BUS_AUTOMATION_SUBSCRIPTION: z.string().trim().min(1).default('automation-v1'),
     SERVICE_BUS_NOTIFICATION_SUBSCRIPTION: z.string().trim().min(1).default('notifications-v1'),
     M365_GRAPH_DELIVERY_ENABLED: booleanFromEnv.default('false'),
-    M365_OUTLOOK_SENDER_USER: z.string().trim().min(1).optional(),
-    M365_TEAMS_ACTIVITY_TYPE: z.string().trim().min(1).optional(),
-    M365_TEAMS_TOPIC_WEB_URL: z.string().url().optional(),
+    M365_OUTLOOK_SENDER_USER: optionalNonEmptyString,
+    M365_TEAMS_ACTIVITY_TYPE: optionalNonEmptyString,
+    M365_TEAMS_TOPIC_WEB_URL: optionalUrlString,
     M365_TEAMS_TOPIC_VALUE: z.string().trim().min(1).max(255).default('Bridata'),
     AZURE_CLIENT_ID: z.string().uuid().optional(),
   })
