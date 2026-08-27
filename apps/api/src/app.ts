@@ -27,6 +27,10 @@ import { sessionRoutes } from './routes/session.js';
 import { wbsV2Routes } from './routes/wbs-v2.js';
 import { workCalendarV2Routes } from './routes/work-calendars-v2.js';
 
+type PrismaWrappedDatabaseError = FastifyError & {
+  meta?: { code?: string; message?: string };
+};
+
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
@@ -83,11 +87,13 @@ export async function buildApp(): Promise<FastifyInstance> {
       return;
     }
 
-    if (error.code === 'P0001') {
+    const dbError = error as PrismaWrappedDatabaseError;
+    const postgresCode = dbError.code === 'P2010' ? dbError.meta?.code : dbError.code;
+    if (postgresCode === 'P0001') {
       request.log.info({ err: error }, 'Bridata domain integrity guard rejected request');
       void reply.code(409).send({
         error: 'domain_integrity_conflict',
-        message: error.message,
+        message: dbError.meta?.message || error.message,
         correlationId: request.id,
       });
       return;
