@@ -18,6 +18,7 @@ enum WorkBoardColumnTypeV1 {
   LINK
   FILE
   FORMULA
+  RELATION
 }
 
 enum WorkViewTypeV1 {
