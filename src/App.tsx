@@ -11,7 +11,7 @@ import { CommandPalette } from './components/layout/CommandPalette';
 import { WorkspaceHome } from './components/views/WorkspaceHome';
 import { ProjectsOverviewView } from './components/views/ProjectsOverviewView';
 import { ProjectCenter } from './components/views/ProjectCenter';
-import { WorkBoardsV1View } from './components/views/WorkBoardsV1View';
+import { WorkBoardsEditorV1View } from './components/views/WorkBoardsEditorV1View';
 import { PortfoliosView } from './components/views/PortfoliosView';
 import { ResourceManagementView } from './components/views/ResourceManagementView';
 import { MaterialsInventoryV2View } from './components/views/MaterialsInventoryV2View';
@@ -32,7 +32,7 @@ const MainContentRouter: React.FC = () => {
     case 'home': return <WorkspaceHome />;
     case 'projects': return <ProjectsOverviewView />;
     case 'project': return <ProjectCenter />;
-    case 'boards': return <WorkBoardsV1View />;
+    case 'boards': return <WorkBoardsEditorV1View />;
     case 'portfolios': return <PortfoliosView />;
     case 'resources': return <ResourceManagementView />;
     case 'materials': return <MaterialsInventoryV2View />;
