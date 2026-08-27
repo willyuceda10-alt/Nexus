@@ -21,7 +21,7 @@ import { MeetingsDecisionsView } from './components/views/MeetingsDecisionsView'
 import { DocumentsApprovalsView } from './components/views/DocumentsApprovalsView';
 import { TimelineView } from './components/views/TimelineView';
 import { ExecutiveDashboard } from './components/views/ExecutiveDashboard';
-import { SettingsView } from './components/views/SettingsView';
+import { SettingsV2View } from './components/views/SettingsV2View';
 
 const MainContentRouter: React.FC = () => {
   const { activeTab } = useNexus();
@@ -53,7 +53,7 @@ const MainContentRouter: React.FC = () => {
     case 'reports':
       return <ExecutiveDashboard />;
     case 'settings':
-      return <SettingsView />;
+      return <SettingsV2View />;
     case 'inbox':
       return <InboxV1View />;
     default:
