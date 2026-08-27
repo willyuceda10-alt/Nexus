@@ -21,6 +21,7 @@ import { materialMasterV2Routes } from './routes/material-master-v2.js';
 import { materialOperationsV2Routes } from './routes/material-operations-v2.js';
 import { materialOverviewV2Routes } from './routes/material-overview-v2.js';
 import { meRoutes } from './routes/me.js';
+import { meetingsV1Routes } from './routes/meetings-v1.js';
 import { notificationCapabilitiesV1Routes } from './routes/notification-capabilities-v1.js';
 import { notificationPreferencesV1Routes } from './routes/notification-preferences-v1.js';
 import { objectRoutes } from './routes/objects.js';
@@ -38,6 +39,7 @@ import { workOsBoardConfigOptionsV1Routes } from './routes/work-os-board-config-
 import { workOsBoardEditorV1Routes } from './routes/work-os-board-editor-v1.js';
 import { workOsBoardManagedOptionCellsV1Routes } from './routes/work-os-board-managed-option-cells-v1.js';
 import { workOsBoardManagedOptionsV1Routes } from './routes/work-os-board-managed-options-v1.js';
+import { workOsBoardTemporalV1Routes } from './routes/work-os-board-temporal-v1.js';
 import { workOsBoardsV1Routes } from './routes/work-os-boards-v1.js';
 
 type PrismaWrappedDatabaseError = FastifyError & {
@@ -51,36 +53,23 @@ export async function buildApp(): Promise<FastifyInstance> {
     logger: {
       level: config.LOG_LEVEL,
       redact: {
-        paths: [
-          'req.headers.authorization',
-          'request.headers.authorization',
-          'headers.authorization',
-        ],
+        paths: ['req.headers.authorization', 'request.headers.authorization', 'headers.authorization'],
         censor: '[REDACTED]',
       },
     },
     requestIdHeader: 'x-correlation-id',
     genReqId: (request) => {
       const incoming = request.headers['x-correlation-id'];
-      return typeof incoming === 'string' && incoming.length <= 128
-        ? incoming
-        : randomUUID();
+      return typeof incoming === 'string' && incoming.length <= 128 ? incoming : randomUUID();
     },
     bodyLimit: 1_048_576,
   });
 
   registerRequestContext(app);
-
-  await app.register(helmet, {
-    contentSecurityPolicy: false,
-  });
-
+  await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, {
     origin(origin, callback) {
-      if (!origin || config.corsOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
+      if (!origin || config.corsOrigins.includes(origin)) { callback(null, true); return; }
       callback(new Error('Origin not allowed by Bridata Project CORS policy'), false);
     },
     credentials: true,
@@ -104,26 +93,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.setErrorHandler((error: FastifyError, request, reply) => {
     if (error instanceof ProjectScheduleV2ValidationError) {
       request.log.info({ err: error }, 'Project Engine V2 validation rejected request');
-      void reply.code(400).send({
-        error: 'invalid_project_schedule',
-        message: error.message,
-        correlationId: request.id,
-      });
+      void reply.code(400).send({ error: 'invalid_project_schedule', message: error.message, correlationId: request.id });
       return;
     }
-
     const dbError = error as PrismaWrappedDatabaseError;
     const postgresCode = dbError.code === 'P2010' ? dbError.meta?.code : dbError.code;
     if (postgresCode === 'P0001') {
       request.log.info({ err: error }, 'Bridata domain integrity guard rejected request');
-      void reply.code(409).send({
-        error: 'domain_integrity_conflict',
-        message: dbError.meta?.message || error.message,
-        correlationId: request.id,
-      });
+      void reply.code(409).send({ error: 'domain_integrity_conflict', message: dbError.meta?.message || error.message, correlationId: request.id });
       return;
     }
-
     request.log.error({ err: error }, 'Unhandled Bridata Project API error');
     const statusCode = error.statusCode && error.statusCode < 500 ? error.statusCode : 500;
     void reply.code(statusCode).send({
@@ -147,12 +126,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(notificationCapabilitiesV1Routes);
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
+  await app.register(meetingsV1Routes);
   await app.register(workOsBoardsV1Routes);
   await app.register(workOsBoardEditorV1Routes);
   await app.register(workOsBoardConfigOptionsV1Routes);
   await app.register(workOsBoardManagedOptionsV1Routes);
   await app.register(workOsBoardManagedOptionCellsV1Routes);
   await app.register(workOsBoardComputedV1Routes);
+  await app.register(workOsBoardTemporalV1Routes);
   await app.register(dependencyRoutes);
   await app.register(scheduleAnalysisRoutes);
   await app.register(projectScheduleV2Routes);
