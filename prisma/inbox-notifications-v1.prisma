@@ -1,0 +1,68 @@
+enum InboxPriorityV1 {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum InboxStatusV1 {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum NotificationChannelV1 {
+  INTERNAL
+}
+
+enum NotificationDeliveryStatusV1 {
+  DELIVERED
+  FAILED
+}
+
+model InboxItemV1 {
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String          @map("tenant_id") @db.Uuid
+  userId              String          @map("user_id") @db.Uuid
+  workspaceId         String?         @map("workspace_id") @db.Uuid
+  projectObjectId     String?         @map("project_object_id") @db.Uuid
+  sourceType          String          @map("source_type") @db.VarChar(80)
+  sourceId            String?         @map("source_id") @db.Uuid
+  title               String          @db.VarChar(500)
+  body                String?         @db.Text
+  priority            InboxPriorityV1 @default(MEDIUM)
+  status              InboxStatusV1   @default(OPEN)
+  requiresAction      Boolean         @default(false) @map("requires_action")
+  unread              Boolean         @default(true)
+  snoozedUntil        DateTime?       @map("snoozed_until") @db.Timestamptz(6)
+  readAt              DateTime?       @map("read_at") @db.Timestamptz(6)
+  resolvedAt          DateTime?       @map("resolved_at") @db.Timestamptz(6)
+  automationRunId     String?         @map("automation_run_id") @db.Uuid
+  automationStepRunId String?         @unique @map("automation_step_run_id") @db.Uuid
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, userId, status, unread, createdAt(sort: Desc)])
+  @@index([tenantId, workspaceId, projectObjectId])
+  @@map("inbox_items_v1")
+}
+
+model NotificationDeliveryV1 {
+  id                  String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                       @map("tenant_id") @db.Uuid
+  userId              String                       @map("user_id") @db.Uuid
+  inboxItemId         String?                      @map("inbox_item_id") @db.Uuid
+  channel             NotificationChannelV1        @default(INTERNAL)
+  status              NotificationDeliveryStatusV1 @default(DELIVERED)
+  title               String                       @db.VarChar(500)
+  body                String?                      @db.Text
+  automationRunId     String?                      @map("automation_run_id") @db.Uuid
+  automationStepRunId String?                      @unique @map("automation_step_run_id") @db.Uuid
+  deliveredAt         DateTime?                    @map("delivered_at") @db.Timestamptz(6)
+  lastError           String?                      @map("last_error") @db.Text
+  createdAt           DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, userId, createdAt(sort: Desc)])
+  @@map("notification_deliveries_v1")
+}
