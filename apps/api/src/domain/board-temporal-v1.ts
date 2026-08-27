@@ -22,6 +22,8 @@ export class BoardTemporalValidationError extends Error {
 
 const SAFE_KEY = /^[A-Za-z][A-Za-z0-9_.-]{0,99}$/;
 const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
+const TITLE_TYPES = new Set(['TEXT', 'LONG_TEXT', 'STATUS', 'PRIORITY']);
+const COLOR_TYPES = new Set(['STATUS', 'PRIORITY', 'TEXT']);
 
 function assertSafeKey(value: string, label: string): void {
   if (!SAFE_KEY.test(value)) throw new BoardTemporalValidationError(`${label} is invalid.`);
@@ -53,10 +55,25 @@ export function validateBoardTemporalConfigV1(
     throw new BoardTemporalValidationError('Start and end fields must differ when an end field is configured.');
   }
 
+  const titleFieldKey = config.titleFieldKey ?? 'title';
+  if (titleFieldKey !== 'title') {
+    const titleColumn = byKey.get(titleFieldKey);
+    if (!titleColumn || !TITLE_TYPES.has(titleColumn.dataType)) {
+      throw new BoardTemporalValidationError('Calendar/Timeline title field must be title or a textual/status/priority column.');
+    }
+  }
+
+  if (config.colorFieldKey && !['status', 'priority'].includes(config.colorFieldKey)) {
+    const colorColumn = byKey.get(config.colorFieldKey);
+    if (!colorColumn || !COLOR_TYPES.has(colorColumn.dataType)) {
+      throw new BoardTemporalValidationError('Calendar/Timeline color field must be status, priority, or a compatible governed/text column.');
+    }
+  }
+
   return {
     startFieldKey: config.startFieldKey,
     ...(config.endFieldKey !== undefined ? { endFieldKey: config.endFieldKey } : {}),
-    titleFieldKey: config.titleFieldKey ?? 'title',
+    titleFieldKey,
     ...(config.colorFieldKey !== undefined ? { colorFieldKey: config.colorFieldKey } : {}),
     allDay: config.allDay ?? true,
   };
