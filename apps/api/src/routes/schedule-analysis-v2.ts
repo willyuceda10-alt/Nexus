@@ -9,7 +9,11 @@ import {
   ScheduleEngineV2CycleError,
   ScheduleEngineV2ValidationError,
 } from '../domain/scheduling-v2.js';
-import { WorkCalendarV2ValidationError, type WorkCalendarV2 } from '../domain/work-calendar-v2.js';
+import {
+  WorkCalendarV2ValidationError,
+  workingMinutesBetweenDatesV2,
+  type WorkCalendarV2,
+} from '../domain/work-calendar-v2.js';
 import { calendarFromMetadata } from '../domain/work-calendar.js';
 import { withTenant } from '../tenant-transaction.js';
 
@@ -52,6 +56,37 @@ function legacyCalendar(
       workingMinutes: 0,
     })),
   };
+}
+
+function fallbackDurationMinutes(
+  object: {
+    objectTypeKey: string;
+    startDate: Date | null;
+    dueDate: Date | null;
+  },
+  projectMetadata: Prisma.JsonValue | null,
+  calendar: WorkCalendarV2,
+  minutesPerDay: number,
+  typedCalendarActive: boolean,
+): number | null {
+  if (!object.startDate && !object.dueDate) return null;
+  if (object.objectTypeKey === 'MILESTONE') return 0;
+
+  if (typedCalendarActive) {
+    const start = object.startDate ?? object.dueDate!;
+    const finish = object.dueDate ?? start;
+    return Math.max(minutesPerDay, workingMinutesBetweenDatesV2(start, finish, calendar));
+  }
+
+  return durationMinutesFromLegacyFields(
+    {
+      startDate: object.startDate,
+      dueDate: object.dueDate,
+      objectTypeKey: object.objectTypeKey,
+    },
+    calendarFromMetadata(projectMetadata),
+    minutesPerDay,
+  );
 }
 
 function dateOnly(value: Date): string {
@@ -146,14 +181,12 @@ export async function scheduleAnalysisV2Routes(app: FastifyInstance): Promise<vo
 
         const tasks = projectObjects.flatMap((object) => {
           const typed = scheduleByObject.get(object.id);
-          const durationMinutes = typed?.durationMinutes ?? durationMinutesFromLegacyFields(
-            {
-              startDate: object.startDate,
-              dueDate: object.dueDate,
-              objectTypeKey: object.objectTypeKey,
-            },
-            calendarFromMetadata(project.metadata),
+          const durationMinutes = typed?.durationMinutes ?? fallbackDurationMinutes(
+            object,
+            project.metadata,
+            calendar,
             minutesPerDay,
+            Boolean(typedCalendar),
           );
           if (durationMinutes === null) return [];
           return [{
@@ -265,6 +298,7 @@ export async function scheduleAnalysisV2Routes(app: FastifyInstance): Promise<vo
                 workingWeekdays: calendar.workingWeekdays,
                 minutesPerDay: calendar.minutesPerDay,
                 exceptionCount: calendar.exceptions.length,
+                timeResolution: 'WORKING_MINUTES_DATE_BUCKETED_V2' as const,
               },
               migration: {
                 totalWorkItems: projectObjects.length,
