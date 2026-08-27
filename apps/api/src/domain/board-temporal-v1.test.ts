@@ -11,6 +11,9 @@ describe('Board Temporal V1', () => {
     { fieldKey: 'dueDate', dataType: 'DATE' },
     { fieldKey: 'inspection_date', dataType: 'DATE' },
     { fieldKey: 'progress', dataType: 'PROGRESS' },
+    { fieldKey: 'sap_code', dataType: 'TEXT' },
+    { fieldKey: 'phase_status', dataType: 'STATUS' },
+    { fieldKey: 'owner_person', dataType: 'PERSON' },
   ];
 
   it('accepts core and custom date fields', () => {
@@ -23,10 +26,26 @@ describe('Board Temporal V1', () => {
     expect(validateBoardTemporalConfigV1({ startFieldKey: 'inspection_date' }, columns).startFieldKey).toBe('inspection_date');
   });
 
+  it('allows governed display title and color fields', () => {
+    expect(validateBoardTemporalConfigV1({
+      startFieldKey: 'startDate',
+      titleFieldKey: 'sap_code',
+      colorFieldKey: 'phase_status',
+    }, columns)).toMatchObject({
+      titleFieldKey: 'sap_code',
+      colorFieldKey: 'phase_status',
+    });
+  });
+
   it('rejects non-date, same field and unsafe paths', () => {
     expect(() => validateBoardTemporalConfigV1({ startFieldKey: 'progress' }, columns)).toThrow(BoardTemporalValidationError);
     expect(() => validateBoardTemporalConfigV1({ startFieldKey: 'startDate', endFieldKey: 'startDate' }, columns)).toThrow(BoardTemporalValidationError);
     expect(() => validateBoardTemporalConfigV1({ startFieldKey: '__proto__' }, columns)).toThrow(BoardTemporalValidationError);
+  });
+
+  it('rejects incompatible title and color fields', () => {
+    expect(() => validateBoardTemporalConfigV1({ startFieldKey: 'startDate', titleFieldKey: 'owner_person' }, columns)).toThrow(BoardTemporalValidationError);
+    expect(() => validateBoardTemporalConfigV1({ startFieldKey: 'startDate', colorFieldKey: 'progress' }, columns)).toThrow(BoardTemporalValidationError);
   });
 
   it('clamps reversed ranges instead of rendering negative duration', () => {
