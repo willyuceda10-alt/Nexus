@@ -2,10 +2,10 @@
 
 This preview path is intentionally independent from GitHub Actions and from Azure deployment.
 
-## Option A — GitHub Codespaces (fastest visual review)
+## Option A — GitHub Codespaces
 
 1. Open repository `willyuceda10-alt/Nexus` in GitHub.
-2. Select branch `feature/work-os-board-view-engine-v1`.
+2. Select branch `feature/work-os-board-editor-v1`.
 3. Click **Code → Codespaces → Create codespace on this branch**.
 4. Wait for the dev container to finish `npm ci`.
 5. In the Codespaces terminal run:
@@ -22,14 +22,14 @@ The default preview uses:
 VITE_DATA_MODE=mock
 ```
 
-so it does not require PostgreSQL, Entra, Service Bus or the API. It is suitable for visual/UI review only.
+so it does not require PostgreSQL, Entra, Service Bus or the API. It is suitable for visual/UI review and the Board Editor mock interactions.
 
 ## Option B — local Windows browser
 
 From a local clone of this branch:
 
 ```powershell
-git checkout feature/work-os-board-view-engine-v1
+git checkout feature/work-os-board-editor-v1
 npm ci
 $env:VITE_DATA_MODE="mock"
 npm run dev:web
@@ -45,16 +45,18 @@ http://localhost:3000
 
 Review these flows first:
 
-1. **Centro de mando** — operational hierarchy, portfolio pulse, attention and upcoming work.
-2. **Proyectos** — workspace project catalog; it no longer jumps directly into the first project.
-3. **Proyecto** — primary domains (`Resumen`, `Trabajo`, `Planificación`, `Costos`, `Riesgos`, `Reuniones`, `Documentos`).
-4. **Tableros** — new Work OS Board Engine entry under Planificar.
-5. **Tableros → Tabla principal** — grouped Board rows, dynamic columns and shared object data.
-6. **Tableros → Kanban** — alternate representation of the same items; no object duplication.
-7. **Sidebar/Header** — Empresa → Workspace → page/project context remains visible.
-8. **Mi trabajo, Materiales, Costos, Automatizaciones and Configuración** — verify visual continuity with the shell.
+1. **Centro de mando** — product shell and workspace hierarchy.
+2. **Proyectos** — workspace project catalog and project context.
+3. **Tableros** — Work OS Board Editor under Planificar.
+4. **Tableros → Tabla principal** — double-click editable cells for supported field types.
+5. **Tableros → Vista** — save status filter, sort, hidden columns and per-view column order.
+6. **Tableros → + Columna** — create a custom Board column in mock mode.
+7. **Tableros → + Grupo** — create operational grouping independent from object status.
+8. **Tableros → Añadir elementos** — attach existing tasks without copying them.
+9. **Tableros → Kanban** — drag a card to another status lane; the same object changes status.
+10. **Mi trabajo, Materiales, Costos, Automatizaciones and Configuración** — verify continuity with the shared shell.
 
-API-backed data mutation is not executed in mock mode. In API mode, Work OS Boards are stored in the new typed Board/View tables and reference existing `NexusObject` rows.
+In mock mode the interactions are local to the browser session. In API mode the Board Editor uses the typed Board/View schema and existing NexusObject/ObjectFieldValue records.
 
 ## API mode
 
@@ -72,4 +74,4 @@ The long-lived shared preview remains an Azure concern. Do not use Vercel/Railwa
 
 ## Important distinction
 
-The Codespaces preview proves visual composition and navigation. It does **not** prove migrations, RLS, workers, Microsoft Graph permissions or production behavior.
+The Codespaces preview proves visual composition and mock interaction. It does **not** prove migrations, FORCE RLS, API authorization, concurrency, workers, Microsoft Graph permissions or production behavior.
