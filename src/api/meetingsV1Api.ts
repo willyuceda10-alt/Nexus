@@ -2,6 +2,7 @@ import { runtimeConfig } from '../config/runtime';
 import type {
   ApiMeetingCapabilitiesV1,
   ApiMeetingV1,
+  ApiMeetingWorkspacePersonV1,
   CreateApiMeetingV1Input,
   UpdateApiMeetingV1Input,
 } from './meetingsV1Contracts';
@@ -27,6 +28,10 @@ async function request<T>(tenantId: string, path: string, init: RequestInit = {}
 export const meetingsV1Api = {
   capabilities(tenantId: string): Promise<ApiMeetingCapabilitiesV1> {
     return request(tenantId, '/api/v1/meetings-v1/capabilities');
+  },
+  people(tenantId: string, workspaceId: string): Promise<{ items: ApiMeetingWorkspacePersonV1[] }> {
+    const query = new URLSearchParams({ workspaceId });
+    return request(tenantId, `/api/v1/meetings-v1/people?${query.toString()}`);
   },
   list(tenantId: string, input: { workspaceId: string; projectId?: string; from?: string; to?: string; limit?: number }): Promise<{ items: ApiMeetingV1[] }> {
     const query = new URLSearchParams({ workspaceId: input.workspaceId });
