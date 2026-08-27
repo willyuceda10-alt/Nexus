@@ -20,6 +20,8 @@ export class MicrosoftGraphCalendarError extends Error {
   }
 }
 
+export type GraphCalendarTimeZoneV1 = 'UTC' | 'SA Pacific Standard Time';
+
 export interface GraphCalendarEventResultV1 {
   id: string;
   changeKey: string | null;
@@ -46,6 +48,26 @@ export interface GraphCalendarEventInputV1 {
   attendees: Array<{ email: string; displayName: string; type: 'required' | 'optional' | 'resource' }>;
   isOnline: boolean;
   recurrence?: Record<string, unknown> | null;
+  eventTimeZone?: GraphCalendarTimeZoneV1;
+}
+
+const LIMA_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+function graphDateTime(value: Date, timeZone: GraphCalendarTimeZoneV1): string {
+  const adjusted = timeZone === 'SA Pacific Standard Time'
+    ? new Date(value.getTime() - LIMA_OFFSET_MS)
+    : value;
+  return adjusted.toISOString().replace(/Z$/, '');
+}
+
+function parseGraphDateTime(value: string, timeZone: string | undefined): Date | null {
+  const normalizedZone = timeZone ?? 'UTC';
+  const parsed = normalizedZone === 'SA Pacific Standard Time'
+    ? new Date(`${value.replace(/Z$/, '')}Z`).getTime() + LIMA_OFFSET_MS
+    : normalizedZone === 'UTC'
+      ? new Date(value.endsWith('Z') ? value : `${value}Z`).getTime()
+      : Number.NaN;
+  return Number.isFinite(parsed) ? new Date(parsed) : null;
 }
 
 export class MicrosoftGraphCalendarClient {
@@ -73,11 +95,12 @@ export class MicrosoftGraphCalendarClient {
   }
 
   private eventBody(input: GraphCalendarEventInputV1): Record<string, unknown> {
+    const eventTimeZone = input.eventTimeZone ?? 'UTC';
     return {
       subject: input.subject,
       body: { contentType: 'text', content: input.body ?? input.subject },
-      start: { dateTime: input.startAt.toISOString().replace(/Z$/, ''), timeZone: 'UTC' },
-      end: { dateTime: input.endAt.toISOString().replace(/Z$/, ''), timeZone: 'UTC' },
+      start: { dateTime: graphDateTime(input.startAt, eventTimeZone), timeZone: eventTimeZone },
+      end: { dateTime: graphDateTime(input.endAt, eventTimeZone), timeZone: eventTimeZone },
       location: input.location ? { displayName: input.location } : undefined,
       attendees: input.attendees.map((attendee) => ({
         emailAddress: { address: attendee.email, name: attendee.displayName },
@@ -168,10 +191,9 @@ export class MicrosoftGraphCalendarClient {
     };
     return (payload.value ?? []).flatMap((item) => {
       if (!item.id || (item.type !== 'occurrence' && item.type !== 'exception') || !item.start?.dateTime || !item.end?.dateTime) return [];
-      const normalize = (value: string) => new Date(value.endsWith('Z') ? value : `${value}Z`);
-      const start = normalize(item.start.dateTime);
-      const end = normalize(item.end.dateTime);
-      if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return [];
+      const start = parseGraphDateTime(item.start.dateTime, item.start.timeZone);
+      const end = parseGraphDateTime(item.end.dateTime, item.end.timeZone);
+      if (!start || !end) return [];
       return [{ id: item.id, type: item.type, seriesMasterId: item.seriesMasterId ?? null, startAt: start, endAt: end }];
     });
   }
@@ -179,14 +201,15 @@ export class MicrosoftGraphCalendarClient {
   async updateOccurrence(
     organizerGraphUser: string,
     occurrenceEventId: string,
-    input: { startAt: Date; endAt: Date; location: string | null },
+    input: { startAt: Date; endAt: Date; location: string | null; eventTimeZone?: GraphCalendarTimeZoneV1 },
   ): Promise<void> {
     const path = `/users/${encodeURIComponent(organizerGraphUser)}/events/${encodeURIComponent(occurrenceEventId)}`;
+    const eventTimeZone = input.eventTimeZone ?? 'UTC';
     const response = await this.graphFetch(path, {
       method: 'PATCH',
       body: JSON.stringify({
-        start: { dateTime: input.startAt.toISOString().replace(/Z$/, ''), timeZone: 'UTC' },
-        end: { dateTime: input.endAt.toISOString().replace(/Z$/, ''), timeZone: 'UTC' },
+        start: { dateTime: graphDateTime(input.startAt, eventTimeZone), timeZone: eventTimeZone },
+        end: { dateTime: graphDateTime(input.endAt, eventTimeZone), timeZone: eventTimeZone },
         location: input.location ? { displayName: input.location } : { displayName: '' },
       }),
     });
