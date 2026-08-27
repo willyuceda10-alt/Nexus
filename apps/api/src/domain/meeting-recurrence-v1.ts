@@ -135,7 +135,7 @@ export function toGraphRecurrenceV1(rule: MeetingRecurrenceRuleV1, firstOccurren
     pattern.type = 'absoluteMonthly';
     pattern.dayOfMonth = rule.dayOfMonth;
   }
-  const range: Record<string, unknown> = { startDate: firstOccurrenceDate, recurrenceTimeZone: 'SA Pacific Standard Time' };
+  const range: Record<string, unknown> = { startDate: firstOccurrenceDate, recurrenceTimeZone: 'UTC' };
   if (rule.rangeType === 'NUMBERED') {
     range.type = 'numbered';
     range.numberOfOccurrences = rule.numberOfOccurrences;
