@@ -80,13 +80,14 @@ export interface GovernanceProjection {
 
 const TERMINAL_RISK_STATUSES = new Set<NexusObject['status']>(['CLOSED', 'COMPLETED', 'CANCELLED']);
 const PENDING_CHANGE_STATUSES = new Set<NexusObject['status']>(['DRAFT', 'PLANNING', 'IN_PROGRESS', 'IN_REVIEW', 'PENDING_APPROVAL']);
+const EXCLUDED_CHANGE_IMPACT_STATUSES = new Set<NexusObject['status']>(['REJECTED', 'CANCELLED']);
 
 function dateOnly(value: string): string {
   return value.slice(0, 10);
 }
 
 function validScale(value: number | undefined): value is number {
-  return Number.isInteger(value) && value !== undefined && value >= 1 && value <= 5;
+  return value !== undefined && Number.isInteger(value) && value >= 1 && value <= 5;
 }
 
 export function riskBand(score: number | undefined): RiskBand {
@@ -215,11 +216,15 @@ export function buildGovernanceProjection(
     };
   });
 
+  const openRisks = risks.filter((risk) => !TERMINAL_RISK_STATUSES.has(risk.status));
+  const ratedOpenRisks = openRisks.filter((risk) => risk.score !== undefined);
+  const mitigatedOpenRisks = openRisks.filter((risk) => Boolean(risk.mitigationPlan?.trim()));
+
   const matrix: RiskMatrixCell[] = [];
   for (let probability = 5; probability >= 1; probability -= 1) {
     for (let impact = 1; impact <= 5; impact += 1) {
       const score = probability * impact;
-      const cellRisks = risks.filter(
+      const cellRisks = openRisks.filter(
         (risk) => risk.probability === probability && risk.impact === impact,
       );
       matrix.push({
@@ -232,10 +237,6 @@ export function buildGovernanceProjection(
       });
     }
   }
-
-  const openRisks = risks.filter((risk) => !TERMINAL_RISK_STATUSES.has(risk.status));
-  const ratedOpenRisks = openRisks.filter((risk) => risk.score !== undefined);
-  const mitigatedOpenRisks = openRisks.filter((risk) => Boolean(risk.mitigationPlan?.trim()));
 
   const groupedByProject = new Map<string, GovernanceRiskRow[]>();
   for (const risk of openRisks) {
@@ -267,6 +268,7 @@ export function buildGovernanceProjection(
 
   const pendingChanges = changes.filter((change) => PENDING_CHANGE_STATUSES.has(change.status));
   const approvedChanges = changes.filter((change) => change.status === 'APPROVED');
+  const currentImpactChanges = changes.filter((change) => !EXCLUDED_CHANGE_IMPACT_STATUSES.has(change.status));
 
   return {
     risks: [...risks].sort((a, b) => {
@@ -288,8 +290,8 @@ export function buildGovernanceProjection(
       exposureScore: ratedOpenRisks.reduce((sum, risk) => sum + (risk.score ?? 0), 0),
       pendingChangeCount: pendingChanges.length,
       approvedChangeCount: approvedChanges.length,
-      changeCostImpact: changes.reduce((sum, change) => sum + change.costImpact, 0),
-      changeTimeImpactDays: changes.reduce((sum, change) => sum + change.timeImpactDays, 0),
+      changeCostImpact: currentImpactChanges.reduce((sum, change) => sum + change.costImpact, 0),
+      changeTimeImpactDays: currentImpactChanges.reduce((sum, change) => sum + change.timeImpactDays, 0),
     },
   };
 }
