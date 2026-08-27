@@ -9,6 +9,7 @@ import {
   FolderKanban,
   Gauge,
   Layers3,
+  PackageSearch,
   Settings2,
   ShieldAlert,
   UsersRound,
@@ -47,6 +48,7 @@ export const Sidebar: React.FC = () => {
     { id: 'portfolios', label: 'Portafolios', icon: Layers3 },
     { id: 'timeline', label: 'Cronograma', icon: CalendarClock },
     { id: 'resources', label: 'Recursos y capacidad', icon: UsersRound },
+    { id: 'materials', label: 'Materiales', icon: PackageSearch },
     { id: 'governance', label: 'Riesgos y cambios', icon: ShieldAlert },
   ];
 
