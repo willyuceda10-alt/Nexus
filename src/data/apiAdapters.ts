@@ -22,6 +22,7 @@ const objectTypes = new Set<ObjectType>([
   'PROGRAM',
   'PROJECT',
   'RESOURCE',
+  'MATERIAL',
   'TASK',
   'RISK',
   'DOCUMENT',
