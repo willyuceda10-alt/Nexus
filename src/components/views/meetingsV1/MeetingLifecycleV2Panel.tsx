@@ -110,7 +110,7 @@ export const MeetingLifecycleV2Panel: React.FC<{ projectId?: string; onChanged?:
     }
     const start = new Date(startAt);
     const end = new Date(endAt);
-    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end.getTime() <= start.getTime()) {
       setError('La hora de fin debe ser posterior al inicio.');
       return;
     }
