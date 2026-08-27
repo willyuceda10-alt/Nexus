@@ -83,6 +83,7 @@ export class AutomationValidationErrorV1 extends Error {
 }
 
 const PATH_SEGMENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const FORBIDDEN_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -101,13 +102,17 @@ export function eventContextV1(event: AutomationEventEnvelopeV1): Record<string,
 
 export function readAutomationPathV1(root: unknown, path: string): unknown {
   const parts = path.split('.').filter(Boolean);
-  if (parts.length === 0 || parts.length > 20 || parts.some((part) => !PATH_SEGMENT.test(part))) {
+  if (
+    parts.length === 0 ||
+    parts.length > 20 ||
+    parts.some((part) => !PATH_SEGMENT.test(part) || FORBIDDEN_PATH_SEGMENTS.has(part))
+  ) {
     throw new AutomationValidationErrorV1(`Invalid event path: ${path}`);
   }
 
   let current: unknown = root;
   for (const part of parts) {
-    if (!isRecord(current) || !(part in current)) return undefined;
+    if (!isRecord(current) || !Object.prototype.hasOwnProperty.call(current, part)) return undefined;
     current = current[part];
   }
   return current;
