@@ -19,6 +19,7 @@ import { resourceCapacityRoutes } from './routes/resource-capacity.js';
 import { scheduleAnalysisRoutes } from './routes/schedule-analysis.js';
 import { scheduleAnalysisV2Routes } from './routes/schedule-analysis-v2.js';
 import { sessionRoutes } from './routes/session.js';
+import { wbsV2Routes } from './routes/wbs-v2.js';
 import { workCalendarV2Routes } from './routes/work-calendars-v2.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -86,8 +87,6 @@ export async function buildApp(): Promise<FastifyInstance> {
     });
   });
 
-  // Inject hierarchy-specific policy after the normal authenticate/resolveActor
-  // preHandlers of generic object writes, without forking the Object Engine CRUD.
   registerHierarchyWriteGuards(app);
 
   await app.register(healthRoutes);
@@ -101,6 +100,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(workCalendarV2Routes);
   await app.register(scheduleAnalysisV2Routes);
   await app.register(projectEngineV2BackfillRoutes);
+  await app.register(wbsV2Routes);
   await app.register(forecastRoutes);
   await app.register(resourceCapacityRoutes);
   await app.register(baselineRoutes);
