@@ -51,7 +51,7 @@ export interface PermissionDecisionInputV2 {
 
 export interface PermissionDecisionV2 {
   allowed: boolean;
-  source: 'EXPLICIT_DENY' | 'EXPLICIT_ALLOW' | 'BASE_ROLE' | 'DEFAULT_DENY';
+  source: 'BREAK_GLASS_OWNER' | 'EXPLICIT_DENY' | 'EXPLICIT_ALLOW' | 'BASE_ROLE' | 'DEFAULT_DENY';
   matchedPolicies: PermissionPolicyV2[];
 }
 
@@ -120,6 +120,13 @@ export function evaluatePermissionV2(input: PermissionDecisionInputV2): Permissi
   const matchedPolicies = input.policies.filter((policy) =>
     policy.permissionKey === input.permission && policyScopeMatches(input, policy) && policySubjectMatches(input, policy),
   );
+
+  // The tenant OWNER is the recovery principal for permission administration.
+  // This one capability cannot be removed by a policy, otherwise a bad rule could
+  // permanently lock the tenant out of its own authorization control plane.
+  if (input.tenantRole === 'OWNER' && input.permission === 'tenant.manage_permissions') {
+    return { allowed: true, source: 'BREAK_GLASS_OWNER', matchedPolicies };
+  }
 
   if (matchedPolicies.some((policy) => policy.effect === 'DENY')) {
     return { allowed: false, source: 'EXPLICIT_DENY', matchedPolicies };
