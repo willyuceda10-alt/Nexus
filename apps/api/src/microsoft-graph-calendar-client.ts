@@ -175,7 +175,10 @@ export class MicrosoftGraphCalendarClient {
       '$select': 'id,type,seriesMasterId,start,end',
     });
     const path = `/users/${encodeURIComponent(organizerGraphUser)}/events/${encodeURIComponent(seriesMasterId)}/instances?${query.toString()}`;
-    const response = await this.graphFetch(path, { method: 'GET' });
+    const response = await this.graphFetch(path, {
+      method: 'GET',
+      headers: { Prefer: 'outlook.timezone="SA Pacific Standard Time"' },
+    });
     if (!response.ok) {
       const text = (await response.text()).slice(0, 5000);
       throw new MicrosoftGraphCalendarError(response.status, `Graph recurring instances request failed (${response.status}): ${text}`);
