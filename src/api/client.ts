@@ -60,6 +60,11 @@ import type {
   MaterialEngineBackfillV2Response,
 } from './materialInventoryV2Contracts';
 import type {
+  ApiNotificationCapabilitiesV1,
+  ApiNotificationPreferencesV1,
+  UpdateApiNotificationPreferencesV1Input,
+} from './notificationPreferencesV1Contracts';
+import type {
   ApiProjectEngineV2BackfillResponse,
   ApiScheduleAnalysisV2,
   ApiWbsV2Response,
@@ -347,6 +352,17 @@ export const bridataApi = {
     return request<ApiInboxItemV1>(`/api/v1/inbox-v1/${encodeURIComponent(id)}/snooze`, {
       method: 'POST', body: JSON.stringify({ until }),
     });
+  },
+  notificationPreferencesV1(signal?: AbortSignal): Promise<ApiNotificationPreferencesV1> {
+    return request<ApiNotificationPreferencesV1>('/api/v1/notification-preferences-v1', { signal });
+  },
+  updateNotificationPreferencesV1(input: UpdateApiNotificationPreferencesV1Input): Promise<void> {
+    return request<void>('/api/v1/notification-preferences-v1', {
+      method: 'PUT', body: JSON.stringify(input),
+    });
+  },
+  notificationCapabilitiesV1(signal?: AbortSignal): Promise<ApiNotificationCapabilitiesV1> {
+    return request<ApiNotificationCapabilitiesV1>('/api/v1/notification-capabilities-v1', { signal });
   },
   projectForecast(projectId: string, asOf?: string, signal?: AbortSignal): Promise<ApiProjectForecast> {
     const query = new URLSearchParams({ projectId });
