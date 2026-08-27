@@ -1,5 +1,9 @@
 -- Bridata Project - Project Engine V2 relational foundation
 -- Additive migration: V1 NexusObject scheduling remains supported during transition.
+-- Existing V1 dependency rows are intentionally NOT backfilled here because the
+-- source tables already use FORCE RLS. Migration-time cross-tenant reads would
+-- violate the fail-closed tenant model. Backfill will run later through a
+-- tenant-scoped application job after the V2 write path is enabled.
 
 CREATE TYPE "SchedulingModeV2" AS ENUM ('AUTO', 'MANUAL');
 CREATE TYPE "ScheduleConstraintTypeV2" AS ENUM (
@@ -172,7 +176,7 @@ CREATE INDEX "work_item_schedules_tenant_id_parent_work_item_id_idx"
 CREATE UNIQUE INDEX "schedule_dependencies_v2_project_edge_key"
   ON "schedule_dependencies_v2"("project_object_id", "predecessor_object_id", "successor_object_id");
 CREATE UNIQUE INDEX "schedule_dependencies_v2_legacy_relation_id_key"
-  ON "schedule_dependencies_v2"("legacy_relation_id") WHERE "legacy_relation_id" IS NOT NULL;
+  ON "schedule_dependencies_v2"("legacy_relation_id");
 CREATE INDEX "schedule_dependencies_v2_tenant_id_project_object_id_idx"
   ON "schedule_dependencies_v2"("tenant_id", "project_object_id");
 CREATE UNIQUE INDEX "project_baselines_project_object_id_version_key"
@@ -251,7 +255,7 @@ ALTER TABLE "project_baseline_items"
   ADD CONSTRAINT "project_baseline_items_work_item_object_id_fkey"
   FOREIGN KEY ("work_item_object_id") REFERENCES "nexus_objects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- RLS is applied in the same migration so these new tenant-owned tables fail closed.
+-- New tenant-owned tables fail closed immediately after creation.
 DO $$
 DECLARE
   table_name text;
@@ -275,39 +279,3 @@ BEGIN
     );
   END LOOP;
 END $$;
-
--- Backfill typed V2 dependencies from the current ObjectRelation convention.
--- V1 storage convention: source_object_id=successor, target_object_id=predecessor.
-INSERT INTO "schedule_dependencies_v2" (
-  "tenant_id",
-  "project_object_id",
-  "predecessor_object_id",
-  "successor_object_id",
-  "dependency_type",
-  "lag_minutes",
-  "notes",
-  "legacy_relation_id",
-  "updated_at"
-)
-SELECT
-  r."tenant_id",
-  (successor."metadata"->>'projectId')::uuid,
-  r."target_object_id",
-  r."source_object_id",
-  CASE
-    WHEN r."metadata"->>'dependencyType' IN ('FS','SS','FF','SF')
-      THEN (r."metadata"->>'dependencyType')::"ScheduleDependencyTypeV2"
-    ELSE 'FS'::"ScheduleDependencyTypeV2"
-  END,
-  COALESCE((r."metadata"->>'lagDays')::integer, 0) * 480,
-  r."notes",
-  r."id",
-  CURRENT_TIMESTAMP
-FROM "object_relations" r
-JOIN "nexus_objects" successor ON successor."id" = r."source_object_id"
-JOIN "nexus_objects" predecessor ON predecessor."id" = r."target_object_id"
-WHERE r."relation_type" = 'DEPENDS_ON'
-  AND successor."metadata"->>'projectId' IS NOT NULL
-  AND predecessor."metadata"->>'projectId' = successor."metadata"->>'projectId'
-  AND (successor."metadata"->>'projectId') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-ON CONFLICT DO NOTHING;
