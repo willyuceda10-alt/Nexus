@@ -5,36 +5,48 @@ enum MeetingM365SyncStatusV1 {
   FAILED
 }
 
+enum MeetingLifecycleStatusV2 {
+  SCHEDULED
+  CANCEL_PENDING
+  CANCELLED
+}
+
 model MeetingCollaborationV1 {
-  id                 String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId           String                   @map("tenant_id") @db.Uuid
-  workspaceId        String                   @map("workspace_id") @db.Uuid
-  meetingObjectId    String                   @unique @map("meeting_object_id") @db.Uuid
-  projectId          String?                  @map("project_id") @db.Uuid
-  organizerUserId    String                   @map("organizer_user_id") @db.Uuid
-  organizerGraphUser String                   @map("organizer_graph_user") @db.VarChar(320)
-  startAt            DateTime                 @map("start_at") @db.Timestamptz(6)
-  endAt              DateTime                 @map("end_at") @db.Timestamptz(6)
-  timezone           String                   @default("America/Lima") @db.VarChar(100)
-  location           String?                  @db.VarChar(500)
-  isOnline           Boolean                  @default(true) @map("is_online")
-  onlineProvider     String                   @default("TEAMS") @map("online_provider") @db.VarChar(50)
-  syncStatus         MeetingM365SyncStatusV1  @default(LOCAL_ONLY) @map("sync_status")
-  graphEventId       String?                  @map("graph_event_id") @db.VarChar(1024)
-  graphChangeKey     String?                  @map("graph_change_key") @db.VarChar(1024)
-  joinUrl            String?                  @map("join_url") @db.Text
-  webLink            String?                  @map("web_link") @db.Text
-  lastSyncAttemptAt  DateTime?                @map("last_sync_attempt_at") @db.Timestamptz(6)
-  lastSyncedAt       DateTime?                @map("last_synced_at") @db.Timestamptz(6)
-  lastSyncedEventId  String?                  @map("last_synced_event_id") @db.Uuid
-  syncError          String?                  @map("sync_error") @db.Text
-  createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                  String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                    @map("tenant_id") @db.Uuid
+  workspaceId         String                    @map("workspace_id") @db.Uuid
+  meetingObjectId     String                    @unique @map("meeting_object_id") @db.Uuid
+  projectId           String?                   @map("project_id") @db.Uuid
+  organizerUserId     String                    @map("organizer_user_id") @db.Uuid
+  organizerGraphUser  String                    @map("organizer_graph_user") @db.VarChar(320)
+  startAt             DateTime                  @map("start_at") @db.Timestamptz(6)
+  endAt               DateTime                  @map("end_at") @db.Timestamptz(6)
+  timezone            String                    @default("America/Lima") @db.VarChar(100)
+  location            String?                   @db.VarChar(500)
+  isOnline            Boolean                   @default(true) @map("is_online")
+  onlineProvider      String                    @default("TEAMS") @map("online_provider") @db.VarChar(50)
+  syncStatus          MeetingM365SyncStatusV1   @default(LOCAL_ONLY) @map("sync_status")
+  lifecycleStatus     MeetingLifecycleStatusV2  @default(SCHEDULED) @map("lifecycle_status")
+  graphEventId        String?                   @map("graph_event_id") @db.VarChar(1024)
+  graphChangeKey      String?                   @map("graph_change_key") @db.VarChar(1024)
+  joinUrl             String?                   @map("join_url") @db.Text
+  webLink             String?                   @map("web_link") @db.Text
+  lastSyncAttemptAt   DateTime?                 @map("last_sync_attempt_at") @db.Timestamptz(6)
+  lastSyncedAt        DateTime?                 @map("last_synced_at") @db.Timestamptz(6)
+  lastSyncedEventId   String?                   @map("last_synced_event_id") @db.Uuid
+  cancelledAt         DateTime?                 @map("cancelled_at") @db.Timestamptz(6)
+  cancelledBy         String?                   @map("cancelled_by") @db.Uuid
+  cancellationComment String?                   @map("cancellation_comment") @db.Text
+  lastCancelEventId   String?                   @map("last_cancel_event_id") @db.Uuid
+  syncError           String?                   @map("sync_error") @db.Text
+  createdAt           DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   attendees MeetingCollaborationAttendeeV1[]
 
   @@index([tenantId, workspaceId, startAt])
   @@index([tenantId, syncStatus, updatedAt])
+  @@index([tenantId, lifecycleStatus, startAt])
   @@map("meeting_collaboration_v1")
 }
 
