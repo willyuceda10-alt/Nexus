@@ -100,12 +100,22 @@ export class MicrosoftGraphCalendarClient {
     };
   }
 
+  private async readEvent(organizerGraphUser: string, graphEventId: string): Promise<GraphCalendarEventResultV1> {
+    const path = `/users/${encodeURIComponent(organizerGraphUser)}/events/${encodeURIComponent(graphEventId)}`
+      + '?$select=id,changeKey,webLink,onlineMeeting';
+    return this.parseEvent(await this.graphFetch(path, { method: 'GET' }));
+  }
+
   async createEvent(input: GraphCalendarEventInputV1): Promise<GraphCalendarEventResultV1> {
     const response = await this.graphFetch(`/users/${encodeURIComponent(input.organizerGraphUser)}/events`, {
       method: 'POST',
       body: JSON.stringify(this.eventBody(input)),
     });
-    return this.parseEvent(response);
+    const created = await this.parseEvent(response);
+    if (input.isOnline && !created.joinUrl) {
+      return this.readEvent(input.organizerGraphUser, created.id);
+    }
+    return created;
   }
 
   async updateEvent(graphEventId: string, input: GraphCalendarEventInputV1): Promise<GraphCalendarEventResultV1> {
@@ -117,8 +127,7 @@ export class MicrosoftGraphCalendarClient {
       const text = (await patch.text()).slice(0, 5000);
       throw new MicrosoftGraphCalendarError(patch.status, `Graph calendar update failed (${patch.status}): ${text}`);
     }
-    const get = await this.graphFetch(`${path}?$select=id,changeKey,webLink,onlineMeeting`, { method: 'GET' });
-    return this.parseEvent(get);
+    return this.readEvent(input.organizerGraphUser, graphEventId);
   }
 
   close(): void {
