@@ -16,6 +16,15 @@ import type {
   UpdateApiDependencyInput,
   UpdateApiObjectInput,
 } from './contracts';
+import type {
+  ApiProjectEngineV2BackfillResponse,
+  ApiScheduleAnalysisV2,
+  ApiWbsV2Response,
+  ApiWorkItemScheduleV2,
+  UpdateApiWbsV2Input,
+  UpdateApiWbsV2Response,
+  UpdateApiWorkItemScheduleV2Input,
+} from './projectScheduleV2Contracts';
 import type { ApiResourceCapacityResponse } from './resourceCapacityContracts';
 
 export type AccessTokenProvider = () => Promise<string | null>;
@@ -120,6 +129,39 @@ export const bridataApi = {
   scheduleAnalysis(projectId: string, signal?: AbortSignal): Promise<ApiScheduleAnalysis> {
     const query = new URLSearchParams({ projectId });
     return request<ApiScheduleAnalysis>(`/api/v1/schedule-analysis?${query.toString()}`, { signal });
+  },
+  projectScheduleAnalysisV2(projectId: string, signal?: AbortSignal): Promise<ApiScheduleAnalysisV2> {
+    return request<ApiScheduleAnalysisV2>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/schedule-analysis-v2`,
+      { signal },
+    );
+  },
+  projectWbsV2(projectId: string, signal?: AbortSignal): Promise<ApiWbsV2Response> {
+    return request<ApiWbsV2Response>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/wbs-v2`,
+      { signal },
+    );
+  },
+  updateProjectWbsV2(projectId: string, input: UpdateApiWbsV2Input): Promise<UpdateApiWbsV2Response> {
+    return request<UpdateApiWbsV2Response>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/wbs-v2`,
+      { method: 'PUT', body: JSON.stringify(input) },
+    );
+  },
+  updateWorkItemScheduleV2(
+    objectId: string,
+    input: UpdateApiWorkItemScheduleV2Input,
+  ): Promise<ApiWorkItemScheduleV2> {
+    return request<ApiWorkItemScheduleV2>(
+      `/api/v1/work-items/${encodeURIComponent(objectId)}/schedule`,
+      { method: 'PATCH', body: JSON.stringify(input) },
+    );
+  },
+  backfillProjectEngineV2(projectId: string, dryRun = true): Promise<ApiProjectEngineV2BackfillResponse> {
+    return request<ApiProjectEngineV2BackfillResponse>('/api/v1/project-engine-v2/backfill', {
+      method: 'POST',
+      body: JSON.stringify({ projectId, dryRun }),
+    });
   },
   projectForecast(projectId: string, asOf?: string, signal?: AbortSignal): Promise<ApiProjectForecast> {
     const query = new URLSearchParams({ projectId });
