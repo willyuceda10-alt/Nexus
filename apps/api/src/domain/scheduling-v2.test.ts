@@ -113,12 +113,18 @@ describe('scheduling engine v2', () => {
     expect(result.feasible).toBe(false);
   });
 
-  it('uses the late pass for ALAP work when a project target exists', () => {
+  it('uses the late pass for ALAP without letting a later deadline erase the critical path', () => {
     const result = calculateScheduleV2({
       anchorDate: new Date('2026-08-24T00:00:00.000Z'),
-      targetFinish: new Date('2026-08-28T00:00:00.000Z'),
+      targetFinish: new Date('2026-09-04T00:00:00.000Z'),
       calendar: { ...calendar, exceptions: [] },
       tasks: [
+        {
+          id: 'driver',
+          durationMinutes: 2400,
+          schedulingMode: 'AUTO',
+          constraintType: 'AS_SOON_AS_POSSIBLE',
+        },
         {
           id: 'alap',
           durationMinutes: 480,
@@ -129,9 +135,13 @@ describe('scheduling engine v2', () => {
       dependencies: [],
     });
 
-    const task = result.tasks[0]!;
+    const task = result.tasks.find((item) => item.id === 'alap')!;
+    expect(result.naturalFinishMinutes).toBe(2400);
+    expect(result.scheduledProjectFinishMinutes).toBe(2400);
+    expect(result.criticalTaskIds).toEqual(['driver']);
     expect(task.scheduledStartMinutes).toBe(1920);
     expect(task.plannedStart).toBe('2026-08-28');
     expect(task.plannedFinish).toBe('2026-08-28');
+    expect(result.feasible).toBe(true);
   });
 });
