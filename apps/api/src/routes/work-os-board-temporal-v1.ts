@@ -36,6 +36,22 @@ type BoardRow = { id: string; workspace_id: string; object_definition_id: string
 type ViewRow = { id: string; name: string; view_type: 'CALENDAR' | 'TIMELINE'; config: Record<string, unknown> };
 type ColumnRow = { field_key: string; data_type: string };
 type PlacementRow = { object_id: string; group_id: string | null; sort_order: number };
+type TemporalFieldValue = {
+  fieldKey: string;
+  valueText: string | null;
+  valueNumber: Prisma.Decimal | null;
+  valueDate: Date | null;
+  valueBoolean: boolean | null;
+  valueJson: Prisma.JsonValue | null;
+};
+type TemporalObjectValue = {
+  title: string;
+  status: string;
+  priority: string;
+  startDate: Date | null;
+  dueDate: Date | null;
+  fieldValues: TemporalFieldValue[];
+};
 
 async function getBoard(tx: Prisma.TransactionClient, tenantId: string, boardId: string): Promise<BoardRow | null> {
   const rows = await tx.$queryRaw<BoardRow[]>(Prisma.sql`
@@ -72,14 +88,34 @@ function temporalConfigFromView(view: ViewRow): BoardTemporalConfigV1 | null {
   return parsed.success ? parsed.data : null;
 }
 
-function objectTemporalValue(
-  object: { startDate: Date | null; dueDate: Date | null; fieldValues: Array<{ fieldKey: string; valueDate: Date | null }> },
-  fieldKey: string | null | undefined,
-): Date | null {
+function fieldValue(object: TemporalObjectValue, fieldKey: string | null | undefined): TemporalFieldValue | null {
+  if (!fieldKey) return null;
+  return object.fieldValues.find((field) => field.fieldKey === fieldKey) ?? null;
+}
+
+function objectTemporalValue(object: TemporalObjectValue, fieldKey: string | null | undefined): Date | null {
   if (!fieldKey) return null;
   if (fieldKey === 'startDate') return object.startDate;
   if (fieldKey === 'dueDate') return object.dueDate;
-  return object.fieldValues.find((field) => field.fieldKey === fieldKey)?.valueDate ?? null;
+  return fieldValue(object, fieldKey)?.valueDate ?? null;
+}
+
+function scalarJsonText(value: Prisma.JsonValue | null): string | null {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return null;
+}
+
+function objectTextValue(object: TemporalObjectValue, fieldKey: string | null | undefined): string | null {
+  if (!fieldKey) return null;
+  if (fieldKey === 'title') return object.title;
+  if (fieldKey === 'status') return object.status;
+  if (fieldKey === 'priority') return object.priority;
+  const field = fieldValue(object, fieldKey);
+  if (!field) return null;
+  return field.valueText
+    ?? field.valueNumber?.toString()
+    ?? (field.valueBoolean !== null ? String(field.valueBoolean) : null)
+    ?? scalarJsonText(field.valueJson);
 }
 
 export async function workOsBoardTemporalV1Routes(app: FastifyInstance): Promise<void> {
@@ -173,6 +209,13 @@ export async function workOsBoardTemporalV1Routes(app: FastifyInstance): Promise
       const objectIds = placements.map((row) => row.object_id);
       if (!objectIds.length) return { viewId: view.id, viewType: view.view_type, temporal, items: [] };
       const placementByObject = new Map(placements.map((row) => [row.object_id, row]));
+      const projectedFieldKeys = [...new Set([
+        temporal.startFieldKey,
+        temporal.endFieldKey,
+        temporal.titleFieldKey,
+        temporal.colorFieldKey,
+      ].filter((value): value is string => Boolean(value) && !['title', 'status', 'priority', 'startDate', 'dueDate'].includes(value!)))];
+
       const objects = await tx.nexusObject.findMany({
         where: {
           tenantId: actor.tenantId, workspaceId: board.workspace_id, objectDefinitionId: board.object_definition_id,
@@ -182,7 +225,17 @@ export async function workOsBoardTemporalV1Routes(app: FastifyInstance): Promise
           id: true, objectTypeKey: true, title: true, status: true, priority: true, progress: true,
           startDate: true, dueDate: true,
           assignee: { select: { id: true, fullName: true, avatarUrl: true } },
-          fieldValues: { where: { fieldKey: { in: [temporal.startFieldKey, temporal.endFieldKey ?? ''] } }, select: { fieldKey: true, valueDate: true } },
+          fieldValues: {
+            where: { fieldKey: { in: projectedFieldKeys } },
+            select: {
+              fieldKey: true,
+              valueText: true,
+              valueNumber: true,
+              valueDate: true,
+              valueBoolean: true,
+              valueJson: true,
+            },
+          },
         },
       });
 
@@ -197,6 +250,8 @@ export async function workOsBoardTemporalV1Routes(app: FastifyInstance): Promise
           objectId: object.id,
           objectTypeKey: object.objectTypeKey,
           title: object.title,
+          displayTitle: objectTextValue(object, temporal.titleFieldKey) ?? object.title,
+          colorValue: objectTextValue(object, temporal.colorFieldKey),
           status: object.status,
           priority: object.priority,
           progress: object.progress,
