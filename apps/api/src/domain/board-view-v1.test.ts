@@ -34,4 +34,13 @@ describe('Work OS Board + View Engine V1', () => {
     expect(() => validateViewConfigV1('KANBAN', {})).toThrow(WorkBoardValidationError);
     expect(() => validateViewConfigV1('GANTT', { startFieldKey: 'startDate', endFieldKey: 'dueDate' })).not.toThrow();
   });
+
+  it('accepts per-view hidden columns and column order', () => {
+    expect(() => validateViewConfigV1('TABLE', {
+      hiddenColumnKeys: ['priority', 'description'],
+      columnOrder: ['title', 'status', 'assigneeId', 'dueDate'],
+    })).not.toThrow();
+    expect(() => validateViewConfigV1('TABLE', { columnOrder: 'title,status' }))
+      .toThrow(WorkBoardValidationError);
+  });
 });
