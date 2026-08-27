@@ -91,6 +91,12 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
             { name: 'ENTRA_API_CLIENT_ID', value: entraApiClientId }
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }
             { name: 'ENTRA_REQUIRED_SCOPE', value: 'access_as_user' }
+            { name: 'NOTIFICATION_WORKER_AVAILABLE', value: string(deployNotificationWorker) }
+            { name: 'M365_GRAPH_DELIVERY_ENABLED', value: string(m365GraphDeliveryEnabled) }
+            { name: 'M365_OUTLOOK_SENDER_USER', value: m365OutlookSenderUser }
+            { name: 'M365_TEAMS_ACTIVITY_TYPE', value: m365TeamsActivityType }
+            { name: 'M365_TEAMS_TOPIC_WEB_URL', value: m365TeamsTopicWebUrl }
+            { name: 'M365_TEAMS_TOPIC_VALUE', value: m365TeamsTopicValue }
           ]
           probes: [
             {
@@ -244,6 +250,7 @@ resource notificationWorker 'Microsoft.App/containerApps@2024-03-01' = if (deplo
             { name: 'ENTRA_API_CLIENT_ID', value: entraApiClientId }
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }
             { name: 'NOTIFICATION_WORKER_ENABLED', value: 'true' }
+            { name: 'NOTIFICATION_WORKER_AVAILABLE', value: 'true' }
             { name: 'SERVICE_BUS_NAMESPACE', value: serviceBusNamespaceFqdn }
             { name: 'SERVICE_BUS_TOPIC', value: serviceBusTopicName }
             { name: 'SERVICE_BUS_NOTIFICATION_SUBSCRIPTION', value: serviceBusNotificationSubscriptionName }
