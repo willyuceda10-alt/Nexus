@@ -201,6 +201,24 @@ export const WorkBoardsConfigOptionsV1View: React.FC = () => {
     finally { setSaving(false); }
   };
 
+  const saveManagedOption = async (item: ApiWorkBoardItemV1, column: ApiWorkBoardColumnV1, value: string | string[] | null) => {
+    if (!data) return;
+    setSaving(true); setError(null);
+    try {
+      if (apiReady) {
+        await workOsBoardConfigV1Api.updateManagedOptionCell(tenant.id, data.board.id, item.object.id, column.id, { version: item.object.version, value });
+        await loadData(data.board.id, selectedView?.id);
+      } else {
+        const items = data.items.map((current) => current.object.id !== item.object.id ? current : column.source === 'CUSTOM'
+          ? { ...current, customFields: { ...current.customFields, [column.field_key]: value }, object: { ...current.object, version: current.object.version + 1 } }
+          : { ...current, object: { ...current.object, [column.field_key]: value, version: current.object.version + 1 } } as ApiWorkBoardItemV1);
+        setData({ ...data, items });
+      }
+      setEditing(null);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'El valor no pertenece al diccionario activo de esta columna.'); }
+    finally { setSaving(false); }
+  };
+
   const savePerson = async (item: ApiWorkBoardItemV1, column: ApiWorkBoardColumnV1, userId: string | null) => {
     if (!data || !governance) return;
     setSaving(true); setError(null);
@@ -239,7 +257,10 @@ export const WorkBoardsConfigOptionsV1View: React.FC = () => {
     if (!data) return;
     const item = data.items.find((current) => current.object.id === objectId);
     const statusColumn = data.columns.find((column) => column.source === 'CORE' && column.field_key === 'status');
-    if (item && statusColumn && item.object.status !== status) await saveCell(item, statusColumn, status);
+    if (!item || !statusColumn || item.object.status === status) return;
+    const managed = governance?.optionSets.some((set) => set.columnId === statusColumn.id) ?? false;
+    if (managed) await saveManagedOption(item, statusColumn, status);
+    else await saveCell(item, statusColumn, status);
   };
 
   const loadAvailable = async () => {
@@ -296,7 +317,8 @@ export const WorkBoardsConfigOptionsV1View: React.FC = () => {
         const set = { id: governance.optionSets.find((item) => item.columnId === column.id)?.id ?? `mock-options-${column.id}`, columnId: column.id, name: column.label, allowMultiple: column.data_type === 'TAGS', options: options.map((option, index) => ({ ...option, sortOrder: (index + 1) * 10, isActive: true, color: option.color ?? null })) };
         setGovernance({ ...governance, optionSets: [...governance.optionSets.filter((item) => item.columnId !== column.id), set] });
       }
-    } finally { setSaving(false); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo guardar el diccionario.'); }
+    finally { setSaving(false); }
   };
 
   const createRelation = async (input: { label: string; fieldKey: string; targetBoardId: string; multiple: boolean }) => {
@@ -309,7 +331,8 @@ export const WorkBoardsConfigOptionsV1View: React.FC = () => {
         setData({ ...data, columns: [...data.columns, column] });
         setRelationCandidates({ ...relationCandidates, [column.id]: objects.filter((object) => object.type === 'PROJECT').slice(0, 30).map((object) => ({ id: object.id, title: object.title, status: object.status, objectTypeKey: object.type })) });
       }
-    } finally { setSaving(false); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo crear la relación.'); }
+    finally { setSaving(false); }
   };
 
   const createFormula = async (input: { label: string; fieldKey: string; expression: BoardFormulaExpressionV1; format: 'NUMBER' | 'CURRENCY' | 'PERCENT'; decimals: number }) => {
@@ -321,7 +344,8 @@ export const WorkBoardsConfigOptionsV1View: React.FC = () => {
         const column: ApiWorkBoardColumnV1 = { id: `mock-formula-${Date.now()}`, key: input.fieldKey, label: input.label, source: 'CUSTOM', data_type: 'FORMULA', field_key: input.fieldKey, width: 160, sort_order: data.columns.length * 10 + 10, is_visible: true, is_editable: false, config: { formula: input.expression, format: input.format, decimals: input.decimals, currency: input.format === 'CURRENCY' ? 'PEN' : null } };
         setData({ ...data, columns: [...data.columns, column], items: data.items.map((item) => ({ ...item, customFields: { ...item.customFields, [input.fieldKey]: evaluateMockFormula(item, input.expression) } })) });
       }
-    } finally { setSaving(false); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo crear la fórmula.'); }
+    finally { setSaving(false); }
   };
 
   const toggleColumn = async (column: ApiWorkBoardColumnV1) => { if (column.field_key !== 'title') await persistViewConfig({ hiddenColumnKeys: hiddenColumnKeys.includes(column.key) ? hiddenColumnKeys.filter((key) => key !== column.key) : [...hiddenColumnKeys, column.key] }); };
@@ -348,7 +372,11 @@ export const WorkBoardsConfigOptionsV1View: React.FC = () => {
           </section>
 
           {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-[10px] font-semibold text-rose-700">{error}</div>}
-          {selectedView?.view_type === 'KANBAN' ? <BoardKanbanV1 items={filteredItems} onDropStatus={dropStatus} onOpen={openObjectDrawer} /> : governance ? <BoardGovernedTableV1 items={filteredItems} groups={data?.groups ?? []} columns={visibleColumns} configuration={governance} relationCandidates={relationCandidates} editing={editing} setEditing={setEditing} onSaveCell={saveCell} onSavePerson={savePerson} onSaveRelation={saveRelation} onMoveGroup={moveGroup} /> : null}
+          {selectedView?.view_type === 'KANBAN'
+            ? <BoardKanbanV1 items={filteredItems} onDropStatus={dropStatus} onOpen={openObjectDrawer} />
+            : governance
+              ? <BoardGovernedTableV1 items={filteredItems} groups={data?.groups ?? []} columns={visibleColumns} configuration={governance} relationCandidates={relationCandidates} editing={editing} setEditing={setEditing} onSaveCell={saveCell} onSaveManagedOption={saveManagedOption} onSavePerson={savePerson} onSaveRelation={saveRelation} onMoveGroup={moveGroup} />
+              : null}
         </main>
       </div>
 
