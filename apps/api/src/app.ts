@@ -15,6 +15,7 @@ import { costOverviewV2Routes } from './routes/cost-overview-v2.js';
 import { dependencyRoutes } from './routes/dependencies.js';
 import { forecastRoutes } from './routes/forecast.js';
 import { healthRoutes } from './routes/health.js';
+import { inboxV1Routes } from './routes/inbox-v1.js';
 import { materialMasterV2Routes } from './routes/material-master-v2.js';
 import { materialOperationsV2Routes } from './routes/material-operations-v2.js';
 import { materialOverviewV2Routes } from './routes/material-overview-v2.js';
@@ -119,6 +120,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(authorizationV2Routes);
   await app.register(outboxAdminV2Routes);
   await app.register(automationV1Routes);
+  await app.register(inboxV1Routes);
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
   await app.register(dependencyRoutes);
