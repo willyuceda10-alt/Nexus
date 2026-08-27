@@ -151,7 +151,11 @@ export async function projectEngineV2BackfillRoutes(app: FastifyInstance): Promi
               },
             });
             calendarState = 'created';
+          }
 
+          // Always upsert legacy holidays when the migrated calendar exists. This
+          // makes reruns repair a partially completed previous backfill.
+          if (calendar && !dryRun) {
             for (const holiday of legacy.holidays) {
               const exceptionDate = new Date(`${holiday}T00:00:00.000Z`);
               await tx.workCalendarException.upsert({
