@@ -17,6 +17,17 @@ import type {
   UpdateApiObjectInput,
 } from './contracts';
 import type {
+  ApiCostBackfillV2Response,
+  ApiCostCatalogV2,
+  ApiProjectCostOverviewV2,
+  CreateApiActualCostV2Input,
+  CreateApiBudgetLineV2Input,
+  CreateApiCommitmentV2Input,
+  CreateApiCostCodeV2Input,
+  UpdateApiBudgetLineV2Input,
+  UpdateApiCostProfileV2Input,
+} from './costEngineV2Contracts';
+import type {
   ApiMaterialMasterV2,
   ApiMaterialOverviewV2,
   ApiMaterialSetupV2,
@@ -244,6 +255,68 @@ export const bridataApi = {
   issueMaterialV2(input: CreateMaterialIssueV2Input): Promise<{ id: string; type: 'ISSUE'; quantity: number }> {
     return request<{ id: string; type: 'ISSUE'; quantity: number }>('/api/v1/material-engine-v2/issues', {
       method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  costCatalogV2(workspaceId: string, signal?: AbortSignal): Promise<ApiCostCatalogV2> {
+    const query = new URLSearchParams({ workspaceId });
+    return request<ApiCostCatalogV2>(`/api/v1/cost-engine-v2/catalog?${query.toString()}`, { signal });
+  },
+  projectCostOverviewV2(projectId: string, signal?: AbortSignal): Promise<ApiProjectCostOverviewV2> {
+    return request<ApiProjectCostOverviewV2>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/cost-overview-v2`,
+      { signal },
+    );
+  },
+  createCostCodeV2(input: CreateApiCostCodeV2Input): Promise<{ id: string }> {
+    return request<{ id: string }>('/api/v1/cost-engine-v2/cost-codes', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  updateProjectCostProfileV2(projectId: string, input: UpdateApiCostProfileV2Input): Promise<{ id: string }> {
+    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/cost-profile-v2`, {
+      method: 'PUT', body: JSON.stringify(input),
+    });
+  },
+  createBudgetLineV2(projectId: string, input: CreateApiBudgetLineV2Input): Promise<{ id: string }> {
+    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/budget-lines-v2`, {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  updateBudgetLineV2(id: string, input: UpdateApiBudgetLineV2Input): Promise<{ id: string }> {
+    return request<{ id: string }>(`/api/v1/cost-engine-v2/budget-lines/${encodeURIComponent(id)}`, {
+      method: 'PATCH', body: JSON.stringify(input),
+    });
+  },
+  createCommitmentV2(projectId: string, input: CreateApiCommitmentV2Input): Promise<{ id: string }> {
+    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/commitments-v2`, {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  updateCommitmentV2(id: string, input: { releasedAmount?: number; status?: 'OPEN' | 'CLOSED' | 'CANCELLED'; notes?: string | null }): Promise<{ id: string }> {
+    return request<{ id: string }>(`/api/v1/cost-engine-v2/commitments/${encodeURIComponent(id)}`, {
+      method: 'PATCH', body: JSON.stringify(input),
+    });
+  },
+  createActualCostV2(projectId: string, input: CreateApiActualCostV2Input): Promise<{ id: string }> {
+    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/actual-costs-v2`, {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  captureCostBaselineV2(projectId: string, name?: string | null): Promise<{ id: string; version: number; lineCount: number }> {
+    return request<{ id: string; version: number; lineCount: number }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/cost-baseline-v2`,
+      { method: 'POST', body: JSON.stringify({ name: name ?? null }) },
+    );
+  },
+  listCostBaselinesV2(projectId: string, signal?: AbortSignal): Promise<{ items: Array<Record<string, unknown>> }> {
+    return request<{ items: Array<Record<string, unknown>> }>(
+      `/api/v1/projects/${encodeURIComponent(projectId)}/cost-baselines-v2`,
+      { signal },
+    );
+  },
+  backfillCostEngineV2(projectId: string, dryRun = true): Promise<ApiCostBackfillV2Response> {
+    return request<ApiCostBackfillV2Response>('/api/v1/cost-engine-v2/backfill', {
+      method: 'POST', body: JSON.stringify({ projectId, dryRun }),
     });
   },
   projectForecast(projectId: string, asOf?: string, signal?: AbortSignal): Promise<ApiProjectForecast> {
