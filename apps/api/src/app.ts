@@ -8,6 +8,8 @@ import { ProjectScheduleV2ValidationError } from './domain/project-schedule-v2.j
 import { registerHierarchyWriteGuards } from './hierarchy-guard.js';
 import { baselineRoutes } from './routes/baselines.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
+import { costOperationsV2Routes } from './routes/cost-operations-v2.js';
+import { costOverviewV2Routes } from './routes/cost-overview-v2.js';
 import { dependencyRoutes } from './routes/dependencies.js';
 import { forecastRoutes } from './routes/forecast.js';
 import { healthRoutes } from './routes/health.js';
@@ -107,6 +109,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(materialMasterV2Routes);
   await app.register(materialOperationsV2Routes);
   await app.register(materialOverviewV2Routes);
+  await app.register(costOperationsV2Routes);
+  await app.register(costOverviewV2Routes);
   await app.register(forecastRoutes);
   await app.register(resourceCapacityRoutes);
   await app.register(baselineRoutes);
