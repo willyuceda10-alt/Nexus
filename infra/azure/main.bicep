@@ -373,7 +373,7 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     entraTenantId: entraTenantId
     corsOrigins: apiCorsOrigins
     deployOutboxWorker: deployOutboxWorker && deployAsyncMessaging
-    serviceBusNamespaceFqdn: deployAsyncMessaging ? asyncMessaging!.outputs.namespaceFqdn : ''
+    serviceBusNamespaceFqdn: asyncMessaging.?outputs.namespaceFqdn ?? ''
     serviceBusTopicName: domainEventsTopicName
   }
 }
@@ -400,7 +400,7 @@ output postgresFqdn string = deployPostgres ? postgresFqdnValue : ''
 output applicationDatabaseName string = deployPostgres ? postgresDatabaseName : ''
 output databaseSecretsStored bool = deployPostgres && storeDatabaseSecrets
 output asyncMessagingDeployed bool = deployAsyncMessaging
-output serviceBusNamespaceName string = deployAsyncMessaging ? asyncMessaging!.outputs.namespaceName : ''
-output domainEventsTopic string = deployAsyncMessaging ? asyncMessaging!.outputs.topicName : ''
+output serviceBusNamespaceName string = asyncMessaging.?outputs.namespaceName ?? ''
+output domainEventsTopic string = asyncMessaging.?outputs.topicName ?? ''
 output apiRuntimeDeployed bool = deployApiRuntime
 output outboxWorkerDeployed bool = deployApiRuntime && deployOutboxWorker && deployAsyncMessaging
