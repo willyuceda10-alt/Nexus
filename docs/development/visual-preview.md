@@ -5,7 +5,7 @@ This preview path is intentionally independent from GitHub Actions and from Azur
 ## Option A — GitHub Codespaces (fastest visual review)
 
 1. Open repository `willyuceda10-alt/Nexus` in GitHub.
-2. Select branch `feature/notification-preferences-m365-foundation`.
+2. Select branch `feature/product-shell-redesign-v2`.
 3. Click **Code → Codespaces → Create codespace on this branch**.
 4. Wait for the dev container to finish `npm ci`.
 5. In the Codespaces terminal run:
@@ -29,6 +29,7 @@ so it does not require PostgreSQL, Entra, Service Bus or the API. It is suitable
 From a local clone of this branch:
 
 ```powershell
+git checkout feature/product-shell-redesign-v2
 npm ci
 $env:VITE_DATA_MODE="mock"
 npm run dev:web
@@ -40,21 +41,17 @@ Then open:
 http://localhost:3000
 ```
 
-## What can be reviewed visually in mock mode
+## Redesign checkpoints
 
-- Centro de mando
-- Proyectos
-- WBS / Gantt layout
-- Recursos
-- Materiales
-- Costos
-- Automatizaciones
-- Mi trabajo / Inbox shell
-- Riesgos
-- Reuniones
-- Documentos
-- Analítica
-- Configuración
+Review these flows first:
+
+1. **Centro de mando** — operational hierarchy, portfolio pulse, attention and upcoming work.
+2. **Proyectos** — workspace project catalog; it no longer jumps directly into the first project.
+3. **Proyecto** — primary domains (`Resumen`, `Trabajo`, `Planificación`, `Costos`, `Riesgos`, `Reuniones`, `Documentos`).
+4. **Trabajo** — Table/Kanban are alternate views of the same work model.
+5. **Planificación** — Gantt/WBS and Timeline are alternate planning views.
+6. **Sidebar/Header** — Empresa → Workspace → page/project context remains visible.
+7. **Mi trabajo, Materiales, Costos, Automatizaciones and Configuración** — verify visual continuity with the new shell.
 
 API-backed data mutation is not executed in mock mode.
 
