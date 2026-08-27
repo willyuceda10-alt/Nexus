@@ -7,6 +7,7 @@ export type ApiPermissionKeyV2 =
   | 'workspace.read'
   | 'workspace.manage'
   | 'workspace.manage_permissions'
+  | 'workspace.manage_automation'
   | 'project.read'
   | 'project.manage'
   | 'project.schedule.read'
