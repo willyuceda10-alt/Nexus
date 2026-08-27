@@ -34,25 +34,27 @@ Open `http://localhost:3000`.
 2. **Proyectos** — workspace project catalog and project context.
 3. **Tableros** — Table/Kanban/Model editor.
 4. **Planificar -> Calendario y Timeline** — generic WorkView temporal projection.
-5. **Colaborar -> Reuniones -> Recurring Meetings V1** — recurring-series layer at the top of the meeting center.
-6. **Crear serie** — title, description, participants, external guests, one room, equipment, start/end and M365 toggle.
-7. **Patrón** — Daily, Weekly or absolute Monthly by day-of-month **1 through 28 only** in V1.
-8. **Rango** — numbered occurrences or end date only.
-9. **Serie existente** — expand occurrences and inspect sequence/date/status/exception marker.
-10. **Mover esta** — reschedule exactly one occurrence as an exception.
-11. **Cancelar esta** — cancel exactly one occurrence without cancelling the series.
-12. **Reprogramar serie** — series-wide time shift before any exceptions/cancellations exist.
-13. **Cancelar serie** — canonical whole-series lifecycle action.
-14. **Meeting Lifecycle V2** — normal meeting reschedule/cancel continuity.
-15. **Programación inteligente V2** — people + room + equipment + Teams scheduling flow.
-16. **Salas y recursos** — resource catalog and booking administration.
-17. **Calendario mensual / Próximas reuniones** — agenda, Teams/Outlook actions and sync state.
-18. **Derivar tarea / Decisiones** — collaboration governance continuity.
-19. **Mi trabajo, Materiales, Costos, Automatizaciones, Configuración** — shared shell continuity.
+5. **Colaborar -> Reuniones -> Agenda canónica** — API mode only: one calendar projection combining simple meetings and materialized recurring occurrences without duplicating the recurring master.
+6. **Agenda canónica -> excepción/cancelación** — moved occurrence appears on its current date; cancelled occurrence stays visible as history. Recurring entries deliberately do not expose a Teams/Outlook link until occurrence-link behavior is Graph-smoke-tested.
+7. **Recurring Meetings V1** — recurring-series management layer.
+8. **Crear serie** — title, description, participants, external guests, one room, equipment, start/end and M365 toggle.
+9. **Patrón** — Daily, Weekly or absolute Monthly by day-of-month **1 through 28 only** in V1.
+10. **Rango** — numbered occurrences or end date only.
+11. **Serie existente** — expand occurrences and inspect sequence/date/status/exception marker.
+12. **Mover esta** — reschedule exactly one occurrence as an exception.
+13. **Cancelar esta** — cancel exactly one occurrence without cancelling the series.
+14. **Reprogramar serie** — series-wide time shift before any exceptions/cancellations exist.
+15. **Cancelar serie** — canonical whole-series lifecycle action.
+16. **Meeting Lifecycle V2** — normal meeting reschedule/cancel continuity.
+17. **Programación inteligente V2** — people + room + equipment + Teams scheduling flow.
+18. **Salas y recursos** — resource catalog and booking administration.
+19. **Calendario mensual / Próximas reuniones** — existing meeting-center agenda, Teams/Outlook actions and sync state.
+20. **Derivar tarea / Decisiones** — collaboration governance continuity.
+21. **Mi trabajo, Materiales, Costos, Automatizaciones, Configuración** — shared shell continuity.
 
 ## What mock mode proves
 
-Mock mode proves layout, navigation and browser-local interactions only. Recurring Meetings V1 intentionally does not create fake recurring series in mock mode; persistent series creation and occurrence lifecycle operations require API mode.
+Mock mode proves layout, navigation and browser-local interactions only. Recurring Meetings V1 intentionally does not create fake recurring series in mock mode; persistent series creation, canonical mixed-calendar projection and occurrence lifecycle operations require API mode.
 
 It does not prove:
 
@@ -60,6 +62,7 @@ It does not prove:
 - RLS / FORCE RLS;
 - cross-booking concurrency guards;
 - authenticated API calls;
+- canonical mixed-calendar projection queries;
 - Microsoft Graph availability;
 - Outlook recurring series creation;
 - Graph `/instances` resolution;
