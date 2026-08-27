@@ -49,7 +49,12 @@ BEGIN
     'schedule_dependencies_v2',
     'project_baselines',
     'project_baseline_items',
-    'authorization_policies'
+    'authorization_policies',
+    'automation_definitions_v1',
+    'automation_versions_v1',
+    'automation_runs_v1',
+    'automation_step_runs_v1',
+    'automation_approval_requests_v1'
   ]
   LOOP
     -- This script is also used as a defensive re-application step. During
@@ -81,7 +86,7 @@ CREATE INDEX IF NOT EXISTS idx_domain_events_payload_gin
 
 CREATE INDEX IF NOT EXISTS idx_nexus_objects_fts
   ON nexus_objects USING GIN (
-    to_tsvector('spanish', coalesce(title, '') || ' ' || coalesce(description, '')
+    to_tsvector('spanish', coalesce(title, '') || ' ' || coalesce(description, ''))
   );
 
 -- Defensive check: fail closed when no tenant context exists.
