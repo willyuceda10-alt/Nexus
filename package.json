@@ -19,6 +19,7 @@
     "lint": "npm run typecheck",
     "test": "npm run test --workspace @nexus/api",
     "test:governance": "tsx src/domain/governanceRisk.smoke.ts",
+    "test:meetings": "tsx src/domain/meetingsDecisions.smoke.ts",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:format": "prisma format",
