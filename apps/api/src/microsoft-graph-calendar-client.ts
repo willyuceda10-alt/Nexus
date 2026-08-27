@@ -130,6 +130,19 @@ export class MicrosoftGraphCalendarClient {
     return this.readEvent(input.organizerGraphUser, graphEventId);
   }
 
+  async cancelEvent(organizerGraphUser: string, graphEventId: string, comment: string | null): Promise<void> {
+    const path = `/users/${encodeURIComponent(organizerGraphUser)}/events/${encodeURIComponent(graphEventId)}/cancel`;
+    const response = await this.graphFetch(path, {
+      method: 'POST',
+      body: JSON.stringify({ comment: comment ?? 'Reunión cancelada desde Bridata.' }),
+    });
+    if (response.status === 404) return;
+    if (response.status !== 202) {
+      const text = (await response.text()).slice(0, 5000);
+      throw new MicrosoftGraphCalendarError(response.status, `Graph calendar cancellation failed (${response.status}): ${text}`);
+    }
+  }
+
   close(): void {
     this.tokenProvider.reset();
   }
