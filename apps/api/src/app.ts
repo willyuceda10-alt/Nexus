@@ -83,6 +83,16 @@ export async function buildApp(): Promise<FastifyInstance> {
       return;
     }
 
+    if (error.code === 'P0001') {
+      request.log.info({ err: error }, 'Bridata domain integrity guard rejected request');
+      void reply.code(409).send({
+        error: 'domain_integrity_conflict',
+        message: error.message,
+        correlationId: request.id,
+      });
+      return;
+    }
+
     request.log.error({ err: error }, 'Unhandled Bridata Project API error');
     const statusCode = error.statusCode && error.statusCode < 500 ? error.statusCode : 500;
     void reply.code(statusCode).send({
