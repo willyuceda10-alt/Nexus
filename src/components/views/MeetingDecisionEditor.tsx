@@ -82,10 +82,10 @@ export const MeetingDecisionEditor: React.FC<{
     try {
       setError(null);
       const participantList = parseParticipants(participants);
-      const normalizedMeetingDate = meetingDate ? new Date(meetingDate).toISOString() : undefined;
+      const normalizedMeetingDate = meetingDate ? new Date(meetingDate).toISOString() : '';
       await updateNexusObject(meeting.id, {
         status,
-        ...(normalizedMeetingDate ? { meetingDate: normalizedMeetingDate } : {}),
+        meetingDate: normalizedMeetingDate,
         meetingAgenda: agenda.trim(),
         meetingMinutes: minutes.trim(),
         participants: participantList,
@@ -102,7 +102,7 @@ export const MeetingDecisionEditor: React.FC<{
       await updateNexusObject(decision.id, {
         status,
         decisionJustification: justification.trim(),
-        meetingId: meetingId || undefined,
+        meetingId,
       });
       onClose();
     } catch (cause) {
