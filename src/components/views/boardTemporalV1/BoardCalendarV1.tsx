@@ -24,10 +24,12 @@ function monthLabel(date: Date): string {
   return new Intl.DateTimeFormat('es-PE', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(date);
 }
 
-function statusClass(status: string): string {
-  if (status === 'COMPLETED' || status === 'APPROVED') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
-  if (status === 'BLOCKED' || status === 'REJECTED') return 'border-rose-200 bg-rose-50 text-rose-700';
-  if (status === 'IN_PROGRESS') return 'border-green-200 bg-green-50 text-green-800';
+function semanticClass(value: string | null, fallbackStatus: string, priority: string): string {
+  const normalized = (value || fallbackStatus || priority).trim().toUpperCase();
+  if (['COMPLETED', 'APPROVED', 'DONE', 'LOW'].includes(normalized)) return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+  if (['BLOCKED', 'REJECTED', 'CRITICAL'].includes(normalized)) return 'border-rose-200 bg-rose-50 text-rose-700';
+  if (['HIGH', 'AT_RISK', 'LATE'].includes(normalized)) return 'border-amber-200 bg-amber-50 text-amber-800';
+  if (['IN_PROGRESS', 'ACTIVE', 'MEDIUM'].includes(normalized)) return 'border-green-200 bg-green-50 text-green-800';
   return 'border-slate-200 bg-slate-50 text-slate-700';
 }
 
@@ -54,9 +56,9 @@ export function BoardCalendarV1({
           <h3 className="mt-1 text-[15px] font-extrabold capitalize text-slate-950">{monthLabel(month)}</h3>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1)))} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"><ChevronLeft className="h-4 w-4" /></button>
+          <button onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1)))} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Mes anterior"><ChevronLeft className="h-4 w-4" /></button>
           <button onClick={() => setMonth(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)))} className="h-8 rounded-lg border border-slate-200 px-3 text-[9px] font-bold text-slate-600 hover:bg-slate-50">Hoy</button>
-          <button onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)))} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"><ChevronRight className="h-4 w-4" /></button>
+          <button onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)))} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Mes siguiente"><ChevronRight className="h-4 w-4" /></button>
         </div>
       </div>
       <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50/80">
@@ -75,8 +77,8 @@ export function BoardCalendarV1({
               </div>
               <div className="mt-1.5 space-y-1">
                 {dayItems.slice(0, 3).map((item) => (
-                  <button key={`${key}-${item.objectId}`} onClick={() => onOpen(item.objectId)} className={`block w-full truncate rounded-md border px-2 py-1 text-left text-[8px] font-bold ${statusClass(item.status)}`} title={item.title}>
-                    {item.title}
+                  <button key={`${key}-${item.objectId}`} onClick={() => onOpen(item.objectId)} className={`block w-full truncate rounded-md border px-2 py-1 text-left text-[8px] font-bold ${semanticClass(item.colorValue, item.status, item.priority)}`} title={item.title}>
+                    {item.displayTitle || item.title}
                   </button>
                 ))}
               </div>
