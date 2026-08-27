@@ -1,0 +1,34 @@
+model WorkBoardOptionSetV1 {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  boardId       String   @map("board_id") @db.Uuid
+  columnId      String   @unique @map("column_id") @db.Uuid
+  name          String   @db.VarChar(255)
+  allowMultiple Boolean  @default(false) @map("allow_multiple")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  options WorkBoardOptionV1[]
+
+  @@index([tenantId, boardId])
+  @@map("work_board_option_sets_v1")
+}
+
+model WorkBoardOptionV1 {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  optionSetId String   @map("option_set_id") @db.Uuid
+  key         String   @db.VarChar(100)
+  label       String   @db.VarChar(255)
+  color       String?  @db.VarChar(30)
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  optionSet WorkBoardOptionSetV1 @relation(fields: [optionSetId], references: [id], onDelete: Cascade)
+
+  @@unique([optionSetId, key])
+  @@index([tenantId, optionSetId, sortOrder])
+  @@map("work_board_options_v1")
+}
