@@ -12,6 +12,8 @@ export interface ApiBoardTemporalItemV1 {
   objectId: string;
   objectTypeKey: string;
   title: string;
+  displayTitle: string;
+  colorValue: string | null;
   status: string;
   priority: string;
   progress: number;
