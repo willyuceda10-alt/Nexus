@@ -15,6 +15,7 @@ import { ResourceManagementView } from './components/views/ResourceManagementVie
 import { MaterialsInventoryV2View } from './components/views/MaterialsInventoryV2View';
 import { CostControlV2View } from './components/views/CostControlV2View';
 import { AutomationsV1View } from './components/views/AutomationsV1View';
+import { InboxV1View } from './components/views/InboxV1View';
 import { GovernanceRiskView } from './components/views/GovernanceRiskView';
 import { MeetingsDecisionsView } from './components/views/MeetingsDecisionsView';
 import { DocumentsApprovalsView } from './components/views/DocumentsApprovalsView';
@@ -54,7 +55,7 @@ const MainContentRouter: React.FC = () => {
     case 'settings':
       return <SettingsView />;
     case 'inbox':
-      return <GovernanceRiskView />;
+      return <InboxV1View />;
     default:
       return <WorkspaceHome />;
   }
