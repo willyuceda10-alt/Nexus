@@ -302,12 +302,12 @@ export function calculateScheduleV2(input: ScheduleEngineV2Input): ScheduleEngin
     ...input.tasks.map((task) => (earlyStart.get(task.id) ?? 0) + task.durationMinutes),
   );
 
+  // targetFinish is a deadline, not an artificial project horizon. A later target
+  // must not create float or erase the actual critical path.
   const targetFinishOffset = input.targetFinish
     ? finishBoundaryOffset(input.anchorDate, input.targetFinish, input.calendar)
     : undefined;
-  const scheduledProjectFinishMinutes = targetFinishOffset === undefined
-    ? naturalFinishMinutes
-    : Math.max(naturalFinishMinutes, targetFinishOffset);
+  const scheduledProjectFinishMinutes = naturalFinishMinutes;
 
   const lateStart = new Map<string, number>();
   for (const task of input.tasks) {
