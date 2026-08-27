@@ -36,6 +36,7 @@ import { workCalendarV2Routes } from './routes/work-calendars-v2.js';
 import { workOsBoardComputedV1Routes } from './routes/work-os-board-computed-v1.js';
 import { workOsBoardConfigOptionsV1Routes } from './routes/work-os-board-config-options-v1.js';
 import { workOsBoardEditorV1Routes } from './routes/work-os-board-editor-v1.js';
+import { workOsBoardManagedOptionsV1Routes } from './routes/work-os-board-managed-options-v1.js';
 import { workOsBoardsV1Routes } from './routes/work-os-boards-v1.js';
 
 type PrismaWrappedDatabaseError = FastifyError & {
@@ -136,6 +137,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(workOsBoardsV1Routes);
   await app.register(workOsBoardEditorV1Routes);
   await app.register(workOsBoardConfigOptionsV1Routes);
+  await app.register(workOsBoardManagedOptionsV1Routes);
   await app.register(workOsBoardComputedV1Routes);
   await app.register(dependencyRoutes);
   await app.register(scheduleAnalysisRoutes);
