@@ -76,7 +76,12 @@ export async function processRecurringOccurrenceEventV1(
     }
 
     if (parsed.kind === 'sync') {
-      await graph.updateOccurrence(row.organizer_graph_user, graphOccurrenceId, { startAt:row.start_at,endAt:row.end_at,location:row.location });
+      await graph.updateOccurrence(row.organizer_graph_user, graphOccurrenceId, {
+        startAt:row.start_at,
+        endAt:row.end_at,
+        location:row.location,
+        eventTimeZone:'SA Pacific Standard Time',
+      });
       await withTenant(event.tenantId, async (tx) => {
         await tx.$executeRaw(Prisma.sql`
           UPDATE meeting_recurrence_occurrences_v1 SET graph_event_id=${graphOccurrenceId},is_exception=true,updated_at=CURRENT_TIMESTAMP
