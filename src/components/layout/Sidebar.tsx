@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CheckSquare2,
   ChevronRight,
+  CircleDollarSign,
   FileText,
   FolderKanban,
   Gauge,
@@ -49,6 +50,7 @@ export const Sidebar: React.FC = () => {
     { id: 'timeline', label: 'Cronograma', icon: CalendarClock },
     { id: 'resources', label: 'Recursos y capacidad', icon: UsersRound },
     { id: 'materials', label: 'Materiales', icon: PackageSearch },
+    { id: 'costs', label: 'Costos', icon: CircleDollarSign },
     { id: 'governance', label: 'Riesgos y cambios', icon: ShieldAlert },
   ];
 
