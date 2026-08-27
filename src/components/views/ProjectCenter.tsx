@@ -14,6 +14,7 @@ import { useNexus } from '../../context/NexusContext';
 import { TableView } from './TableView';
 import { KanbanView } from './KanbanView';
 import { WbsGanttV2View } from './WbsGanttV2View';
+import { ProjectMaterialRiskStrip } from './ProjectMaterialRiskStrip';
 import { TimelineView } from './TimelineView';
 import { GovernanceRiskView } from './GovernanceRiskView';
 import { MeetingsDecisionsView } from './MeetingsDecisionsView';
@@ -186,7 +187,12 @@ export const ProjectCenter: React.FC = () => {
         <div className="p-4 lg:p-5">
           {projectActiveSubTab === 'table' && <TableView projectId={project.id} />}
           {projectActiveSubTab === 'kanban' && <KanbanView projectId={project.id} />}
-          {projectActiveSubTab === 'gantt' && <WbsGanttV2View projectId={project.id} />}
+          {projectActiveSubTab === 'gantt' && (
+            <>
+              <ProjectMaterialRiskStrip projectId={project.id} />
+              <WbsGanttV2View projectId={project.id} />
+            </>
+          )}
           {projectActiveSubTab === 'timeline' && <TimelineView projectId={project.id} />}
           {projectActiveSubTab === 'governance' && <GovernanceRiskView projectId={project.id} />}
           {projectActiveSubTab === 'meetings' && <MeetingsDecisionsView projectId={project.id} />}
