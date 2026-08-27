@@ -7,6 +7,8 @@ param managedEnvironmentId string
 param registryServer string
 param apiIdentityResourceId string
 param apiIdentityClientId string
+param automationIdentityResourceId string
+param automationIdentityClientId string
 param apiImage string
 param migrationImage string
 param runtimeDatabaseSecretUri string
@@ -17,8 +19,10 @@ param corsOrigins string
 param deployApi bool = true
 param deployMigrationJob bool = true
 param deployOutboxWorker bool = false
+param deployAutomationWorker bool = false
 param serviceBusNamespaceFqdn string = ''
 param serviceBusTopicName string = 'bridata-domain-events'
+param serviceBusAutomationSubscriptionName string = 'automation-v1'
 
 var baseName = 'nexus-${environment}'
 
@@ -68,55 +72,21 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
           name: 'api'
           image: apiImage
           env: [
-            {
-              name: 'NODE_ENV'
-              value: 'production'
-            }
-            {
-              name: 'HOST'
-              value: '0.0.0.0'
-            }
-            {
-              name: 'PORT'
-              value: '8080'
-            }
-            {
-              name: 'LOG_LEVEL'
-              value: environment == 'prod' ? 'info' : 'debug'
-            }
-            {
-              name: 'DATABASE_URL'
-              secretRef: 'runtime-database-url'
-            }
-            {
-              name: 'CORS_ORIGINS'
-              value: corsOrigins
-            }
-            {
-              name: 'AUTH_MODE'
-              value: 'entra'
-            }
-            {
-              name: 'ENTRA_API_CLIENT_ID'
-              value: entraApiClientId
-            }
-            {
-              name: 'ENTRA_TENANT_ID'
-              value: entraTenantId
-            }
-            {
-              name: 'ENTRA_REQUIRED_SCOPE'
-              value: 'access_as_user'
-            }
+            { name: 'NODE_ENV', value: 'production' }
+            { name: 'HOST', value: '0.0.0.0' }
+            { name: 'PORT', value: '8080' }
+            { name: 'LOG_LEVEL', value: environment == 'prod' ? 'info' : 'debug' }
+            { name: 'DATABASE_URL', secretRef: 'runtime-database-url' }
+            { name: 'CORS_ORIGINS', value: corsOrigins }
+            { name: 'AUTH_MODE', value: 'entra' }
+            { name: 'ENTRA_API_CLIENT_ID', value: entraApiClientId }
+            { name: 'ENTRA_TENANT_ID', value: entraTenantId }
+            { name: 'ENTRA_REQUIRED_SCOPE', value: 'access_as_user' }
           ]
           probes: [
             {
               type: 'Liveness'
-              httpGet: {
-                path: '/health/live'
-                port: 8080
-                scheme: 'HTTP'
-              }
+              httpGet: { path: '/health/live', port: 8080, scheme: 'HTTP' }
               initialDelaySeconds: 10
               periodSeconds: 30
               timeoutSeconds: 5
@@ -125,11 +95,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
             }
             {
               type: 'Readiness'
-              httpGet: {
-                path: '/health/ready'
-                port: 8080
-                scheme: 'HTTP'
-              }
+              httpGet: { path: '/health/ready', port: 8080, scheme: 'HTTP' }
               initialDelaySeconds: 5
               periodSeconds: 10
               timeoutSeconds: 5
@@ -137,10 +103,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
               successThreshold: 1
             }
           ]
-          resources: {
-            cpu: json('0.25')
-            memory: '0.5Gi'
-          }
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
         }
       ]
       scale: {
@@ -149,11 +112,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
         rules: [
           {
             name: 'http'
-            http: {
-              metadata: {
-                concurrentRequests: '50'
-              }
-            }
+            http: { metadata: { concurrentRequests: '50' } }
           }
         ]
       }
@@ -167,91 +126,81 @@ resource outboxWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployOutbo
   tags: tags
   identity: {
     type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${apiIdentityResourceId}': {}
-    }
+    userAssignedIdentities: { '${apiIdentityResourceId}': {} }
   }
   properties: {
     managedEnvironmentId: managedEnvironmentId
     configuration: {
       activeRevisionsMode: 'Single'
-      registries: [
-        {
-          server: registryServer
-          identity: apiIdentityResourceId
-        }
-      ]
-      secrets: [
-        {
-          name: 'runtime-database-url'
-          keyVaultUrl: runtimeDatabaseSecretUri
-          identity: apiIdentityResourceId
-        }
-      ]
+      registries: [{ server: registryServer, identity: apiIdentityResourceId }]
+      secrets: [{ name: 'runtime-database-url', keyVaultUrl: runtimeDatabaseSecretUri, identity: apiIdentityResourceId }]
     }
     template: {
       containers: [
         {
           name: 'outbox'
           image: apiImage
-          command: [
-            'node'
-          ]
-          args: [
-            'apps/api/dist/outbox-worker.js'
-          ]
+          command: ['node']
+          args: ['apps/api/dist/outbox-worker.js']
           env: [
-            {
-              name: 'NODE_ENV'
-              value: 'production'
-            }
-            {
-              name: 'LOG_LEVEL'
-              value: environment == 'prod' ? 'info' : 'debug'
-            }
-            {
-              name: 'DATABASE_URL'
-              secretRef: 'runtime-database-url'
-            }
-            {
-              name: 'AUTH_MODE'
-              value: 'entra'
-            }
-            {
-              name: 'ENTRA_API_CLIENT_ID'
-              value: entraApiClientId
-            }
-            {
-              name: 'ENTRA_TENANT_ID'
-              value: entraTenantId
-            }
-            {
-              name: 'OUTBOX_WORKER_ENABLED'
-              value: 'true'
-            }
-            {
-              name: 'SERVICE_BUS_NAMESPACE'
-              value: serviceBusNamespaceFqdn
-            }
-            {
-              name: 'SERVICE_BUS_TOPIC'
-              value: serviceBusTopicName
-            }
-            {
-              name: 'AZURE_CLIENT_ID'
-              value: apiIdentityClientId
-            }
+            { name: 'NODE_ENV', value: 'production' }
+            { name: 'LOG_LEVEL', value: environment == 'prod' ? 'info' : 'debug' }
+            { name: 'DATABASE_URL', secretRef: 'runtime-database-url' }
+            { name: 'AUTH_MODE', value: 'entra' }
+            { name: 'ENTRA_API_CLIENT_ID', value: entraApiClientId }
+            { name: 'ENTRA_TENANT_ID', value: entraTenantId }
+            { name: 'OUTBOX_WORKER_ENABLED', value: 'true' }
+            { name: 'SERVICE_BUS_NAMESPACE', value: serviceBusNamespaceFqdn }
+            { name: 'SERVICE_BUS_TOPIC', value: serviceBusTopicName }
+            { name: 'AZURE_CLIENT_ID', value: apiIdentityClientId }
           ]
-          resources: {
-            cpu: json('0.25')
-            memory: '0.5Gi'
-          }
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
         }
       ]
-      scale: {
-        minReplicas: 1
-        maxReplicas: 1
-      }
+      scale: { minReplicas: 1, maxReplicas: 1 }
+    }
+  }
+}
+
+resource automationWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployAutomationWorker) {
+  name: '${baseName}-automation'
+  location: location
+  tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${automationIdentityResourceId}': {} }
+  }
+  properties: {
+    managedEnvironmentId: managedEnvironmentId
+    configuration: {
+      activeRevisionsMode: 'Single'
+      registries: [{ server: registryServer, identity: automationIdentityResourceId }]
+      secrets: [{ name: 'runtime-database-url', keyVaultUrl: runtimeDatabaseSecretUri, identity: automationIdentityResourceId }]
+    }
+    template: {
+      containers: [
+        {
+          name: 'automation'
+          image: apiImage
+          command: ['node']
+          args: ['apps/api/dist/automation-worker.js']
+          env: [
+            { name: 'NODE_ENV', value: 'production' }
+            { name: 'LOG_LEVEL', value: environment == 'prod' ? 'info' : 'debug' }
+            { name: 'DATABASE_URL', secretRef: 'runtime-database-url' }
+            { name: 'AUTH_MODE', value: 'entra' }
+            { name: 'ENTRA_API_CLIENT_ID', value: entraApiClientId }
+            { name: 'ENTRA_TENANT_ID', value: entraTenantId }
+            { name: 'AUTOMATION_WORKER_ENABLED', value: 'true' }
+            { name: 'SERVICE_BUS_NAMESPACE', value: serviceBusNamespaceFqdn }
+            { name: 'SERVICE_BUS_TOPIC', value: serviceBusTopicName }
+            { name: 'SERVICE_BUS_AUTOMATION_SUBSCRIPTION', value: serviceBusAutomationSubscriptionName }
+            { name: 'AZURE_CLIENT_ID', value: automationIdentityClientId }
+          ]
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+        }
+      ]
+      scale: { minReplicas: 1, maxReplicas: environment == 'prod' ? 3 : 1 }
     }
   }
 }
@@ -262,9 +211,7 @@ resource migrations 'Microsoft.App/jobs@2024-03-01' = if (deployMigrationJob) {
   tags: tags
   identity: {
     type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${apiIdentityResourceId}': {}
-    }
+    userAssignedIdentities: { '${apiIdentityResourceId}': {} }
   }
   properties: {
     environmentId: managedEnvironmentId
@@ -272,27 +219,11 @@ resource migrations 'Microsoft.App/jobs@2024-03-01' = if (deployMigrationJob) {
       triggerType: 'Manual'
       replicaTimeout: 900
       replicaRetryLimit: 1
-      manualTriggerConfig: {
-        parallelism: 1
-        replicaCompletionCount: 1
-      }
-      registries: [
-        {
-          server: registryServer
-          identity: apiIdentityResourceId
-        }
-      ]
+      manualTriggerConfig: { parallelism: 1, replicaCompletionCount: 1 }
+      registries: [{ server: registryServer, identity: apiIdentityResourceId }]
       secrets: [
-        {
-          name: 'admin-database-url'
-          keyVaultUrl: adminDatabaseSecretUri
-          identity: apiIdentityResourceId
-        }
-        {
-          name: 'runtime-database-url'
-          keyVaultUrl: runtimeDatabaseSecretUri
-          identity: apiIdentityResourceId
-        }
+        { name: 'admin-database-url', keyVaultUrl: adminDatabaseSecretUri, identity: apiIdentityResourceId }
+        { name: 'runtime-database-url', keyVaultUrl: runtimeDatabaseSecretUri, identity: apiIdentityResourceId }
       ]
     }
     template: {
@@ -301,23 +232,11 @@ resource migrations 'Microsoft.App/jobs@2024-03-01' = if (deployMigrationJob) {
           name: 'migrate'
           image: migrationImage
           env: [
-            {
-              name: 'DATABASE_URL'
-              secretRef: 'admin-database-url'
-            }
-            {
-              name: 'ADMIN_DATABASE_URL'
-              secretRef: 'admin-database-url'
-            }
-            {
-              name: 'RUNTIME_DATABASE_URL'
-              secretRef: 'runtime-database-url'
-            }
+            { name: 'DATABASE_URL', secretRef: 'admin-database-url' }
+            { name: 'ADMIN_DATABASE_URL', secretRef: 'admin-database-url' }
+            { name: 'RUNTIME_DATABASE_URL', secretRef: 'runtime-database-url' }
           ]
-          resources: {
-            cpu: json('0.25')
-            memory: '0.5Gi'
-          }
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
         }
       ]
     }
@@ -327,4 +246,5 @@ resource migrations 'Microsoft.App/jobs@2024-03-01' = if (deployMigrationJob) {
 output apiName string = deployApi ? api.name : ''
 output apiFqdn string = deployApi ? api.properties.configuration.ingress.fqdn : ''
 output outboxWorkerName string = deployOutboxWorker ? outboxWorker.name : ''
+output automationWorkerName string = deployAutomationWorker ? automationWorker.name : ''
 output migrationJobName string = deployMigrationJob ? migrations.name : ''
