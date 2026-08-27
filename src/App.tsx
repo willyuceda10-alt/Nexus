@@ -9,6 +9,7 @@ import { CreateObjectModal } from './components/layout/CreateObjectModal';
 import { CommandPalette } from './components/layout/CommandPalette';
 
 import { WorkspaceHome } from './components/views/WorkspaceHome';
+import { ProjectsOverviewView } from './components/views/ProjectsOverviewView';
 import { ProjectCenter } from './components/views/ProjectCenter';
 import { PortfoliosView } from './components/views/PortfoliosView';
 import { ResourceManagementView } from './components/views/ResourceManagementView';
@@ -29,8 +30,9 @@ const MainContentRouter: React.FC = () => {
   switch (activeTab) {
     case 'home':
       return <WorkspaceHome />;
-    case 'project':
     case 'projects':
+      return <ProjectsOverviewView />;
+    case 'project':
       return <ProjectCenter />;
     case 'portfolios':
       return <PortfoliosView />;
@@ -66,13 +68,13 @@ export function App() {
     <ApiBootstrapProvider>
       <NexusProvider>
         <SchedulingProvider>
-          <div className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] font-sans text-slate-900 selection:bg-green-200 selection:text-green-950">
+          <div className="flex h-screen w-screen overflow-hidden bg-[#F4F7F5] font-sans text-slate-900 selection:bg-green-200 selection:text-green-950">
             <Sidebar />
 
-            <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#F8FAFC]">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#F4F7F5]">
               <Header />
 
-              <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">
+              <main className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,#F7FAF8_0%,#F3F6F4_100%)]">
                 <MainContentRouter />
               </main>
             </div>
