@@ -1,0 +1,1 @@
+ALTER TYPE "NotificationDeliveryStatusV1" ADD VALUE IF NOT EXISTS 'PROCESSING';
