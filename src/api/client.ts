@@ -139,10 +139,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-// Shared transport for specialized API modules. It preserves the same access-token,
-// tenant, correlation-id and error semantics as the core Bridata client.
-export const bridataApiRequest = request;
-
 function objectListPath(params: ListObjectsParams = {}): string {
   const query = new URLSearchParams();
   if (params.workspaceId) query.set('workspaceId', params.workspaceId);
@@ -186,174 +182,245 @@ export const bridataApi = {
   deleteDependency(id: string): Promise<void> {
     return request<void>(`/api/v1/dependencies/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
-  scheduleAnalysis(projectId: string): Promise<ApiScheduleAnalysis> {
-    return request<ApiScheduleAnalysis>(`/api/v1/projects/${encodeURIComponent(projectId)}/schedule-analysis`);
+  scheduleAnalysis(projectId: string, signal?: AbortSignal): Promise<ApiScheduleAnalysis> {
+    const query = new URLSearchParams({ projectId });
+    return request<ApiScheduleAnalysis>(`/api/v1/schedule-analysis?${query.toString()}`, { signal });
   },
-  scheduleAnalysisV2(projectId: string): Promise<ApiScheduleAnalysisV2> {
-    return request<ApiScheduleAnalysisV2>(`/api/v2/projects/${encodeURIComponent(projectId)}/schedule-analysis`);
+  projectScheduleAnalysisV2(projectId: string, signal?: AbortSignal): Promise<ApiScheduleAnalysisV2> {
+    return request<ApiScheduleAnalysisV2>(`/api/v1/projects/${encodeURIComponent(projectId)}/schedule-analysis-v2`, { signal });
   },
-  listWbsV2(projectId: string): Promise<ApiWbsV2Response> {
-    return request<ApiWbsV2Response>(`/api/v2/projects/${encodeURIComponent(projectId)}/wbs`);
+  projectWbsV2(projectId: string, signal?: AbortSignal): Promise<ApiWbsV2Response> {
+    return request<ApiWbsV2Response>(`/api/v1/projects/${encodeURIComponent(projectId)}/wbs-v2`, { signal });
   },
-  updateWbsV2(projectId: string, itemId: string, input: UpdateApiWbsV2Input): Promise<UpdateApiWbsV2Response> {
-    return request<UpdateApiWbsV2Response>(`/api/v2/projects/${encodeURIComponent(projectId)}/wbs/${encodeURIComponent(itemId)}`, { method: 'PATCH', body: JSON.stringify(input) });
+  updateProjectWbsV2(projectId: string, input: UpdateApiWbsV2Input): Promise<UpdateApiWbsV2Response> {
+    return request<UpdateApiWbsV2Response>(`/api/v1/projects/${encodeURIComponent(projectId)}/wbs-v2`, {
+      method: 'PUT', body: JSON.stringify(input),
+    });
   },
-  updateWorkItemScheduleV2(itemId: string, input: UpdateApiWorkItemScheduleV2Input): Promise<ApiWorkItemScheduleV2> {
-    return request<ApiWorkItemScheduleV2>(`/api/v2/work-items/${encodeURIComponent(itemId)}/schedule`, { method: 'PATCH', body: JSON.stringify(input) });
+  updateWorkItemScheduleV2(objectId: string, input: UpdateApiWorkItemScheduleV2Input): Promise<ApiWorkItemScheduleV2> {
+    return request<ApiWorkItemScheduleV2>(`/api/v1/work-items/${encodeURIComponent(objectId)}/schedule`, {
+      method: 'PATCH', body: JSON.stringify(input),
+    });
   },
-  projectEngineBackfillV2(projectId: string): Promise<ApiProjectEngineV2BackfillResponse> {
-    return request<ApiProjectEngineV2BackfillResponse>(`/api/v2/projects/${encodeURIComponent(projectId)}/backfill`, { method: 'POST' });
+  backfillProjectEngineV2(projectId: string, dryRun = true): Promise<ApiProjectEngineV2BackfillResponse> {
+    return request<ApiProjectEngineV2BackfillResponse>('/api/v1/project-engine-v2/backfill', {
+      method: 'POST', body: JSON.stringify({ projectId, dryRun }),
+    });
   },
-  createBaseline(projectId: string, input: { name: string; notes?: string | null }): Promise<ApiBaselineSummary> {
-    return request<ApiBaselineSummary>(`/api/v1/projects/${encodeURIComponent(projectId)}/baselines`, { method: 'POST', body: JSON.stringify(input) });
+  materialSetupV2(workspaceId: string, signal?: AbortSignal): Promise<ApiMaterialSetupV2> {
+    const query = new URLSearchParams({ workspaceId });
+    return request<ApiMaterialSetupV2>(`/api/v1/material-engine-v2/setup?${query.toString()}`, { signal });
   },
-  listBaselines(projectId: string): Promise<{ items: ApiBaselineSummary[] }> {
-    return request<{ items: ApiBaselineSummary[] }>(`/api/v1/projects/${encodeURIComponent(projectId)}/baselines`);
+  materialOverviewV2(workspaceId: string, projectId?: string | null, asOf?: string, signal?: AbortSignal): Promise<ApiMaterialOverviewV2> {
+    const query = new URLSearchParams({ workspaceId });
+    if (projectId) query.set('projectId', projectId);
+    if (asOf) query.set('asOf', asOf);
+    return request<ApiMaterialOverviewV2>(`/api/v1/material-engine-v2/overview?${query.toString()}`, { signal });
   },
-  projectForecast(projectId: string): Promise<ApiProjectForecast> {
-    return request<ApiProjectForecast>(`/api/v1/projects/${encodeURIComponent(projectId)}/forecast`);
+  backfillMaterialEngineV2(workspaceId: string, dryRun = true): Promise<MaterialEngineBackfillV2Response> {
+    return request<MaterialEngineBackfillV2Response>('/api/v1/material-engine-v2/backfill', {
+      method: 'POST', body: JSON.stringify({ workspaceId, dryRun }),
+    });
   },
-  resourceCapacity(projectId: string): Promise<ApiResourceCapacityResponse> {
-    return request<ApiResourceCapacityResponse>(`/api/v1/projects/${encodeURIComponent(projectId)}/resource-capacity`);
+  syncMaterialMasterV2(input: {
+    materialObjectId: string;
+    code: string;
+    uomCode?: string;
+    uomName?: string;
+    decimalPlaces?: number;
+    unitCost?: number;
+    currency?: string;
+  }): Promise<ApiMaterialMasterV2> {
+    return request<ApiMaterialMasterV2>('/api/v1/material-engine-v2/materials/sync', {
+      method: 'POST', body: JSON.stringify(input),
+    });
   },
-  materialSetup(projectId: string): Promise<ApiMaterialSetupV2> {
-    return request<ApiMaterialSetupV2>(`/api/v2/projects/${encodeURIComponent(projectId)}/materials/setup`);
+  createWarehouseV2(input: { workspaceId: string; code: string; name: string }): Promise<ApiWarehouseV2> {
+    return request<ApiWarehouseV2>('/api/v1/material-engine-v2/warehouses', { method: 'POST', body: JSON.stringify(input) });
   },
-  materialOverview(projectId: string): Promise<ApiMaterialOverviewV2> {
-    return request<ApiMaterialOverviewV2>(`/api/v2/projects/${encodeURIComponent(projectId)}/materials/overview`);
+  createSupplierV2(input: { code: string; name: string; taxId?: string | null; email?: string | null; phone?: string | null }): Promise<ApiSupplierV2> {
+    return request<ApiSupplierV2>('/api/v1/material-engine-v2/suppliers', { method: 'POST', body: JSON.stringify(input) });
   },
-  createMaterialMaster(input: Record<string, unknown>): Promise<ApiMaterialMasterV2> {
-    return request<ApiMaterialMasterV2>('/api/v2/materials/master', { method: 'POST', body: JSON.stringify(input) });
+  createMaterialRequirementV2(input: CreateMaterialRequirementV2Input): Promise<{ id: string; status: string }> {
+    return request<{ id: string; status: string }>('/api/v1/material-engine-v2/requirements', { method: 'POST', body: JSON.stringify(input) });
   },
-  createSupplier(input: Record<string, unknown>): Promise<ApiSupplierV2> {
-    return request<ApiSupplierV2>('/api/v2/materials/suppliers', { method: 'POST', body: JSON.stringify(input) });
+  createReservationV2(input: CreateReservationV2Input): Promise<{ id: string; availableAfter: number }> {
+    return request<{ id: string; availableAfter: number }>('/api/v1/material-engine-v2/reservations', { method: 'POST', body: JSON.stringify(input) });
   },
-  createWarehouse(input: Record<string, unknown>): Promise<ApiWarehouseV2> {
-    return request<ApiWarehouseV2>('/api/v2/materials/warehouses', { method: 'POST', body: JSON.stringify(input) });
+  createPurchaseOrderV2(input: CreatePurchaseOrderV2Input): Promise<{ id: string; number: string; status: string; lineCount: number }> {
+    return request<{ id: string; number: string; status: string; lineCount: number }>('/api/v1/material-engine-v2/purchase-orders', { method: 'POST', body: JSON.stringify(input) });
   },
-  materialEngineBackfill(projectId: string): Promise<MaterialEngineBackfillV2Response> {
-    return request<MaterialEngineBackfillV2Response>(`/api/v2/projects/${encodeURIComponent(projectId)}/materials/backfill`, { method: 'POST' });
+  createGoodsReceiptV2(input: CreateGoodsReceiptV2Input): Promise<{ id: string; number: string; status: string; lineCount: number }> {
+    return request<{ id: string; number: string; status: string; lineCount: number }>('/api/v1/material-engine-v2/goods-receipts', { method: 'POST', body: JSON.stringify(input) });
   },
-  createMaterialRequirement(input: CreateMaterialRequirementV2Input): Promise<unknown> {
-    return request('/api/v2/materials/requirements', { method: 'POST', body: JSON.stringify(input) });
+  issueMaterialV2(input: CreateMaterialIssueV2Input): Promise<{ id: string; type: 'ISSUE'; quantity: number }> {
+    return request<{ id: string; type: 'ISSUE'; quantity: number }>('/api/v1/material-engine-v2/issues', { method: 'POST', body: JSON.stringify(input) });
   },
-  createReservation(input: CreateReservationV2Input): Promise<unknown> {
-    return request('/api/v2/materials/reservations', { method: 'POST', body: JSON.stringify(input) });
+  costCatalogV2(workspaceId: string, signal?: AbortSignal): Promise<ApiCostCatalogV2> {
+    const query = new URLSearchParams({ workspaceId });
+    return request<ApiCostCatalogV2>(`/api/v1/cost-engine-v2/catalog?${query.toString()}`, { signal });
   },
-  createPurchaseOrder(input: CreatePurchaseOrderV2Input): Promise<unknown> {
-    return request('/api/v2/materials/purchase-orders', { method: 'POST', body: JSON.stringify(input) });
+  projectCostOverviewV2(projectId: string, signal?: AbortSignal): Promise<ApiProjectCostOverviewV2> {
+    return request<ApiProjectCostOverviewV2>(`/api/v1/projects/${encodeURIComponent(projectId)}/cost-overview-v2`, { signal });
   },
-  createGoodsReceipt(input: CreateGoodsReceiptV2Input): Promise<unknown> {
-    return request('/api/v2/materials/goods-receipts', { method: 'POST', body: JSON.stringify(input) });
+  createCostCodeV2(input: CreateApiCostCodeV2Input): Promise<{ id: string }> {
+    return request<{ id: string }>('/api/v1/cost-engine-v2/cost-codes', { method: 'POST', body: JSON.stringify(input) });
   },
-  createMaterialIssue(input: CreateMaterialIssueV2Input): Promise<unknown> {
-    return request('/api/v2/materials/issues', { method: 'POST', body: JSON.stringify(input) });
+  updateProjectCostProfileV2(projectId: string, input: UpdateApiCostProfileV2Input): Promise<{ id: string }> {
+    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/cost-profile-v2`, { method: 'PUT', body: JSON.stringify(input) });
   },
-  costCatalog(projectId: string): Promise<ApiCostCatalogV2> {
-    return request<ApiCostCatalogV2>(`/api/v2/projects/${encodeURIComponent(projectId)}/costs/catalog`);
+  createBudgetLineV2(projectId: string, input: CreateApiBudgetLineV2Input): Promise<{ id: string }> {
+    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/budget-lines-v2`, { method: 'POST', body: JSON.stringify(input) });
   },
-  projectCostOverview(projectId: string): Promise<ApiProjectCostOverviewV2> {
-    return request<ApiProjectCostOverviewV2>(`/api/v2/projects/${encodeURIComponent(projectId)}/costs/overview`);
+  updateBudgetLineV2(id: string, input: UpdateApiBudgetLineV2Input): Promise<{ id: string }> {
+    return request<{ id: string }>(`/api/v1/cost-engine-v2/budget-lines/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
   },
-  createCostCode(input: CreateApiCostCodeV2Input): Promise<unknown> {
-    return request('/api/v2/costs/codes', { method: 'POST', body: JSON.stringify(input) });
+  createCommitmentV2(projectId: string, input: CreateApiCommitmentV2Input): Promise<{ id: string }> {
+    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/commitments-v2`, { method: 'POST', body: JSON.stringify(input) });
   },
-  updateCostProfile(projectId: string, input: UpdateApiCostProfileV2Input): Promise<unknown> {
-    return request(`/api/v2/projects/${encodeURIComponent(projectId)}/costs/profile`, { method: 'PATCH', body: JSON.stringify(input) });
+  updateCommitmentV2(id: string, input: { releasedAmount?: number; status?: 'OPEN' | 'CLOSED' | 'CANCELLED'; notes?: string | null }): Promise<{ id: string }> {
+    return request<{ id: string }>(`/api/v1/cost-engine-v2/commitments/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
   },
-  createBudgetLine(input: CreateApiBudgetLineV2Input): Promise<unknown> {
-    return request('/api/v2/costs/budget-lines', { method: 'POST', body: JSON.stringify(input) });
+  createActualCostV2(projectId: string, input: CreateApiActualCostV2Input): Promise<{ id: string }> {
+    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/actual-costs-v2`, { method: 'POST', body: JSON.stringify(input) });
   },
-  updateBudgetLine(id: string, input: UpdateApiBudgetLineV2Input): Promise<unknown> {
-    return request(`/api/v2/costs/budget-lines/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+  captureCostBaselineV2(projectId: string, name?: string | null): Promise<{ id: string; version: number; lineCount: number }> {
+    return request<{ id: string; version: number; lineCount: number }>(`/api/v1/projects/${encodeURIComponent(projectId)}/cost-baseline-v2`, {
+      method: 'POST', body: JSON.stringify({ name: name ?? null }),
+    });
   },
-  createCommitment(input: CreateApiCommitmentV2Input): Promise<unknown> {
-    return request('/api/v2/costs/commitments', { method: 'POST', body: JSON.stringify(input) });
+  listCostBaselinesV2(projectId: string, signal?: AbortSignal): Promise<{ items: Array<Record<string, unknown>> }> {
+    return request<{ items: Array<Record<string, unknown>> }>(`/api/v1/projects/${encodeURIComponent(projectId)}/cost-baselines-v2`, { signal });
   },
-  createActualCost(input: CreateApiActualCostV2Input): Promise<unknown> {
-    return request('/api/v2/costs/actuals', { method: 'POST', body: JSON.stringify(input) });
+  backfillCostEngineV2(projectId: string, dryRun = true): Promise<ApiCostBackfillV2Response> {
+    return request<ApiCostBackfillV2Response>('/api/v1/cost-engine-v2/backfill', { method: 'POST', body: JSON.stringify({ projectId, dryRun }) });
   },
-  costBackfill(projectId: string): Promise<ApiCostBackfillV2Response> {
-    return request<ApiCostBackfillV2Response>(`/api/v2/projects/${encodeURIComponent(projectId)}/costs/backfill`, { method: 'POST' });
-  },
-  listAutomations(): Promise<{ items: ApiAutomationDefinitionV1[] }> {
-    return request('/api/v1/automations');
-  },
-  createAutomation(input: CreateApiAutomationDefinitionV1Input): Promise<ApiAutomationDefinitionV1> {
-    return request('/api/v1/automations', { method: 'POST', body: JSON.stringify(input) });
-  },
-  listAutomationVersions(definitionId: string): Promise<{ items: ApiAutomationVersionV1[] }> {
-    return request(`/api/v1/automations/${encodeURIComponent(definitionId)}/versions`);
-  },
-  publishAutomationVersion(definitionId: string, input: PublishApiAutomationVersionV1Input): Promise<ApiAutomationVersionV1> {
-    return request(`/api/v1/automations/${encodeURIComponent(definitionId)}/versions`, { method: 'POST', body: JSON.stringify(input) });
-  },
-  publishInternalNotificationAutomationV2(definitionId: string, input: PublishInternalNotificationAutomationV2Input): Promise<PublishInternalNotificationAutomationV2Response> {
-    return request(`/api/v2/automations/${encodeURIComponent(definitionId)}/publish-internal-notification`, { method: 'POST', body: JSON.stringify(input) });
-  },
-  listAutomationRuns(status?: ApiAutomationStatusV1): Promise<{ items: ApiAutomationRunV1[] }> {
+  listAutomationsV1(params: { workspaceId?: string; projectId?: string; status?: ApiAutomationStatusV1 } = {}, signal?: AbortSignal): Promise<{ items: ApiAutomationDefinitionV1[] }> {
     const query = new URLSearchParams();
-    if (status) query.set('status', status);
+    if (params.workspaceId) query.set('workspaceId', params.workspaceId);
+    if (params.projectId) query.set('projectId', params.projectId);
+    if (params.status) query.set('status', params.status);
     const suffix = query.toString();
-    return request(suffix ? `/api/v1/automation-runs?${suffix}` : '/api/v1/automation-runs');
+    return request<{ items: ApiAutomationDefinitionV1[] }>(`/api/v1/automations-v1${suffix ? `?${suffix}` : ''}`, { signal });
   },
-  listAutomationApprovals(status?: ApiAutomationApprovalStatusV1): Promise<{ items: ApiAutomationApprovalV1[] }> {
-    const query = new URLSearchParams();
-    if (status) query.set('status', status);
-    const suffix = query.toString();
-    return request(suffix ? `/api/v1/automation-approvals?${suffix}` : '/api/v1/automation-approvals');
+  createAutomationV1(input: CreateApiAutomationDefinitionV1Input): Promise<ApiAutomationDefinitionV1> {
+    return request<ApiAutomationDefinitionV1>('/api/v1/automations-v1', { method: 'POST', body: JSON.stringify(input) });
   },
-  decideAutomationApproval(approvalId: string, decision: 'APPROVE' | 'REJECT'): Promise<ApiAutomationApprovalV1> {
-    return request(`/api/v1/automation-approvals/${encodeURIComponent(approvalId)}/decision`, { method: 'POST', body: JSON.stringify({ decision }) });
+  publishAutomationVersionV1(id: string, input: PublishApiAutomationVersionV1Input): Promise<ApiAutomationVersionV1> {
+    return request<ApiAutomationVersionV1>(`/api/v1/automations-v1/${encodeURIComponent(id)}/versions`, {
+      method: 'POST', body: JSON.stringify(input),
+    });
   },
-  listInbox(params: ListApiInboxV1Params = {}): Promise<ApiInboxListV1> {
+  publishInternalNotificationAutomationV2(
+    id: string,
+    input: PublishInternalNotificationAutomationV2Input,
+  ): Promise<PublishInternalNotificationAutomationV2Response> {
+    return request<PublishInternalNotificationAutomationV2Response>(
+      `/api/v1/automations-v1/${encodeURIComponent(id)}/internal-notification-version-v2`,
+      { method: 'POST', body: JSON.stringify(input) },
+    );
+  },
+  setAutomationStatusV1(id: string, status: ApiAutomationStatusV1): Promise<ApiAutomationDefinitionV1> {
+    return request<ApiAutomationDefinitionV1>(`/api/v1/automations-v1/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH', body: JSON.stringify({ status }),
+    });
+  },
+  automationRunsV1(id: string, limit = 50, signal?: AbortSignal): Promise<{ items: ApiAutomationRunV1[] }> {
+    const query = new URLSearchParams({ limit: String(limit) });
+    return request<{ items: ApiAutomationRunV1[] }>(`/api/v1/automations-v1/${encodeURIComponent(id)}/runs?${query.toString()}`, { signal });
+  },
+  automationApprovalsV1(status: ApiAutomationApprovalStatusV1 = 'PENDING', signal?: AbortSignal): Promise<{ items: ApiAutomationApprovalV1[] }> {
+    const query = new URLSearchParams({ status });
+    return request<{ items: ApiAutomationApprovalV1[] }>(`/api/v1/automation-approvals-v1?${query.toString()}`, { signal });
+  },
+  decideAutomationApprovalV1(id: string, decision: 'APPROVED' | 'REJECTED', comment?: string | null): Promise<{ id: string; status: string; decidedAt: string | null }> {
+    return request<{ id: string; status: string; decidedAt: string | null }>(`/api/v1/automation-approvals-v1/${encodeURIComponent(id)}/decision`, {
+      method: 'POST', body: JSON.stringify({ decision, comment: comment ?? null }),
+    });
+  },
+  inboxV1(params: ListApiInboxV1Params = {}, signal?: AbortSignal): Promise<ApiInboxListV1> {
     const query = new URLSearchParams();
     if (params.status) query.set('status', params.status);
-    if (params.requiresAction !== undefined) query.set('requiresAction', String(params.requiresAction));
-    if (params.limit) query.set('limit', String(params.limit));
+    if (params.unread !== undefined) query.set('unread', String(params.unread));
+    if (params.includeSnoozed !== undefined) query.set('includeSnoozed', String(params.includeSnoozed));
+    if (params.limit !== undefined) query.set('limit', String(params.limit));
     const suffix = query.toString();
-    return request(suffix ? `/api/v1/inbox?${suffix}` : '/api/v1/inbox');
+    return request<ApiInboxListV1>(`/api/v1/inbox-v1${suffix ? `?${suffix}` : ''}`, { signal });
   },
-  markInboxRead(itemId: string): Promise<ApiInboxItemV1> {
-    return request(`/api/v1/inbox/${encodeURIComponent(itemId)}/read`, { method: 'POST' });
+  readInboxItemV1(id: string): Promise<ApiInboxItemV1> {
+    return request<ApiInboxItemV1>(`/api/v1/inbox-v1/${encodeURIComponent(id)}/read`, { method: 'POST' });
   },
-  archiveInboxItem(itemId: string): Promise<ApiInboxItemV1> {
-    return request(`/api/v1/inbox/${encodeURIComponent(itemId)}/archive`, { method: 'POST' });
+  resolveInboxItemV1(id: string): Promise<ApiInboxItemV1> {
+    return request<ApiInboxItemV1>(`/api/v1/inbox-v1/${encodeURIComponent(id)}/resolve`, { method: 'POST' });
   },
-  getNotificationPreferences(): Promise<ApiNotificationPreferencesV1> {
-    return request('/api/v1/notification-preferences');
+  dismissInboxItemV1(id: string): Promise<ApiInboxItemV1> {
+    return request<ApiInboxItemV1>(`/api/v1/inbox-v1/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
   },
-  updateNotificationPreferences(input: UpdateApiNotificationPreferencesV1Input): Promise<ApiNotificationPreferencesV1> {
-    return request('/api/v1/notification-preferences', { method: 'PUT', body: JSON.stringify(input) });
+  snoozeInboxItemV1(id: string, until: string | null): Promise<ApiInboxItemV1> {
+    return request<ApiInboxItemV1>(`/api/v1/inbox-v1/${encodeURIComponent(id)}/snooze`, {
+      method: 'POST', body: JSON.stringify({ until }),
+    });
   },
-  getNotificationCapabilities(): Promise<ApiNotificationCapabilitiesV1> {
-    return request('/api/v1/notification-capabilities');
+  notificationPreferencesV1(signal?: AbortSignal): Promise<ApiNotificationPreferencesV1> {
+    return request<ApiNotificationPreferencesV1>('/api/v1/notification-preferences-v1', { signal });
   },
-  listBoards(workspaceId?: string): Promise<{ items: ApiWorkBoardSummaryV1[] }> {
-    const query = new URLSearchParams();
-    if (workspaceId) query.set('workspaceId', workspaceId);
-    const suffix = query.toString();
-    return request(suffix ? `/api/v1/work-os/boards-v1?${suffix}` : '/api/v1/work-os/boards-v1');
+  updateNotificationPreferencesV1(input: UpdateApiNotificationPreferencesV1Input): Promise<void> {
+    return request<void>('/api/v1/notification-preferences-v1', {
+      method: 'PUT', body: JSON.stringify(input),
+    });
   },
-  createBoard(input: { workspaceId: string; objectDefinitionId: string; name: string; description?: string | null }): Promise<ApiWorkBoardDetailV1> {
-    return request('/api/v1/work-os/boards-v1', { method: 'POST', body: JSON.stringify(input) });
+  notificationCapabilitiesV1(signal?: AbortSignal): Promise<ApiNotificationCapabilitiesV1> {
+    return request<ApiNotificationCapabilitiesV1>('/api/v1/notification-capabilities-v1', { signal });
   },
-  boardData(boardId: string, viewId?: string): Promise<ApiWorkBoardDataV1> {
+  workBoardsV1(workspaceId: string, signal?: AbortSignal): Promise<{ items: ApiWorkBoardSummaryV1[] }> {
+    const query = new URLSearchParams({ workspaceId });
+    return request<{ items: ApiWorkBoardSummaryV1[] }>(`/api/v1/work-os/boards-v1?${query.toString()}`, { signal });
+  },
+  workBoardV1(boardId: string, signal?: AbortSignal): Promise<ApiWorkBoardDetailV1> {
+    return request<ApiWorkBoardDetailV1>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}`, { signal });
+  },
+  workBoardDataV1(boardId: string, viewId?: string | null, signal?: AbortSignal): Promise<ApiWorkBoardDataV1> {
     const query = new URLSearchParams();
     if (viewId) query.set('viewId', viewId);
     const suffix = query.toString();
-    return request(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/data${suffix ? `?${suffix}` : ''}`);
+    return request<ApiWorkBoardDataV1>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/data${suffix ? `?${suffix}` : ''}`, { signal });
   },
-  addBoardGroup(boardId: string, input: { name: string; position?: number }): Promise<unknown> {
-    return request(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/groups`, { method: 'POST', body: JSON.stringify(input) });
+  createWorkBoardV1(input: { workspaceId: string; objectDefinitionId: string; name: string; description?: string | null; icon?: string | null }): Promise<{ id: string }> {
+    return request<{ id: string }>('/api/v1/work-os/boards-v1', { method: 'POST', body: JSON.stringify(input) });
   },
-  addBoardColumn(boardId: string, input: { key: string; label: string; columnType: ApiWorkBoardColumnTypeV1; source: ApiWorkBoardColumnSourceV1; coreField?: string; fieldDefinitionId?: string; position?: number; isRequired?: boolean }): Promise<unknown> {
-    return request(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/columns`, { method: 'POST', body: JSON.stringify(input) });
+  createWorkBoardGroupV1(boardId: string, input: { name: string; key?: string; color?: string | null; sortOrder?: number }): Promise<Record<string, unknown>> {
+    return request<Record<string, unknown>>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/groups`, { method: 'POST', body: JSON.stringify(input) });
   },
-  addBoardView(boardId: string, input: { name: string; viewType: ApiWorkViewTypeV1; isDefault?: boolean }): Promise<unknown> {
-    return request(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/views`, { method: 'POST', body: JSON.stringify(input) });
+  createWorkBoardColumnV1(boardId: string, input: {
+    label: string; key?: string; source: ApiWorkBoardColumnSourceV1; dataType: ApiWorkBoardColumnTypeV1;
+    fieldKey: string; width?: number | null; sortOrder?: number; isVisible?: boolean; isEditable?: boolean;
+    config?: Record<string, unknown> | null;
+  }): Promise<Record<string, unknown>> {
+    return request<Record<string, unknown>>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/columns`, { method: 'POST', body: JSON.stringify(input) });
   },
-  addBoardItem(boardId: string, input: { objectId: string; groupId?: string | null; position?: number }): Promise<unknown> {
-    return request(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/items`, { method: 'POST', body: JSON.stringify(input) });
+  createWorkViewV1(boardId: string, input: { name: string; viewType: ApiWorkViewTypeV1; isDefault?: boolean; sortOrder?: number; config?: Record<string, unknown> }): Promise<Record<string, unknown>> {
+    return request<Record<string, unknown>>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/views`, { method: 'POST', body: JSON.stringify(input) });
+  },
+  placeWorkBoardItemV1(boardId: string, input: { objectId: string; groupId?: string | null; sortOrder?: number }): Promise<void> {
+    return request<void>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/items`, { method: 'POST', body: JSON.stringify(input) });
+  },
+  updateWorkBoardPlacementV1(boardId: string, objectId: string, input: { groupId?: string | null; sortOrder?: number }): Promise<void> {
+    return request<void>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/items/${encodeURIComponent(objectId)}`, { method: 'PATCH', body: JSON.stringify(input) });
+  },
+  projectForecast(projectId: string, asOf?: string, signal?: AbortSignal): Promise<ApiProjectForecast> {
+    const query = new URLSearchParams({ projectId });
+    if (asOf) query.set('asOf', asOf);
+    return request<ApiProjectForecast>(`/api/v1/forecast?${query.toString()}`, { signal });
+  },
+  resourceCapacity(workspaceId: string, from?: string, to?: string, signal?: AbortSignal): Promise<ApiResourceCapacityResponse> {
+    const query = new URLSearchParams({ workspaceId });
+    if (from) query.set('from', from);
+    if (to) query.set('to', to);
+    return request<ApiResourceCapacityResponse>(`/api/v1/resource-capacity?${query.toString()}`, { signal });
+  },
+  saveProjectBaseline(projectId: string, overwrite = false): Promise<ApiBaselineSummary> {
+    return request<ApiBaselineSummary>(`/api/v1/projects/${encodeURIComponent(projectId)}/baseline`, {
+      method: 'POST', body: JSON.stringify({ overwrite }),
+    });
   },
 };
