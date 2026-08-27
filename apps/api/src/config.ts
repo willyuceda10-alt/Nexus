@@ -43,11 +43,17 @@ const envSchema = z
     NOTIFICATION_WORKER_AVAILABLE: booleanFromEnv.default('false'),
     NOTIFICATION_RECEIVE_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(55).default(20),
     NOTIFICATION_LOOP_DELAY_MS: z.coerce.number().int().min(50).max(10000).default(250),
+    MEETING_CALENDAR_WORKER_ENABLED: booleanFromEnv.default('false'),
+    MEETING_CALENDAR_WORKER_AVAILABLE: booleanFromEnv.default('false'),
+    MEETING_CALENDAR_RECEIVE_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(55).default(20),
+    MEETING_CALENDAR_LOOP_DELAY_MS: z.coerce.number().int().min(50).max(10000).default(250),
     SERVICE_BUS_NAMESPACE: optionalNonEmptyString,
     SERVICE_BUS_TOPIC: z.string().trim().min(1).default('bridata-domain-events'),
     SERVICE_BUS_AUTOMATION_SUBSCRIPTION: z.string().trim().min(1).default('automation-v1'),
     SERVICE_BUS_NOTIFICATION_SUBSCRIPTION: z.string().trim().min(1).default('notifications-v1'),
+    SERVICE_BUS_MEETING_SUBSCRIPTION: z.string().trim().min(1).default('meetings-v1'),
     M365_GRAPH_DELIVERY_ENABLED: booleanFromEnv.default('false'),
+    M365_CALENDAR_SYNC_ENABLED: booleanFromEnv.default('false'),
     M365_OUTLOOK_SENDER_USER: optionalNonEmptyString,
     M365_TEAMS_ACTIVITY_TYPE: optionalNonEmptyString,
     M365_TEAMS_TOPIC_WEB_URL: optionalUrlString,
@@ -57,39 +63,23 @@ const envSchema = z
   .superRefine((env, ctx) => {
     if (env.AUTH_MODE === 'entra') {
       if (!env.ENTRA_API_CLIENT_ID) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['ENTRA_API_CLIENT_ID'],
-          message: 'ENTRA_API_CLIENT_ID is required when AUTH_MODE=entra',
-        });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ENTRA_API_CLIENT_ID'], message: 'ENTRA_API_CLIENT_ID is required when AUTH_MODE=entra' });
       }
       if (!env.ENTRA_TENANT_ID) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['ENTRA_TENANT_ID'],
-          message: 'ENTRA_TENANT_ID is required when AUTH_MODE=entra',
-        });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ENTRA_TENANT_ID'], message: 'ENTRA_TENANT_ID is required when AUTH_MODE=entra' });
       }
     }
 
     if (env.AUTH_MODE === 'dev') {
       if (env.NODE_ENV === 'production') {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['AUTH_MODE'],
-          message: 'AUTH_MODE=dev is forbidden in production',
-        });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['AUTH_MODE'], message: 'AUTH_MODE=dev is forbidden in production' });
       }
       if (!env.DEV_AUTH_ENABLED || !env.DEV_USER_ID || !env.DEV_TENANT_ID) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['DEV_AUTH_ENABLED'],
-          message: 'Dev auth requires DEV_AUTH_ENABLED=true, DEV_USER_ID and DEV_TENANT_ID',
-        });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['DEV_AUTH_ENABLED'], message: 'Dev auth requires DEV_AUTH_ENABLED=true, DEV_USER_ID and DEV_TENANT_ID' });
       }
     }
 
-    if ((env.OUTBOX_WORKER_ENABLED || env.AUTOMATION_WORKER_ENABLED || env.NOTIFICATION_WORKER_ENABLED) && !env.SERVICE_BUS_NAMESPACE) {
+    if ((env.OUTBOX_WORKER_ENABLED || env.AUTOMATION_WORKER_ENABLED || env.NOTIFICATION_WORKER_ENABLED || env.MEETING_CALENDAR_WORKER_ENABLED) && !env.SERVICE_BUS_NAMESPACE) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['SERVICE_BUS_NAMESPACE'],
@@ -107,9 +97,7 @@ if (!parsed.success) {
 
 export const config = {
   ...parsed.data,
-  corsOrigins: parsed.data.CORS_ORIGINS.split(',')
-    .map((value) => value.trim())
-    .filter(Boolean),
+  corsOrigins: parsed.data.CORS_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean),
 };
 
 export type BridataConfig = typeof config;
