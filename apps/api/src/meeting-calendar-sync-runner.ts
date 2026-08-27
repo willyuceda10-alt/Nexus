@@ -88,7 +88,7 @@ export async function processMeetingCalendarSyncEventV1(
       ) bookings ON bookings.meeting_resource_id=r.id
       WHERE r.tenant_id=${event.tenantId}::uuid
       ORDER BY r.resource_type, r.name
-    `);
+    `;
 
     await tx.$executeRaw(Prisma.sql`
       UPDATE meeting_collaboration_v1
@@ -132,6 +132,7 @@ export async function processMeetingCalendarSyncEventV1(
       attendees: [...attendeeMap.values()],
       isOnline: prepared.row.is_online,
       recurrence,
+      eventTimeZone: prepared.recurrence ? 'SA Pacific Standard Time' as const : 'UTC' as const,
     };
     const result = prepared.row.graph_event_id ? await graph.updateEvent(prepared.row.graph_event_id, input) : await graph.createEvent(input);
 
@@ -167,6 +168,6 @@ export async function processMeetingCalendarSyncEventV1(
         WHERE tenant_id=${event.tenantId}::uuid AND id=${collaborationId}::uuid
       `);
     });
-    return { handled:true, synced:false, retryableFailure:retryable, terminal:!retryable };
+    return { handled:true, synced:false,retryableFailure:retryable, terminal:!retryable };
   }
 }
