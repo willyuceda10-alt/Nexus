@@ -20,6 +20,18 @@ describe('permission engine v2', () => {
     expect(evaluatePermissionV2(base())).toMatchObject({ allowed: true, source: 'BASE_ROLE' });
   });
 
+  it('lets MANAGER operate workspace automations without permission administration', () => {
+    expect(evaluatePermissionV2(base({ permission: 'workspace.manage_automation' })))
+      .toMatchObject({ allowed: true, source: 'BASE_ROLE' });
+    expect(evaluatePermissionV2(base({ permission: 'workspace.manage_permissions' })))
+      .toMatchObject({ allowed: false, source: 'DEFAULT_DENY' });
+  });
+
+  it('denies automation management to a viewer by default', () => {
+    expect(evaluatePermissionV2(base({ workspaceRole: 'VIEWER', permission: 'workspace.manage_automation' })))
+      .toMatchObject({ allowed: false, source: 'DEFAULT_DENY' });
+  });
+
   it('denies by default when no role grants the permission', () => {
     expect(evaluatePermissionV2(base({ workspaceRole: 'VIEWER', permission: 'project.cost.write' })))
       .toMatchObject({ allowed: false, source: 'DEFAULT_DENY' });
