@@ -22,14 +22,23 @@ BEGIN
   IF NEW.lifecycle_status = 'CANCELLED'::"MeetingLifecycleStatusV2" AND NEW.cancelled_at IS NULL THEN
     RAISE EXCEPTION 'Cancelled meeting must include cancelled_at.' USING ERRCODE = 'P0001';
   END IF;
+
   IF NEW.cancelled_by IS NOT NULL AND NOT EXISTS (
     SELECT 1
     FROM users u
-    JOIN tenant_memberships tm ON tm.user_id = u.id AND tm.tenant_id = NEW.tenant_id AND tm.status = 'ACTIVE'
-    JOIN workspace_members wm ON wm.user_id = u.id AND wm.tenant_id = NEW.tenant_id AND wm.workspace_id = NEW.workspace_id
-    WHERE u.id = NEW.cancelled_by AND u.is_active = true
+    JOIN tenant_memberships tm
+      ON tm.user_id = u.id
+     AND tm.tenant_id = NEW.tenant_id
+     AND tm.status = 'ACTIVE'
+    LEFT JOIN workspace_members wm
+      ON wm.user_id = u.id
+     AND wm.tenant_id = NEW.tenant_id
+     AND wm.workspace_id = NEW.workspace_id
+    WHERE u.id = NEW.cancelled_by
+      AND u.is_active = true
+      AND (tm.role IN ('OWNER', 'TENANT_ADMIN') OR wm.user_id IS NOT NULL)
   ) THEN
-    RAISE EXCEPTION 'Meeting cancellation actor is not active in the workspace.' USING ERRCODE = 'P0001';
+    RAISE EXCEPTION 'Meeting cancellation actor is not authorized in the tenant/workspace.' USING ERRCODE = 'P0001';
   END IF;
   RETURN NEW;
 END;
