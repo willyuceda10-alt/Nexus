@@ -12,6 +12,7 @@ import { WorkspaceHome } from './components/views/WorkspaceHome';
 import { ProjectCenter } from './components/views/ProjectCenter';
 import { PortfoliosView } from './components/views/PortfoliosView';
 import { ResourceManagementView } from './components/views/ResourceManagementView';
+import { MaterialsView } from './components/views/MaterialsView';
 import { GovernanceRiskView } from './components/views/GovernanceRiskView';
 import { MeetingsDecisionsView } from './components/views/MeetingsDecisionsView';
 import { DocumentsApprovalsView } from './components/views/DocumentsApprovalsView';
@@ -32,6 +33,8 @@ const MainContentRouter: React.FC = () => {
       return <PortfoliosView />;
     case 'resources':
       return <ResourceManagementView />;
+    case 'materials':
+      return <MaterialsView />;
     case 'governance':
       return <GovernanceRiskView />;
     case 'meetings':
