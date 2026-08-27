@@ -85,6 +85,7 @@ export class AutomationValidationErrorV1 extends Error {
 
 const PATH_SEGMENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const FORBIDDEN_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
+const RESERVED_EMITTED_EVENT_KEYS = new Set(['_automation', 'tenantId', 'workspaceId', 'projectId', 'projectObjectId']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -185,15 +186,10 @@ export function evaluateAutomationConditionV1(
 }
 
 function validateValue(value: AutomationValueV1): void {
-  if (value.kind === 'EVENT_PATH') {
-    readAutomationPathV1({}, value.path);
-  }
+  if (value.kind === 'EVENT_PATH') readAutomationPathV1({}, value.path);
 }
 
-function conditionStats(
-  condition: AutomationConditionV1,
-  depth = 1,
-): { depth: number; predicates: number } {
+function conditionStats(condition: AutomationConditionV1, depth = 1): { depth: number; predicates: number } {
   if (condition.kind === 'PREDICATE') {
     validateValue(condition.left);
     if (condition.operator !== 'EXISTS' && !condition.right) {
@@ -202,7 +198,6 @@ function conditionStats(
     if (condition.right) validateValue(condition.right);
     return { depth, predicates: 1 };
   }
-
   if (condition.conditions.length === 0) {
     throw new AutomationValidationErrorV1('Condition groups must contain at least one condition.');
   }
@@ -228,6 +223,9 @@ function validateAction(action: AutomationActionV1): void {
     }
     validateActionValue(action.aggregateId, 'EMIT_EVENT aggregateId');
     for (const [key, value] of Object.entries(action.payload ?? {})) {
+      if (RESERVED_EMITTED_EVENT_KEYS.has(key)) {
+        throw new AutomationValidationErrorV1(`EMIT_EVENT payload key ${key} is reserved by Bridata routing.`);
+      }
       validateActionValue(value, `EMIT_EVENT payload.${key}`);
     }
     return;
@@ -262,12 +260,8 @@ export function validateAutomationVersionV1(options: {
 
   if (options.condition) {
     const stats = conditionStats(options.condition);
-    if (stats.depth > maxDepth) {
-      throw new AutomationValidationErrorV1(`Condition depth exceeds ${maxDepth}.`);
-    }
-    if (stats.predicates > maxPredicates) {
-      throw new AutomationValidationErrorV1(`Condition predicate count exceeds ${maxPredicates}.`);
-    }
+    if (stats.depth > maxDepth) throw new AutomationValidationErrorV1(`Condition depth exceeds ${maxDepth}.`);
+    if (stats.predicates > maxPredicates) throw new AutomationValidationErrorV1(`Condition predicate count exceeds ${maxPredicates}.`);
   }
 
   if (options.actions.length === 0 || options.actions.length > maxActions) {
@@ -287,10 +281,7 @@ export function automationTraceFromEventV1(event: AutomationEventEnvelopeV1): Au
   return { rootEventId, depth, visitedAutomationIds };
 }
 
-export function nextAutomationTraceV1(
-  trace: AutomationTraceV1,
-  automationDefinitionId: string,
-): AutomationTraceV1 {
+export function nextAutomationTraceV1(trace: AutomationTraceV1, automationDefinitionId: string): AutomationTraceV1 {
   return {
     rootEventId: trace.rootEventId,
     depth: trace.depth + 1,
