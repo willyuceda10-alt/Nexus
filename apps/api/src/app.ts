@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { registerRequestContext } from './auth.js';
 import { ProjectScheduleV2ValidationError } from './domain/project-schedule-v2.js';
 import { registerHierarchyWriteGuards } from './hierarchy-guard.js';
+import { authorizationV2Routes } from './routes/authorization-v2.js';
 import { baselineRoutes } from './routes/baselines.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
 import { costOperationsV2Routes } from './routes/cost-operations-v2.js';
@@ -113,6 +114,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(healthRoutes);
   await app.register(sessionRoutes);
   await app.register(meRoutes);
+  await app.register(authorizationV2Routes);
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
   await app.register(dependencyRoutes);
