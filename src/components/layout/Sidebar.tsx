@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   BarChart3,
+  BellRing,
   CalendarClock,
   CalendarDays,
   CheckSquare2,
@@ -36,12 +37,15 @@ export const Sidebar: React.FC = () => {
     objects,
     selectedProjectId,
     setSelectedProjectId,
+    setProjectActiveSubTab,
     approvals,
     currentUser,
+    currentWorkspace,
   } = useNexus();
   const [inboxUnread, setInboxUnread] = useState(0);
 
   const projects = objects.filter((object) => object.type === 'PROJECT');
+  const activeProjects = projects.filter((project) => !['COMPLETED', 'CANCELLED'].includes(project.status));
   const pendingApprovals = approvals.filter((approval) => approval.status === 'PENDING').length;
   const apiReady = apiBootstrap.dataMode === 'api' && apiBootstrap.status === 'ready';
 
@@ -50,17 +54,15 @@ export const Sidebar: React.FC = () => {
       setInboxUnread(0);
       return;
     }
-
     let cancelled = false;
     const refresh = async () => {
       try {
         const result = await bridataApi.inboxV1({ status: 'OPEN', limit: 1 });
         if (!cancelled) setInboxUnread(result.summary.unread);
       } catch {
-        // The full Inbox view owns user-visible error handling. Navigation badges fail quietly.
+        // Inbox owns visible error handling.
       }
     };
-
     const initial = window.setTimeout(() => { void refresh(); }, 500);
     const interval = window.setInterval(() => { void refresh(); }, 60_000);
     return () => {
@@ -70,25 +72,26 @@ export const Sidebar: React.FC = () => {
     };
   }, [apiReady, activeTab]);
 
-  const commandItems: NavigationItem[] = [
+  const overviewItems: NavigationItem[] = [
     { id: 'home', label: 'Centro de mando', icon: Gauge },
-    {
-      id: 'inbox',
-      label: 'Mi trabajo',
-      icon: CheckSquare2,
-      badge: apiReady ? inboxUnread : pendingApprovals,
-    },
+    { id: 'inbox', label: 'Mi trabajo', icon: CheckSquare2, badge: apiReady ? inboxUnread : pendingApprovals },
   ];
 
   const planningItems: NavigationItem[] = [
     { id: 'projects', label: 'Proyectos', icon: FolderKanban },
     { id: 'portfolios', label: 'Portafolios', icon: Layers3 },
-    { id: 'timeline', label: 'Cronograma', icon: CalendarClock },
-    { id: 'resources', label: 'Recursos y capacidad', icon: UsersRound },
+    { id: 'timeline', label: 'Plan maestro', icon: CalendarClock },
+  ];
+
+  const operationsItems: NavigationItem[] = [
+    { id: 'resources', label: 'Recursos', icon: UsersRound },
     { id: 'materials', label: 'Materiales', icon: PackageSearch },
     { id: 'costs', label: 'Costos', icon: CircleDollarSign },
-    { id: 'automations', label: 'Automatizaciones', icon: Workflow },
+  ];
+
+  const controlItems: NavigationItem[] = [
     { id: 'governance', label: 'Riesgos y cambios', icon: ShieldAlert },
+    { id: 'automations', label: 'Automatizaciones', icon: Workflow },
   ];
 
   const collaborationItems: NavigationItem[] = [
@@ -102,30 +105,22 @@ export const Sidebar: React.FC = () => {
       {items.map((item) => {
         const Icon = item.icon;
         const isActive = activeTab === item.id || (item.id === 'projects' && activeTab === 'project');
-
         return (
           <button
             key={item.id}
             onClick={() => setActiveTab(item.id)}
-            className={`group flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-[13px] transition-all ${
+            className={`group flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-[12px] transition ${
               isActive
-                ? 'bg-green-50 text-green-800 shadow-[inset_3px_0_0_#15803d]'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+                ? 'bg-green-50 font-bold text-green-900 ring-1 ring-green-100'
+                : 'font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-950'
             }`}
           >
             <span className="flex min-w-0 items-center gap-3">
-              <Icon
-                className={`h-[17px] w-[17px] flex-shrink-0 ${
-                  isActive ? 'text-green-700' : 'text-slate-400 group-hover:text-slate-600'
-                }`}
-              />
-              <span className={`truncate ${isActive ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+              <Icon className={`h-[16px] w-[16px] flex-none ${isActive ? 'text-green-700' : 'text-slate-400 group-hover:text-slate-600'}`} />
+              <span className="truncate">{item.label}</span>
             </span>
-
             {item.badge !== undefined && item.badge > 0 && (
-              <span className="ml-2 min-w-5 rounded-full bg-amber-50 px-1.5 py-0.5 text-center text-[10px] font-bold text-amber-700 ring-1 ring-amber-200">
-                {item.badge}
-              </span>
+              <span className="ml-2 min-w-5 rounded-full bg-amber-50 px-1.5 py-0.5 text-center text-[9px] font-black text-amber-700 ring-1 ring-amber-200">{item.badge}</span>
             )}
           </button>
         );
@@ -134,80 +129,86 @@ export const Sidebar: React.FC = () => {
   );
 
   return (
-    <aside className="flex h-full w-[252px] flex-shrink-0 flex-col border-r border-slate-200/80 bg-white">
-      <div className="flex h-[72px] items-center gap-3 border-b border-slate-100 px-5">
-        <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-green-700 to-emerald-500 shadow-[0_8px_20px_rgba(22,101,52,0.22)]">
-          <span className="text-[11px] font-black tracking-[0.08em] text-white">{BRAND.initials}</span>
+    <aside className="flex h-full w-[268px] flex-none flex-col border-r border-slate-200 bg-white">
+      <div className="border-b border-slate-100 px-4 py-4">
+        <div className="flex items-center gap-3 px-1">
+          <div className="grid h-10 w-10 flex-none place-items-center rounded-[14px] bg-green-700 shadow-[0_8px_20px_rgba(21,128,61,0.22)]">
+            <span className="text-[11px] font-black tracking-[0.08em] text-white">{BRAND.initials}</span>
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-extrabold tracking-tight text-slate-950">{BRAND.name}</p>
+            <p className="mt-0.5 truncate text-[9px] font-black uppercase tracking-[0.15em] text-green-700">Enterprise Work OS</p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <p className="truncate text-[15px] font-extrabold tracking-tight text-slate-950">{BRAND.name}</p>
-          <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400">
-            Enterprise Execution
-          </p>
+
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Workspace activo</p>
+              <p className="mt-1 truncate text-[11px] font-bold text-slate-800">{currentWorkspace?.name || 'Sin workspace'}</p>
+            </div>
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-white text-green-700 ring-1 ring-slate-200"><BellRing className="h-3.5 w-3.5" /></span>
+          </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4 no-scrollbar">
         <section>
-          <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Trabajo</p>
-          {renderItems(commandItems)}
+          <p className="px-3 pb-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Resumen</p>
+          {renderItems(overviewItems)}
         </section>
 
         <section className="mt-5">
-          <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Planificación y control</p>
+          <p className="px-3 pb-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Planificar</p>
           {renderItems(planningItems)}
         </section>
 
         <section className="mt-5">
-          <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Colaboración</p>
+          <p className="px-3 pb-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Operar</p>
+          {renderItems(operationsItems)}
+        </section>
+
+        <section className="mt-5">
+          <p className="px-3 pb-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Controlar</p>
+          {renderItems(controlItems)}
+        </section>
+
+        <section className="mt-5">
+          <p className="px-3 pb-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Colaborar</p>
           {renderItems(collaborationItems)}
         </section>
 
         <section className="mt-6 border-t border-slate-100 pt-5">
           <div className="mb-2 flex items-center justify-between px-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Proyectos activos</p>
-            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">{projects.length}</span>
+            <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Proyectos en marcha</p>
+            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-black text-slate-500">{activeProjects.length}</span>
           </div>
-
           <div className="space-y-1">
-            {projects.slice(0, 6).map((project) => {
+            {activeProjects.slice(0, 5).map((project) => {
               const selected = selectedProjectId === project.id && activeTab === 'project';
               return (
                 <button
                   key={project.id}
                   onClick={() => {
                     setSelectedProjectId(project.id);
+                    setProjectActiveSubTab('summary');
                     setActiveTab('project');
                   }}
-                  className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                    selected ? 'bg-slate-100' : 'hover:bg-slate-50'
-                  }`}
+                  className={`group w-full rounded-xl px-3 py-2.5 text-left transition ${selected ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
                 >
-                  <span
-                    className={`h-2 w-2 flex-shrink-0 rounded-full ${
-                      project.status === 'BLOCKED'
-                        ? 'bg-rose-500'
-                        : project.progress >= 80
-                          ? 'bg-emerald-500'
-                          : 'bg-green-500'
-                    }`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className={`block truncate text-[12px] ${selected ? 'font-semibold text-slate-950' : 'font-medium text-slate-600'}`}>
-                      {project.title}
-                    </span>
-                    <span className="mt-0.5 block text-[10px] text-slate-400">{project.progress}% completado</span>
-                  </span>
-                  <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5" />
+                  <div className="flex items-center gap-2.5">
+                    <span className={`h-2 w-2 flex-none rounded-full ${project.status === 'BLOCKED' ? 'bg-rose-500' : 'bg-green-500'}`} />
+                    <span className={`min-w-0 flex-1 truncate text-[11px] ${selected ? 'font-bold text-slate-950' : 'font-semibold text-slate-600'}`}>{project.title}</span>
+                    <ChevronRight className="h-3.5 w-3.5 flex-none text-slate-300 transition group-hover:translate-x-0.5" />
+                  </div>
+                  <div className="ml-4 mt-2 flex items-center gap-2">
+                    <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-green-600" style={{ width: `${Math.min(100, project.progress)}%` }} /></div>
+                    <span className="text-[8px] font-bold text-slate-400">{project.progress}%</span>
+                  </div>
                 </button>
               );
             })}
-
-            {projects.length === 0 && (
-              <div className="mx-2 rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-[11px] text-slate-400">
-                Sin proyectos todavía
-              </div>
-            )}
+            {activeProjects.length === 0 && <div className="mx-2 rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-[10px] text-slate-400">Sin proyectos activos</div>}
           </div>
         </section>
       </div>
@@ -215,26 +216,17 @@ export const Sidebar: React.FC = () => {
       <div className="border-t border-slate-100 p-3">
         <button
           onClick={() => setActiveTab('settings')}
-          className={`mb-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[12px] font-medium transition-colors ${
-            activeTab === 'settings' ? 'bg-green-50 text-green-800' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
-          }`}
+          className={`mb-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[11px] font-semibold transition ${activeTab === 'settings' ? 'bg-green-50 text-green-800' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
         >
-          <Settings2 className="h-4 w-4" />
-          Configuración
+          <Settings2 className="h-4 w-4" /> Configuración
         </button>
-
         <div className="flex items-center gap-3 rounded-2xl bg-slate-50 px-3 py-3 ring-1 ring-slate-100">
           {currentUser.avatar ? (
             <img src={currentUser.avatar} alt={currentUser.name} className="h-9 w-9 rounded-xl object-cover" />
           ) : (
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-green-100 text-xs font-bold text-green-800">
-              {currentUser.name.slice(0, 2).toUpperCase()}
-            </div>
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-green-100 text-[10px] font-black text-green-800">{currentUser.name.slice(0, 2).toUpperCase()}</div>
           )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[12px] font-semibold text-slate-900">{currentUser.name}</p>
-            <p className="mt-0.5 truncate text-[10px] text-slate-400">{currentUser.roleName}</p>
-          </div>
+          <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-bold text-slate-900">{currentUser.name}</p><p className="mt-0.5 truncate text-[9px] text-slate-400">{currentUser.roleName}</p></div>
         </div>
       </div>
     </aside>
