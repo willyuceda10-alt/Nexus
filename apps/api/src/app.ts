@@ -26,6 +26,7 @@ import { meetingAvailabilityV1Routes } from './routes/meeting-availability-v1.js
 import { meetingPeopleV1Routes } from './routes/meeting-people-v1.js';
 import { meetingResourceAvailabilityV1Routes } from './routes/meeting-resource-availability-v1.js';
 import { meetingResourcesV1Routes } from './routes/meeting-resources-v1.js';
+import { meetingSchedulingV2Routes } from './routes/meeting-scheduling-v2.js';
 import { meetingsV1Routes } from './routes/meetings-v1.js';
 import { notificationCapabilitiesV1Routes } from './routes/notification-capabilities-v1.js';
 import { notificationPreferencesV1Routes } from './routes/notification-preferences-v1.js';
@@ -69,19 +70,13 @@ export async function buildApp(): Promise<FastifyInstance> {
     requestIdHeader: 'x-correlation-id',
     genReqId: (request) => {
       const incoming = request.headers['x-correlation-id'];
-      return typeof incoming === 'string' && incoming.length <= 128
-        ? incoming
-        : randomUUID();
+      return typeof incoming === 'string' && incoming.length <= 128 ? incoming : randomUUID();
     },
     bodyLimit: 1_048_576,
   });
 
   registerRequestContext(app);
-
-  await app.register(helmet, {
-    contentSecurityPolicy: false,
-  });
-
+  await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, {
     origin(origin, callback) {
       if (!origin || config.corsOrigins.includes(origin)) {
@@ -102,7 +97,6 @@ export async function buildApp(): Promise<FastifyInstance> {
       });
     }
   });
-
   app.addHook('onSend', async (request, reply, payload) => {
     reply.header('x-correlation-id', request.id);
     return payload;
@@ -111,26 +105,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.setErrorHandler((error: FastifyError, request, reply) => {
     if (error instanceof ProjectScheduleV2ValidationError) {
       request.log.info({ err: error }, 'Project Engine V2 validation rejected request');
-      void reply.code(400).send({
-        error: 'invalid_project_schedule',
-        message: error.message,
-        correlationId: request.id,
-      });
+      void reply.code(400).send({ error: 'invalid_project_schedule', message: error.message, correlationId: request.id });
       return;
     }
-
     const dbError = error as PrismaWrappedDatabaseError;
     const postgresCode = dbError.code === 'P2010' ? dbError.meta?.code : dbError.code;
     if (postgresCode === 'P0001') {
       request.log.info({ err: error }, 'Bridata domain integrity guard rejected request');
-      void reply.code(409).send({
-        error: 'domain_integrity_conflict',
-        message: dbError.meta?.message || error.message,
-        correlationId: request.id,
-      });
+      void reply.code(409).send({ error: 'domain_integrity_conflict', message: dbError.meta?.message || error.message, correlationId: request.id });
       return;
     }
-
     request.log.error({ err: error }, 'Unhandled Bridata Project API error');
     const statusCode = error.statusCode && error.statusCode < 500 ? error.statusCode : 500;
     void reply.code(statusCode).send({
@@ -141,7 +125,6 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   registerHierarchyWriteGuards(app);
-
   await app.register(healthRoutes);
   await app.register(sessionRoutes);
   await app.register(meRoutes);
@@ -159,6 +142,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(meetingAvailabilityV1Routes);
   await app.register(meetingResourceAvailabilityV1Routes);
   await app.register(meetingResourcesV1Routes);
+  await app.register(meetingSchedulingV2Routes);
   await app.register(meetingActionsV1Routes);
   await app.register(workOsBoardsV1Routes);
   await app.register(workOsBoardEditorV1Routes);
