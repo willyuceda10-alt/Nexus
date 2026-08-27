@@ -8,8 +8,10 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "dev:outbox": "tsx src/outbox-worker.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
+    "start:outbox": "node dist/outbox-worker.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
