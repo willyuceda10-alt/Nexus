@@ -13,11 +13,15 @@ enum InboxStatusV1 {
 
 enum NotificationChannelV1 {
   INTERNAL
+  OUTLOOK_EMAIL
+  TEAMS_ACTIVITY
 }
 
 enum NotificationDeliveryStatusV1 {
+  PENDING
   DELIVERED
   FAILED
+  SKIPPED
 }
 
 model InboxItemV1 {
@@ -47,15 +51,40 @@ model InboxItemV1 {
   @@map("inbox_items_v1")
 }
 
+model NotificationPreferenceV1 {
+  id                 String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String                @map("tenant_id") @db.Uuid
+  userId             String                @map("user_id") @db.Uuid
+  channel            NotificationChannelV1
+  enabled            Boolean               @default(false)
+  minimumPriority    InboxPriorityV1       @default(MEDIUM) @map("minimum_priority")
+  onlyRequiresAction Boolean               @default(false) @map("only_requires_action")
+  quietHoursStart    String?               @map("quiet_hours_start") @db.VarChar(5)
+  quietHoursEnd      String?               @map("quiet_hours_end") @db.VarChar(5)
+  timezone           String                @default("UTC") @db.VarChar(100)
+  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, userId, channel])
+  @@index([tenantId, userId])
+  @@map("notification_preferences_v1")
+}
+
 model NotificationDeliveryV1 {
   id                  String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId            String                       @map("tenant_id") @db.Uuid
   userId              String                       @map("user_id") @db.Uuid
   inboxItemId         String?                      @map("inbox_item_id") @db.Uuid
   channel             NotificationChannelV1        @default(INTERNAL)
-  status              NotificationDeliveryStatusV1 @default(DELIVERED)
+  status              NotificationDeliveryStatusV1 @default(PENDING)
   title               String                       @db.VarChar(500)
   body                String?                      @db.Text
+  destination         String?                      @db.VarChar(500)
+  attempts            Int                          @default(0)
+  attemptedAt         DateTime?                    @map("attempted_at") @db.Timestamptz(6)
+  nextAttemptAt       DateTime?                    @map("next_attempt_at") @db.Timestamptz(6)
+  providerMessageId   String?                      @map("provider_message_id") @db.VarChar(500)
+  metadata            Json?                        @db.JsonB
   automationRunId     String?                      @map("automation_run_id") @db.Uuid
   automationStepRunId String?                      @unique @map("automation_step_run_id") @db.Uuid
   deliveredAt         DateTime?                    @map("delivered_at") @db.Timestamptz(6)
@@ -64,5 +93,6 @@ model NotificationDeliveryV1 {
   updatedAt           DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([tenantId, userId, createdAt(sort: Desc)])
+  @@index([tenantId, channel, status, nextAttemptAt])
   @@map("notification_deliveries_v1")
 }
