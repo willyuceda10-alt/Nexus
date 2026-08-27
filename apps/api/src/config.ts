@@ -26,8 +26,12 @@ const envSchema = z
     OUTBOX_IDLE_DELAY_MS: z.coerce.number().int().min(250).max(60000).default(5000),
     OUTBOX_LOOP_DELAY_MS: z.coerce.number().int().min(100).max(10000).default(1000),
     OUTBOX_TENANT_SCAN_LIMIT: z.coerce.number().int().min(1).max(1000).default(100),
+    AUTOMATION_WORKER_ENABLED: booleanFromEnv.default('false'),
+    AUTOMATION_RECEIVE_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(55).default(20),
+    AUTOMATION_LOOP_DELAY_MS: z.coerce.number().int().min(50).max(10000).default(250),
     SERVICE_BUS_NAMESPACE: z.string().trim().min(1).optional(),
     SERVICE_BUS_TOPIC: z.string().trim().min(1).default('bridata-domain-events'),
+    SERVICE_BUS_AUTOMATION_SUBSCRIPTION: z.string().trim().min(1).default('automation-v1'),
     AZURE_CLIENT_ID: z.string().uuid().optional(),
   })
   .superRefine((env, ctx) => {
@@ -65,11 +69,11 @@ const envSchema = z
       }
     }
 
-    if (env.OUTBOX_WORKER_ENABLED && !env.SERVICE_BUS_NAMESPACE) {
+    if ((env.OUTBOX_WORKER_ENABLED || env.AUTOMATION_WORKER_ENABLED) && !env.SERVICE_BUS_NAMESPACE) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['SERVICE_BUS_NAMESPACE'],
-        message: 'SERVICE_BUS_NAMESPACE is required when OUTBOX_WORKER_ENABLED=true',
+        message: 'SERVICE_BUS_NAMESPACE is required when an async worker is enabled.',
       });
     }
   });
