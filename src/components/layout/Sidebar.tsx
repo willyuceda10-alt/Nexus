@@ -7,6 +7,7 @@ import {
   CheckSquare2,
   ChevronRight,
   CircleDollarSign,
+  Columns3,
   FileText,
   FolderKanban,
   Gauge,
@@ -79,6 +80,7 @@ export const Sidebar: React.FC = () => {
 
   const planningItems: NavigationItem[] = [
     { id: 'projects', label: 'Proyectos', icon: FolderKanban },
+    { id: 'boards', label: 'Tableros', icon: Columns3 },
     { id: 'portfolios', label: 'Portafolios', icon: Layers3 },
     { id: 'timeline', label: 'Plan maestro', icon: CalendarClock },
   ];
