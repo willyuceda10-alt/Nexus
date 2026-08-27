@@ -1,7 +1,8 @@
 export type AutomationScalarV1 = string | number | boolean | null;
+export type AutomationLiteralV1 = AutomationScalarV1 | AutomationScalarV1[];
 
 export type AutomationValueV1 =
-  | { kind: 'LITERAL'; value: AutomationScalarV1 }
+  | { kind: 'LITERAL'; value: AutomationLiteralV1 }
   | { kind: 'EVENT_PATH'; path: string };
 
 export type AutomationPredicateOperatorV1 =
@@ -212,27 +213,37 @@ function conditionStats(
   };
 }
 
+function validateActionValue(value: AutomationValueV1 | undefined, field: string): void {
+  if (!value) return;
+  validateValue(value);
+  if (value.kind === 'LITERAL' && Array.isArray(value.value)) {
+    throw new AutomationValidationErrorV1(`${field} cannot use a list literal.`);
+  }
+}
+
 function validateAction(action: AutomationActionV1): void {
   if (action.type === 'EMIT_EVENT') {
     if (!/^bridata\.[a-z0-9._-]{1,130}$/i.test(action.eventType)) {
       throw new AutomationValidationErrorV1('EMIT_EVENT eventType must use the bridata.* namespace.');
     }
-    if (action.aggregateId) validateValue(action.aggregateId);
-    for (const value of Object.values(action.payload ?? {})) validateValue(value);
+    validateActionValue(action.aggregateId, 'EMIT_EVENT aggregateId');
+    for (const [key, value] of Object.entries(action.payload ?? {})) {
+      validateActionValue(value, `EMIT_EVENT payload.${key}`);
+    }
     return;
   }
   if (action.type === 'CREATE_TASK') {
-    validateValue(action.title);
-    if (action.description) validateValue(action.description);
-    if (action.projectId) validateValue(action.projectId);
-    if (action.workspaceId) validateValue(action.workspaceId);
-    if (action.assigneeId) validateValue(action.assigneeId);
-    if (action.dueDate) validateValue(action.dueDate);
+    validateActionValue(action.title, 'CREATE_TASK title');
+    validateActionValue(action.description, 'CREATE_TASK description');
+    validateActionValue(action.projectId, 'CREATE_TASK projectId');
+    validateActionValue(action.workspaceId, 'CREATE_TASK workspaceId');
+    validateActionValue(action.assigneeId, 'CREATE_TASK assigneeId');
+    validateActionValue(action.dueDate, 'CREATE_TASK dueDate');
     return;
   }
-  validateValue(action.title);
-  if (action.description) validateValue(action.description);
-  if (action.approverUserId) validateValue(action.approverUserId);
+  validateActionValue(action.title, 'REQUEST_APPROVAL title');
+  validateActionValue(action.description, 'REQUEST_APPROVAL description');
+  validateActionValue(action.approverUserId, 'REQUEST_APPROVAL approverUserId');
 }
 
 export function validateAutomationVersionV1(options: {
