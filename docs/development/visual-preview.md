@@ -36,7 +36,7 @@ Open `http://localhost:3000`.
 4. **Planificar -> Calendario y Timeline** — generic WorkView temporal projection.
 5. **Colaborar -> Reuniones -> Recurring Meetings V1** — recurring-series layer at the top of the meeting center.
 6. **Crear serie** — title, description, participants, external guests, one room, equipment, start/end and M365 toggle.
-7. **Patrón** — Daily, Weekly or Monthly by day-of-month only.
+7. **Patrón** — Daily, Weekly or absolute Monthly by day-of-month **1 through 28 only** in V1.
 8. **Rango** — numbered occurrences or end date only.
 9. **Serie existente** — expand occurrences and inspect sequence/date/status/exception marker.
 10. **Mover esta** — reschedule exactly one occurrence as an exception.
@@ -78,7 +78,7 @@ Requires:
 - Board/View, Meeting Collaboration and Meeting Resources migrations applied;
 - Meeting Scheduling V2 overlap-guard migration applied;
 - Meeting Lifecycle V2 migrations applied;
-- Recurring Meetings V1 migrations applied, including occurrence version/lifecycle and master-sync guard;
+- Recurring Meetings V1 migrations applied, including occurrence version/lifecycle, monthly 1..28 constraint and master-sync guard;
 - valid Bridata/Entra browser authentication;
 - `configureApiSession()` connected to the real access-token provider before authenticated browser API review;
 - preview origin allowed by API CORS.
