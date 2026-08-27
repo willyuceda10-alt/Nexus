@@ -1,0 +1,77 @@
+enum MeetingRecurrencePatternTypeV1 {
+  DAILY
+  WEEKLY
+  ABSOLUTE_MONTHLY
+}
+
+enum MeetingRecurrenceRangeTypeV1 {
+  NUMBERED
+  END_DATE
+}
+
+model MeetingRecurrenceSeriesV1 {
+  id                     String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String                         @map("tenant_id") @db.Uuid
+  workspaceId            String                         @map("workspace_id") @db.Uuid
+  meetingCollaborationId String                         @unique @map("meeting_collaboration_id") @db.Uuid
+  masterMeetingObjectId  String                         @unique @map("master_meeting_object_id") @db.Uuid
+  patternType            MeetingRecurrencePatternTypeV1 @map("pattern_type")
+  interval               Int
+  daysOfWeek             String[]                       @default([]) @map("days_of_week")
+  dayOfMonth             Int?                           @map("day_of_month")
+  rangeType              MeetingRecurrenceRangeTypeV1   @map("range_type")
+  rangeStartDate         DateTime                       @map("range_start_date") @db.Date
+  rangeEndDate           DateTime?                      @map("range_end_date") @db.Date
+  numberOfOccurrences    Int?                           @map("number_of_occurrences")
+  timezone               String                         @default("America/Lima") @db.VarChar(100)
+  createdBy              String                         @map("created_by") @db.Uuid
+  createdAt              DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  occurrences MeetingRecurrenceOccurrenceV1[]
+
+  @@index([tenantId, workspaceId, rangeStartDate])
+  @@map("meeting_recurrence_series_v1")
+}
+
+model MeetingRecurrenceOccurrenceV1 {
+  id                  String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                    @map("tenant_id") @db.Uuid
+  seriesId            String                    @map("series_id") @db.Uuid
+  sequence            Int
+  occurrenceDate      DateTime                  @map("occurrence_date") @db.Date
+  originalStartAt     DateTime                  @map("original_start_at") @db.Timestamptz(6)
+  startAt             DateTime                  @map("start_at") @db.Timestamptz(6)
+  endAt               DateTime                  @map("end_at") @db.Timestamptz(6)
+  lifecycleStatus     MeetingLifecycleStatusV2  @default(SCHEDULED) @map("lifecycle_status")
+  isException         Boolean                   @default(false) @map("is_exception")
+  graphEventId        String?                   @map("graph_event_id") @db.VarChar(1024)
+  cancellationComment String?                   @map("cancellation_comment") @db.Text
+  cancelledAt         DateTime?                 @map("cancelled_at") @db.Timestamptz(6)
+  createdAt           DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  series MeetingRecurrenceSeriesV1 @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  resourceBookings MeetingOccurrenceResourceBookingV1[]
+
+  @@unique([seriesId, sequence])
+  @@unique([seriesId, occurrenceDate])
+  @@index([tenantId, startAt, lifecycleStatus])
+  @@map("meeting_recurrence_occurrences_v1")
+}
+
+model MeetingOccurrenceResourceBookingV1 {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  occurrenceId      String   @map("occurrence_id") @db.Uuid
+  meetingResourceId String   @map("meeting_resource_id") @db.Uuid
+  createdBy         String   @map("created_by") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  occurrence MeetingRecurrenceOccurrenceV1 @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  resource   MeetingResourceV1              @relation(fields: [meetingResourceId], references: [id], onDelete: Restrict)
+
+  @@unique([occurrenceId, meetingResourceId])
+  @@index([tenantId, meetingResourceId])
+  @@map("meeting_occurrence_resource_bookings_v1")
+}
