@@ -68,9 +68,18 @@ export function validateBoardColumnV1(input: {
 }
 
 export function validateViewConfigV1(viewType: WorkViewTypeV1, config: Record<string, unknown>): void {
-  const allowed = new Set(['groupBy', 'kanbanColumnKey', 'dateFieldKey', 'startFieldKey', 'endFieldKey', 'filters', 'sort', 'hiddenColumnKeys', 'density']);
+  const allowed = new Set([
+    'groupBy', 'kanbanColumnKey', 'dateFieldKey', 'startFieldKey', 'endFieldKey',
+    'filters', 'sort', 'hiddenColumnKeys', 'columnOrder', 'density',
+  ]);
   for (const key of Object.keys(config)) {
     if (!allowed.has(key)) throw new WorkBoardValidationError(`Unsupported view config key: ${key}`);
+  }
+  if (config.hiddenColumnKeys !== undefined && (!Array.isArray(config.hiddenColumnKeys) || !config.hiddenColumnKeys.every((item) => typeof item === 'string'))) {
+    throw new WorkBoardValidationError('hiddenColumnKeys must be an array of column keys.');
+  }
+  if (config.columnOrder !== undefined && (!Array.isArray(config.columnOrder) || !config.columnOrder.every((item) => typeof item === 'string'))) {
+    throw new WorkBoardValidationError('columnOrder must be an array of column keys.');
   }
   if (viewType === 'KANBAN' && typeof config.kanbanColumnKey !== 'string') {
     throw new WorkBoardValidationError('KANBAN views require kanbanColumnKey.');
