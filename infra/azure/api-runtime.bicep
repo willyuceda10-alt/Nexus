@@ -28,6 +28,7 @@ param serviceBusTopicName string = 'bridata-domain-events'
 param serviceBusAutomationSubscriptionName string = 'automation-v1'
 param serviceBusNotificationSubscriptionName string = 'notifications-v1'
 param m365GraphDeliveryEnabled bool = false
+param m365AvailabilityEnabled bool = false
 param m365OutlookSenderUser string = ''
 param m365TeamsActivityType string = ''
 param m365TeamsTopicWebUrl string = ''
@@ -93,10 +94,12 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
             { name: 'ENTRA_REQUIRED_SCOPE', value: 'access_as_user' }
             { name: 'NOTIFICATION_WORKER_AVAILABLE', value: string(deployNotificationWorker) }
             { name: 'M365_GRAPH_DELIVERY_ENABLED', value: string(m365GraphDeliveryEnabled) }
+            { name: 'M365_AVAILABILITY_ENABLED', value: string(m365AvailabilityEnabled) }
             { name: 'M365_OUTLOOK_SENDER_USER', value: m365OutlookSenderUser }
             { name: 'M365_TEAMS_ACTIVITY_TYPE', value: m365TeamsActivityType }
             { name: 'M365_TEAMS_TOPIC_WEB_URL', value: m365TeamsTopicWebUrl }
             { name: 'M365_TEAMS_TOPIC_VALUE', value: m365TeamsTopicValue }
+            { name: 'AZURE_CLIENT_ID', value: apiIdentityClientId }
           ]
           probes: [
             {
