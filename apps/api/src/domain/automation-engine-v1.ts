@@ -18,11 +18,7 @@ export type AutomationPredicateOperatorV1 =
   | 'EXISTS';
 
 export type AutomationConditionV1 =
-  | {
-      kind: 'GROUP';
-      operator: 'AND' | 'OR';
-      conditions: AutomationConditionV1[];
-    }
+  | { kind: 'GROUP'; operator: 'AND' | 'OR'; conditions: AutomationConditionV1[] }
   | {
       kind: 'PREDICATE';
       left: AutomationValueV1;
@@ -111,7 +107,6 @@ export function readAutomationPathV1(root: unknown, path: string): unknown {
   ) {
     throw new AutomationValidationErrorV1(`Invalid event path: ${path}`);
   }
-
   let current: unknown = root;
   for (const part of parts) {
     if (!isRecord(current) || !Object.prototype.hasOwnProperty.call(current, part)) return undefined;
@@ -120,10 +115,7 @@ export function readAutomationPathV1(root: unknown, path: string): unknown {
   return current;
 }
 
-export function resolveAutomationValueV1(
-  value: AutomationValueV1,
-  event: AutomationEventEnvelopeV1,
-): unknown {
+export function resolveAutomationValueV1(value: AutomationValueV1, event: AutomationEventEnvelopeV1): unknown {
   if (value.kind === 'LITERAL') return value.value;
   return readAutomationPathV1(eventContextV1(event), value.path);
 }
@@ -143,7 +135,6 @@ export function evaluateAutomationConditionV1(
   event: AutomationEventEnvelopeV1,
 ): boolean {
   if (!condition) return true;
-
   if (condition.kind === 'GROUP') {
     if (condition.conditions.length === 0) return condition.operator === 'AND';
     return condition.operator === 'AND'
@@ -158,22 +149,10 @@ export function evaluateAutomationConditionV1(
   switch (condition.operator) {
     case 'EQ': return primitiveEqual(left, right);
     case 'NEQ': return !primitiveEqual(left, right);
-    case 'GT': {
-      const l = comparableNumber(left); const r = comparableNumber(right);
-      return l !== null && r !== null && l > r;
-    }
-    case 'GTE': {
-      const l = comparableNumber(left); const r = comparableNumber(right);
-      return l !== null && r !== null && l >= r;
-    }
-    case 'LT': {
-      const l = comparableNumber(left); const r = comparableNumber(right);
-      return l !== null && r !== null && l < r;
-    }
-    case 'LTE': {
-      const l = comparableNumber(left); const r = comparableNumber(right);
-      return l !== null && r !== null && l <= r;
-    }
+    case 'GT': { const l = comparableNumber(left); const r = comparableNumber(right); return l !== null && r !== null && l > r; }
+    case 'GTE': { const l = comparableNumber(left); const r = comparableNumber(right); return l !== null && r !== null && l >= r; }
+    case 'LT': { const l = comparableNumber(left); const r = comparableNumber(right); return l !== null && r !== null && l < r; }
+    case 'LTE': { const l = comparableNumber(left); const r = comparableNumber(right); return l !== null && r !== null && l <= r; }
     case 'IN': return Array.isArray(right) && right.some((candidate) => primitiveEqual(left, candidate));
     case 'NOT_IN': return Array.isArray(right) && !right.some((candidate) => primitiveEqual(left, candidate));
     case 'CONTAINS': {
@@ -221,7 +200,9 @@ function validateAction(action: AutomationActionV1): void {
     if (!/^bridata\.[a-z0-9._-]{1,130}$/i.test(action.eventType)) {
       throw new AutomationValidationErrorV1('EMIT_EVENT eventType must use the bridata.* namespace.');
     }
-    validateActionValue(action.aggregateId, 'EMIT_EVENT aggregateId');
+    if (action.aggregateId && !(action.aggregateId.kind === 'EVENT_PATH' && action.aggregateId.path === 'aggregateId')) {
+      throw new AutomationValidationErrorV1('EMIT_EVENT V1 may only reuse the source aggregateId.');
+    }
     for (const [key, value] of Object.entries(action.payload ?? {})) {
       if (RESERVED_EMITTED_EVENT_KEYS.has(key)) {
         throw new AutomationValidationErrorV1(`EMIT_EVENT payload key ${key} is reserved by Bridata routing.`);
@@ -253,17 +234,14 @@ export function validateAutomationVersionV1(options: {
   if (!/^bridata\.[a-z0-9._-]{1,130}$/i.test(options.triggerEventType)) {
     throw new AutomationValidationErrorV1('Trigger event type must use the bridata.* namespace.');
   }
-
   const maxDepth = options.limits?.maxConditionDepth ?? 5;
   const maxPredicates = options.limits?.maxPredicates ?? 20;
   const maxActions = options.limits?.maxActions ?? 10;
-
   if (options.condition) {
     const stats = conditionStats(options.condition);
     if (stats.depth > maxDepth) throw new AutomationValidationErrorV1(`Condition depth exceeds ${maxDepth}.`);
     if (stats.predicates > maxPredicates) throw new AutomationValidationErrorV1(`Condition predicate count exceeds ${maxPredicates}.`);
   }
-
   if (options.actions.length === 0 || options.actions.length > maxActions) {
     throw new AutomationValidationErrorV1(`Automation must contain 1-${maxActions} actions.`);
   }
