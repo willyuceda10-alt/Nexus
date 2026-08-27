@@ -26,13 +26,21 @@ describe('expandMeetingRecurrenceV1', () => {
     expect(occurrences.map((item) => item.occurrenceDate)).toEqual(['2026-08-31', '2026-09-02', '2026-09-07', '2026-09-09']);
   });
 
-  it('uses the last day of a shorter month for absolute monthly recurrence', () => {
-    const januaryStart = new Date('2027-01-31T15:00:00.000Z');
-    const januaryEnd = new Date('2027-01-31T16:00:00.000Z');
-    const occurrences = expandMeetingRecurrenceV1(januaryStart, januaryEnd, rule({
-      patternType: 'ABSOLUTE_MONTHLY', dayOfMonth: 31, numberOfOccurrences: 3,
+  it('expands an absolute monthly recurrence on a verified day 1 through 28', () => {
+    const monthlyStart = new Date('2027-01-15T15:00:00.000Z');
+    const monthlyEnd = new Date('2027-01-15T16:00:00.000Z');
+    const occurrences = expandMeetingRecurrenceV1(monthlyStart, monthlyEnd, rule({
+      patternType: 'ABSOLUTE_MONTHLY', dayOfMonth: 15, numberOfOccurrences: 3,
     }));
-    expect(occurrences.map((item) => item.occurrenceDate)).toEqual(['2027-01-31', '2027-02-28', '2027-03-31']);
+    expect(occurrences.map((item) => item.occurrenceDate)).toEqual(['2027-01-15', '2027-02-15', '2027-03-15']);
+  });
+
+  it('rejects monthly days above the verified V1 range', () => {
+    const monthlyStart = new Date('2027-01-31T15:00:00.000Z');
+    const monthlyEnd = new Date('2027-01-31T16:00:00.000Z');
+    expect(() => expandMeetingRecurrenceV1(monthlyStart, monthlyEnd, rule({
+      patternType: 'ABSOLUTE_MONTHLY', dayOfMonth: 31,
+    }))).toThrow(/between 1 and 28/i);
   });
 
   it('rejects weekly rules whose first date is not part of the selected weekdays', () => {
