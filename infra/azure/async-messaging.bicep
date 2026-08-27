@@ -7,6 +7,7 @@ param runtimeIdentityPrincipalId string
 param automationIdentityPrincipalId string
 param topicName string = 'bridata-domain-events'
 param automationSubscriptionName string = 'automation-v1'
+param deployAutomationConsumer bool = false
 
 var baseName = 'nexus-${environment}'
 var suffix = uniqueString(resourceGroup().id)
@@ -63,7 +64,7 @@ resource platformCoreSubscription 'Microsoft.ServiceBus/namespaces/topics/subscr
   }
 }
 
-resource automationSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2024-01-01' = {
+resource automationSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2024-01-01' = if (deployAutomationConsumer) {
   parent: domainEventsTopic
   name: automationSubscriptionName
   properties: {
@@ -86,7 +87,7 @@ resource runtimeSenderRole 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   }
 }
 
-resource automationReceiverRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource automationReceiverRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployAutomationConsumer) {
   scope: automationSubscription
   name: guid(automationSubscription.id, automationIdentityPrincipalId, serviceBusDataReceiverRoleId)
   properties: {
@@ -100,4 +101,4 @@ output namespaceName string = serviceBus.name
 output namespaceFqdn string = '${serviceBus.name}.servicebus.windows.net'
 output topicName string = domainEventsTopic.name
 output coreSubscriptionName string = platformCoreSubscription.name
-output automationSubscriptionName string = automationSubscription.name
+output automationSubscriptionName string = automationSubscription.?name ?? ''
