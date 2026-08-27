@@ -58,8 +58,8 @@ resource platformCoreSubscription 'Microsoft.ServiceBus/namespaces/topics/subscr
 }
 
 resource runtimeSenderRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: serviceBus
-  name: guid(serviceBus.id, runtimeIdentityPrincipalId, serviceBusDataSenderRoleId)
+  scope: domainEventsTopic
+  name: guid(domainEventsTopic.id, runtimeIdentityPrincipalId, serviceBusDataSenderRoleId)
   properties: {
     principalId: runtimeIdentityPrincipalId
     principalType: 'ServicePrincipal'
