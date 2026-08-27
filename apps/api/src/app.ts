@@ -13,10 +13,13 @@ import { forecastRoutes } from './routes/forecast.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { objectRoutes } from './routes/objects.js';
+import { projectEngineV2BackfillRoutes } from './routes/project-engine-v2-backfill.js';
 import { projectScheduleV2Routes } from './routes/project-schedule-v2.js';
 import { resourceCapacityRoutes } from './routes/resource-capacity.js';
 import { scheduleAnalysisRoutes } from './routes/schedule-analysis.js';
+import { scheduleAnalysisV2Routes } from './routes/schedule-analysis-v2.js';
 import { sessionRoutes } from './routes/session.js';
+import { workCalendarV2Routes } from './routes/work-calendars-v2.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -95,6 +98,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(dependencyRoutes);
   await app.register(scheduleAnalysisRoutes);
   await app.register(projectScheduleV2Routes);
+  await app.register(workCalendarV2Routes);
+  await app.register(scheduleAnalysisV2Routes);
+  await app.register(projectEngineV2BackfillRoutes);
   await app.register(forecastRoutes);
   await app.register(resourceCapacityRoutes);
   await app.register(baselineRoutes);
