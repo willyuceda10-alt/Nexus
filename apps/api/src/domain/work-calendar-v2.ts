@@ -13,6 +13,14 @@ export interface WorkCalendarV2 {
   exceptions: WorkCalendarExceptionV2[];
 }
 
+interface CompiledWorkCalendarV2 {
+  normalized: WorkCalendarV2;
+  exceptionByDate: Map<string, WorkCalendarExceptionV2>;
+  weekdaySet: Set<number>;
+}
+
+const compiledCalendarCache = new WeakMap<object, CompiledWorkCalendarV2>();
+
 export class WorkCalendarV2ValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -73,21 +81,35 @@ export function validateWorkCalendarV2(calendar: WorkCalendarV2): WorkCalendarV2
   };
 }
 
-function exceptionMap(calendar: WorkCalendarV2): Map<string, WorkCalendarExceptionV2> {
-  return new Map(calendar.exceptions.map((entry) => [dateOnlyV2(entry.exceptionDate), entry]));
+function compileCalendar(calendar: WorkCalendarV2): CompiledWorkCalendarV2 {
+  const cached = compiledCalendarCache.get(calendar);
+  if (cached) return cached;
+
+  const normalized = validateWorkCalendarV2(calendar);
+  const compiled = {
+    normalized,
+    exceptionByDate: new Map(
+      normalized.exceptions.map((entry) => [dateOnlyV2(entry.exceptionDate), entry]),
+    ),
+    weekdaySet: new Set(normalized.workingWeekdays),
+  };
+  compiledCalendarCache.set(calendar, compiled);
+  return compiled;
+}
+
+function workingMinutesOnDateCompiled(date: Date, compiled: CompiledWorkCalendarV2): number {
+  const exception = compiled.exceptionByDate.get(dateOnlyV2(date));
+  if (exception) {
+    if (!exception.isWorking) return 0;
+    return exception.workingMinutes ?? compiled.normalized.minutesPerDay;
+  }
+  return compiled.weekdaySet.has(startOfUtcDay(date).getUTCDay())
+    ? compiled.normalized.minutesPerDay
+    : 0;
 }
 
 export function workingMinutesOnDateV2(date: Date, calendar: WorkCalendarV2): number {
-  const normalized = validateWorkCalendarV2(calendar);
-  const exception = exceptionMap(normalized).get(dateOnlyV2(date));
-  if (exception) {
-    if (!exception.isWorking) return 0;
-    return exception.workingMinutes ?? normalized.minutesPerDay;
-  }
-
-  return normalized.workingWeekdays.includes(startOfUtcDay(date).getUTCDay())
-    ? normalized.minutesPerDay
-    : 0;
+  return workingMinutesOnDateCompiled(date, compileCalendar(calendar));
 }
 
 export function isWorkingDateV2(date: Date, calendar: WorkCalendarV2): boolean {
@@ -99,9 +121,10 @@ export function nextWorkingDateV2(
   calendar: WorkCalendarV2,
   direction: 1 | -1 = 1,
 ): Date {
+  const compiled = compileCalendar(calendar);
   let cursor = startOfUtcDay(date);
   for (let guard = 0; guard < 36600; guard += 1) {
-    if (isWorkingDateV2(cursor, calendar)) return cursor;
+    if (workingMinutesOnDateCompiled(cursor, compiled) > 0) return cursor;
     cursor = addUtcDays(cursor, direction);
   }
   throw new WorkCalendarV2ValidationError('Unable to find a working date within the calendar guard range.');
@@ -116,6 +139,7 @@ export function workingMinuteOffsetV2(
   target: Date,
   calendar: WorkCalendarV2,
 ): number {
+  const compiled = compileCalendar(calendar);
   const from = startOfUtcDay(anchor);
   const to = startOfUtcDay(target);
   if (from.getTime() === to.getTime()) return 0;
@@ -123,16 +147,37 @@ export function workingMinuteOffsetV2(
   if (to.getTime() > from.getTime()) {
     let minutes = 0;
     for (let cursor = from; cursor.getTime() < to.getTime(); cursor = addUtcDays(cursor, 1)) {
-      minutes += workingMinutesOnDateV2(cursor, calendar);
+      minutes += workingMinutesOnDateCompiled(cursor, compiled);
     }
     return minutes;
   }
 
   let minutes = 0;
   for (let cursor = addUtcDays(from, -1); cursor.getTime() >= to.getTime(); cursor = addUtcDays(cursor, -1)) {
-    minutes += workingMinutesOnDateV2(cursor, calendar);
+    minutes += workingMinutesOnDateCompiled(cursor, compiled);
   }
   return -minutes;
+}
+
+/**
+ * Calculates working capacity inclusively between two calendar dates.
+ * Used by the V1 -> V2 compatibility path so edited V2 calendars can still
+ * influence legacy work items before their typed schedule row is created.
+ */
+export function workingMinutesBetweenDatesV2(
+  start: Date,
+  finish: Date,
+  calendar: WorkCalendarV2,
+): number {
+  const compiled = compileCalendar(calendar);
+  const from = startOfUtcDay(start);
+  const toCandidate = startOfUtcDay(finish);
+  const to = toCandidate.getTime() < from.getTime() ? from : toCandidate;
+  let minutes = 0;
+  for (let cursor = from; cursor.getTime() <= to.getTime(); cursor = addUtcDays(cursor, 1)) {
+    minutes += workingMinutesOnDateCompiled(cursor, compiled);
+  }
+  return minutes;
 }
 
 /**
@@ -149,6 +194,7 @@ export function dateAtWorkingMinuteOffsetV2(
     throw new WorkCalendarV2ValidationError('offsetMinutes must be finite.');
   }
 
+  const compiled = compileCalendar(calendar);
   const whole = Math.trunc(offsetMinutes);
   if (whole === 0) return startOfUtcDay(anchor);
 
@@ -156,11 +202,17 @@ export function dateAtWorkingMinuteOffsetV2(
     let remaining = whole;
     let cursor = startOfUtcDay(anchor);
     for (let guard = 0; guard < 36600; guard += 1) {
-      const capacity = workingMinutesOnDateV2(cursor, calendar);
+      const capacity = workingMinutesOnDateCompiled(cursor, compiled);
       if (capacity > 0) {
         if (remaining < capacity) return cursor;
         remaining -= capacity;
-        if (remaining === 0) return nextWorkingDateV2(addUtcDays(cursor, 1), calendar, 1);
+        if (remaining === 0) {
+          cursor = addUtcDays(cursor, 1);
+          for (let nextGuard = 0; nextGuard < 36600; nextGuard += 1) {
+            if (workingMinutesOnDateCompiled(cursor, compiled) > 0) return cursor;
+            cursor = addUtcDays(cursor, 1);
+          }
+        }
       }
       cursor = addUtcDays(cursor, 1);
     }
@@ -168,7 +220,7 @@ export function dateAtWorkingMinuteOffsetV2(
     let remaining = Math.abs(whole);
     let cursor = addUtcDays(startOfUtcDay(anchor), -1);
     for (let guard = 0; guard < 36600; guard += 1) {
-      const capacity = workingMinutesOnDateV2(cursor, calendar);
+      const capacity = workingMinutesOnDateCompiled(cursor, compiled);
       if (capacity > 0) {
         if (remaining <= capacity) return cursor;
         remaining -= capacity;
@@ -197,7 +249,6 @@ export function finishDateForWorkV2(
     return dateAtWorkingMinuteOffsetV2(anchor, startOffsetMinutes, calendar);
   }
 
-  // The last consumed minute determines the inclusive finish workday.
   return dateAtWorkingMinuteOffsetV2(
     anchor,
     startOffsetMinutes + Math.max(0, Math.trunc(durationMinutes) - 1),
