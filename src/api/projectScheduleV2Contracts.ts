@@ -155,11 +155,13 @@ export interface ApiScheduleAnalysisV2 {
     workingWeekdays: number[];
     minutesPerDay: number;
     exceptionCount: number;
+    timeResolution: 'WORKING_MINUTES_DATE_BUCKETED_V2';
   };
   migration: {
     totalWorkItems: number;
     v2WorkItems: number;
     fallbackWorkItems: number;
+    summaryWorkItems: number;
     v2Dependencies: number;
     fallbackDependencies: number;
   };
@@ -175,6 +177,7 @@ export interface ApiScheduleAnalysisV2 {
   topologicalOrder: string[];
   tasks: ApiScheduleAnalysisV2Task[];
   dependencies: ApiScheduleAnalysisV2Dependency[];
+  summaryObjectIds: string[];
   violations: Array<{
     type: string;
     taskId?: string;
