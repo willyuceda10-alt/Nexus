@@ -29,6 +29,8 @@ import { meetingResourceAvailabilityV1Routes } from './routes/meeting-resource-a
 import { meetingResourcesV1Routes } from './routes/meeting-resources-v1.js';
 import { meetingSchedulingV2Routes } from './routes/meeting-scheduling-v2.js';
 import { meetingsV1Routes } from './routes/meetings-v1.js';
+import { recurringMeetingLifecycleV1Routes } from './routes/recurring-meeting-lifecycle-v1.js';
+import { recurringMeetingsV1Routes } from './routes/recurring-meetings-v1.js';
 import { notificationCapabilitiesV1Routes } from './routes/notification-capabilities-v1.js';
 import { notificationPreferencesV1Routes } from './routes/notification-preferences-v1.js';
 import { objectRoutes } from './routes/objects.js';
@@ -49,14 +51,8 @@ import { workOsBoardManagedOptionsV1Routes } from './routes/work-os-board-manage
 import { workOsBoardTemporalV1Routes } from './routes/work-os-board-temporal-v1.js';
 import { workOsBoardsV1Routes } from './routes/work-os-boards-v1.js';
 
-type PrismaWrappedDatabaseError = FastifyError & {
-  meta?: { code?: string; message?: string };
-};
-
-type MeetingSchedulingV2PolicyBody = {
-  requestM365Sync?: unknown;
-  validateAvailability?: unknown;
-};
+type PrismaWrappedDatabaseError = FastifyError & { meta?: { code?: string; message?: string } };
+type MeetingSchedulingV2PolicyBody = { requestM365Sync?: unknown; validateAvailability?: unknown };
 
 const legacyBoardOptionsPath = /^\/api\/v1\/work-os\/boards-v1\/[^/]+\/columns\/[^/]+\/options(?:\?|$)/;
 const meetingSchedulingV2Path = /^\/api\/v1\/meetings-v2\/schedule(?:\?|$)/;
@@ -65,14 +61,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
       level: config.LOG_LEVEL,
-      redact: {
-        paths: [
-          'req.headers.authorization',
-          'request.headers.authorization',
-          'headers.authorization',
-        ],
-        censor: '[REDACTED]',
-      },
+      redact: { paths: ['req.headers.authorization', 'request.headers.authorization', 'headers.authorization'], censor: '[REDACTED]' },
     },
     requestIdHeader: 'x-correlation-id',
     genReqId: (request) => {
@@ -86,10 +75,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, {
     origin(origin, callback) {
-      if (!origin || config.corsOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
+      if (!origin || config.corsOrigins.includes(origin)) { callback(null, true); return; }
       callback(new Error('Origin not allowed by Bridata Project CORS policy'), false);
     },
     credentials: true,
@@ -97,11 +83,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   app.addHook('onRequest', async (request, reply) => {
     if (request.method === 'PUT' && legacyBoardOptionsPath.test(request.raw.url ?? '')) {
-      return reply.code(410).send({
-        error: 'legacy_board_options_endpoint_disabled',
-        message: 'Use the governed managed-options endpoint instead.',
-        correlationId: request.id,
-      });
+      return reply.code(410).send({ error: 'legacy_board_options_endpoint_disabled', message: 'Use the governed managed-options endpoint instead.', correlationId: request.id });
     }
   });
 
@@ -109,18 +91,11 @@ export async function buildApp(): Promise<FastifyInstance> {
     if (request.method !== 'POST' || !meetingSchedulingV2Path.test(request.raw.url ?? '')) return;
     const body = request.body as MeetingSchedulingV2PolicyBody | null | undefined;
     if (body?.requestM365Sync === true && body.validateAvailability === false) {
-      return reply.code(400).send({
-        error: 'm365_sync_requires_availability_validation',
-        message: 'Meeting Scheduling V2 requires availability validation when Outlook/M365 synchronization is requested.',
-        correlationId: request.id,
-      });
+      return reply.code(400).send({ error: 'm365_sync_requires_availability_validation', message: 'Meeting Scheduling V2 requires availability validation when Outlook/M365 synchronization is requested.', correlationId: request.id });
     }
   });
 
-  app.addHook('onSend', async (request, reply, payload) => {
-    reply.header('x-correlation-id', request.id);
-    return payload;
-  });
+  app.addHook('onSend', async (request, reply, payload) => { reply.header('x-correlation-id', request.id); return payload; });
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
     if (error instanceof ProjectScheduleV2ValidationError) {
@@ -137,11 +112,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
     request.log.error({ err: error }, 'Unhandled Bridata Project API error');
     const statusCode = error.statusCode && error.statusCode < 500 ? error.statusCode : 500;
-    void reply.code(statusCode).send({
-      error: statusCode >= 500 ? 'internal_error' : 'request_error',
-      message: statusCode >= 500 ? 'An unexpected error occurred.' : error.message,
-      correlationId: request.id,
-    });
+    void reply.code(statusCode).send({ error: statusCode >= 500 ? 'internal_error' : 'request_error', message: statusCode >= 500 ? 'An unexpected error occurred.' : error.message, correlationId: request.id });
   });
 
   registerHierarchyWriteGuards(app);
@@ -164,6 +135,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(meetingResourcesV1Routes);
   await app.register(meetingSchedulingV2Routes);
   await app.register(meetingLifecycleV2Routes);
+  await app.register(recurringMeetingsV1Routes);
+  await app.register(recurringMeetingLifecycleV1Routes);
   await app.register(meetingActionsV1Routes);
   await app.register(workOsBoardsV1Routes);
   await app.register(workOsBoardEditorV1Routes);
