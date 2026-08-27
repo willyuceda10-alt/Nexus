@@ -28,10 +28,9 @@ export class AzureServiceBusAutomationReceiver {
 
   private async authorizedFetch(url: string, init: RequestInit, forceRefresh = false): Promise<Response> {
     const token = await this.tokenProvider.token(forceRefresh);
-    let response = await fetch(url, {
-      ...init,
-      headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}` },
-    });
+    const headers = new Headers(init.headers);
+    headers.set('Authorization', `Bearer ${token}`);
+    let response = await fetch(url, { ...init, headers });
     if (response.status === 401 && !forceRefresh) {
       this.tokenProvider.reset();
       response = await this.authorizedFetch(url, init, true);
