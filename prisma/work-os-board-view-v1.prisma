@@ -1,0 +1,132 @@
+enum WorkBoardColumnSourceV1 {
+  CORE
+  CUSTOM
+}
+
+enum WorkBoardColumnTypeV1 {
+  TEXT
+  LONG_TEXT
+  NUMBER
+  CURRENCY
+  DATE
+  BOOLEAN
+  STATUS
+  PRIORITY
+  PROGRESS
+  PERSON
+  TAGS
+  LINK
+  FILE
+  FORMULA
+}
+
+enum WorkViewTypeV1 {
+  TABLE
+  KANBAN
+  CALENDAR
+  GANTT
+  TIMELINE
+}
+
+model WorkBoardV1 {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  workspaceId        String   @map("workspace_id") @db.Uuid
+  objectDefinitionId String   @map("object_definition_id") @db.Uuid
+  name               String   @db.VarChar(255)
+  description        String?  @db.Text
+  icon               String?  @db.VarChar(100)
+  isArchived         Boolean  @default(false) @map("is_archived")
+  createdByUserId    String   @map("created_by_user_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  groups     WorkBoardGroupV1[]
+  columns    WorkBoardColumnV1[]
+  views      WorkViewV1[]
+  placements WorkBoardItemPlacementV1[]
+
+  @@index([tenantId, workspaceId, isArchived])
+  @@index([tenantId, objectDefinitionId])
+  @@map("work_boards_v1")
+}
+
+model WorkBoardGroupV1 {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  boardId   String   @map("board_id") @db.Uuid
+  key       String   @db.VarChar(100)
+  name      String   @db.VarChar(255)
+  color     String?  @db.VarChar(30)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  board      WorkBoardV1                @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  placements WorkBoardItemPlacementV1[]
+
+  @@unique([boardId, key])
+  @@index([tenantId, boardId, sortOrder])
+  @@map("work_board_groups_v1")
+}
+
+model WorkBoardColumnV1 {
+  id        String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String                  @map("tenant_id") @db.Uuid
+  boardId   String                  @map("board_id") @db.Uuid
+  key       String                  @db.VarChar(100)
+  label     String                  @db.VarChar(255)
+  source    WorkBoardColumnSourceV1
+  dataType  WorkBoardColumnTypeV1   @map("data_type")
+  fieldKey  String                  @map("field_key") @db.VarChar(100)
+  width     Int?                    @db.SmallInt
+  sortOrder Int                     @default(0) @map("sort_order")
+  isVisible Boolean                 @default(true) @map("is_visible")
+  isEditable Boolean               @default(true) @map("is_editable")
+  config    Json?                   @db.JsonB
+  createdAt DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  board WorkBoardV1 @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, key])
+  @@index([tenantId, boardId, sortOrder])
+  @@map("work_board_columns_v1")
+}
+
+model WorkViewV1 {
+  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String         @map("tenant_id") @db.Uuid
+  boardId   String         @map("board_id") @db.Uuid
+  name      String         @db.VarChar(255)
+  viewType  WorkViewTypeV1 @map("view_type")
+  isDefault Boolean        @default(false) @map("is_default")
+  sortOrder Int            @default(0) @map("sort_order")
+  config    Json           @default("{}") @db.JsonB
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  board WorkBoardV1 @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, boardId, sortOrder])
+  @@map("work_views_v1")
+}
+
+model WorkBoardItemPlacementV1 {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  boardId   String   @map("board_id") @db.Uuid
+  objectId  String   @map("object_id") @db.Uuid
+  groupId   String?  @map("group_id") @db.Uuid
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  board WorkBoardV1       @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  group WorkBoardGroupV1? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@unique([boardId, objectId])
+  @@index([tenantId, boardId, groupId, sortOrder])
+  @@index([tenantId, objectId])
+  @@map("work_board_item_placements_v1")
+}
