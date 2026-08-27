@@ -57,7 +57,12 @@ BEGIN
     'automation_approval_requests_v1',
     'inbox_items_v1',
     'notification_deliveries_v1',
-    'notification_preferences_v1'
+    'notification_preferences_v1',
+    'work_boards_v1',
+    'work_board_groups_v1',
+    'work_board_columns_v1',
+    'work_views_v1',
+    'work_board_item_placements_v1'
   ]
   LOOP
     -- This script is also used as a defensive re-application step. During
