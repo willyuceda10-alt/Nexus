@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { prisma } from './db.js';
+import { processMeetingCalendarCancelEventV2 } from './meeting-calendar-cancel-runner.js';
 import { processMeetingCalendarSyncEventV1 } from './meeting-calendar-sync-runner.js';
 import { MicrosoftGraphCalendarClient } from './microsoft-graph-calendar-client.js';
 import { AzureServiceBusMeetingReceiver } from './service-bus-meeting-receiver.js';
@@ -42,7 +43,10 @@ async function main(): Promise<void> {
         continue;
       }
       try {
-        const result = await processMeetingCalendarSyncEventV1(locked.envelope, graph, locked.deliveryCount);
+        const cancelResult = await processMeetingCalendarCancelEventV2(locked.envelope, graph, locked.deliveryCount);
+        const result = cancelResult.handled
+          ? cancelResult
+          : await processMeetingCalendarSyncEventV1(locked.envelope, graph, locked.deliveryCount);
         if (result.retryableFailure) {
           await receiver.abandon(locked);
           console.warn(JSON.stringify({ component: 'meeting-calendar-worker', event: 'message-abandoned', eventId: locked.envelope.eventId, result }));
