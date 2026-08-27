@@ -5,12 +5,17 @@ import { config } from '../config.js';
 export async function notificationCapabilitiesV1Routes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/notification-capabilities-v1', { preHandler: [authenticate, resolveActor] }, async () => ({
     graphDeliveryEnabled: config.M365_GRAPH_DELIVERY_ENABLED,
-    outlookConfigured: Boolean(config.M365_GRAPH_DELIVERY_ENABLED && config.M365_OUTLOOK_SENDER_USER),
+    outlookConfigured: Boolean(
+      config.NOTIFICATION_WORKER_AVAILABLE
+      && config.M365_GRAPH_DELIVERY_ENABLED
+      && config.M365_OUTLOOK_SENDER_USER,
+    ),
     teamsConfigured: Boolean(
-      config.M365_GRAPH_DELIVERY_ENABLED
+      config.NOTIFICATION_WORKER_AVAILABLE
+      && config.M365_GRAPH_DELIVERY_ENABLED
       && config.M365_TEAMS_ACTIVITY_TYPE
       && config.M365_TEAMS_TOPIC_WEB_URL,
     ),
-    notificationWorkerEnabled: config.NOTIFICATION_WORKER_ENABLED,
+    notificationWorkerEnabled: config.NOTIFICATION_WORKER_AVAILABLE,
   }));
 }
