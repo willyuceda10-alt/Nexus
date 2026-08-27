@@ -1,0 +1,109 @@
+model AutomationDefinitionV1 {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  workspaceId       String?  @map("workspace_id") @db.Uuid
+  projectObjectId   String?  @map("project_object_id") @db.Uuid
+  name              String   @db.VarChar(255)
+  description       String?  @db.Text
+  status            String   @default("DRAFT") @db.VarChar(32)
+  activeVersion     Int?     @map("active_version")
+  maxRunsPerHour    Int      @default(100) @map("max_runs_per_hour")
+  maxDepth          Int      @default(5) @map("max_depth")
+  createdByUserId   String   @map("created_by_user_id") @db.Uuid
+  updatedByUserId   String   @map("updated_by_user_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status])
+  @@index([tenantId, workspaceId])
+  @@index([tenantId, projectObjectId])
+  @@map("automation_definitions_v1")
+}
+
+model AutomationVersionV1 {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  definitionId    String   @map("definition_id") @db.Uuid
+  version         Int
+  triggerEventType String  @map("trigger_event_type") @db.VarChar(150)
+  conditionDsl    Json?    @map("condition_dsl") @db.JsonB
+  actions         Json     @db.JsonB
+  changeNote      String?  @map("change_note") @db.Text
+  createdByUserId String   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, id])
+  @@unique([definitionId, version])
+  @@index([tenantId, triggerEventType])
+  @@map("automation_versions_v1")
+}
+
+model AutomationRunV1 {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  definitionId    String    @map("definition_id") @db.Uuid
+  versionId       String    @map("version_id") @db.Uuid
+  sourceEventId   String    @map("source_event_id") @db.Uuid
+  sourceEventType String    @map("source_event_type") @db.VarChar(150)
+  rootEventId     String    @map("root_event_id") @db.Uuid
+  depth           Int       @default(0)
+  status          String    @default("RUNNING") @db.VarChar(32)
+  attempts        Int       @default(1)
+  startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt      DateTime? @map("finished_at") @db.Timestamptz(6)
+  lastError       String?   @map("last_error") @db.Text
+  contextJson     Json      @map("context_json") @db.JsonB
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, id])
+  @@unique([definitionId, sourceEventId])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, sourceEventId])
+  @@map("automation_runs_v1")
+}
+
+model AutomationStepRunV1 {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  runId       String    @map("run_id") @db.Uuid
+  stepIndex   Int       @map("step_index")
+  actionType  String    @map("action_type") @db.VarChar(64)
+  status      String    @default("RUNNING") @db.VarChar(32)
+  attempts    Int       @default(1)
+  inputJson   Json?     @map("input_json") @db.JsonB
+  outputJson  Json?     @map("output_json") @db.JsonB
+  startedAt   DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(6)
+  lastError   String?   @map("last_error") @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, id])
+  @@unique([runId, stepIndex])
+  @@index([tenantId, status])
+  @@map("automation_step_runs_v1")
+}
+
+model AutomationApprovalRequestV1 {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  runId                String    @map("run_id") @db.Uuid
+  stepIndex             Int       @map("step_index")
+  automationDefinitionId String   @map("automation_definition_id") @db.Uuid
+  approverUserId        String?   @map("approver_user_id") @db.Uuid
+  title                 String    @db.VarChar(500)
+  description           String?   @db.Text
+  status                String    @default("PENDING") @db.VarChar(32)
+  decisionByUserId      String?   @map("decision_by_user_id") @db.Uuid
+  decisionComment       String?   @map("decision_comment") @db.Text
+  decidedAt             DateTime? @map("decided_at") @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, id])
+  @@unique([runId, stepIndex])
+  @@index([tenantId, status, approverUserId])
+  @@map("automation_approval_requests_v1")
+}
