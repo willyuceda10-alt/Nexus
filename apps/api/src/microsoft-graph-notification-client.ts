@@ -73,7 +73,6 @@ export class MicrosoftGraphNotificationClient {
               },
             ],
           },
-          saveToSentItems: true,
         }),
       },
     );
