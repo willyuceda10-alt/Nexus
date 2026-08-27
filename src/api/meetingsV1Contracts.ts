@@ -74,7 +74,7 @@ export interface ApiMeetingV1 {
 export interface ApiMeetingCapabilitiesV1 {
   m365CalendarSyncEnabled: boolean;
   meetingCalendarWorkerAvailable: boolean;
-  m365AvailabilityEnabled: boolean;
+  m365AvailabilityEnabled?: boolean;
   teamsOnlineMeetingSupported: boolean;
   canonicalStore: 'BRIDATA';
 }
