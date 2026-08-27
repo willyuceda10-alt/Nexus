@@ -76,7 +76,7 @@ const WORKSPACE_ROLE_GRANTS: Record<string, ReadonlySet<PermissionKeyV2>> = {
     'meetings.read', 'meetings.write', 'documents.read', 'documents.write',
   ]),
   MANAGER: new Set<PermissionKeyV2>([
-    'workspace.read', 'project.read', 'project.manage', 'project.schedule.read', 'project.schedule.write',
+    'workspace.read', 'workspace.manage', 'project.read', 'project.manage', 'project.schedule.read', 'project.schedule.write',
     'project.material.read', 'project.material.write', 'project.cost.read', 'project.cost.write',
     'project.baseline.create', 'governance.read', 'governance.write', 'meetings.read', 'meetings.write',
     'documents.read', 'documents.write',
