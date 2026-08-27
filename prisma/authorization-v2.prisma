@@ -1,0 +1,22 @@
+// Authorization / Permissions V2
+// Scalar-only projection. Scope integrity and RLS are enforced by SQL migrations.
+
+model AuthorizationPolicyV2 {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  scopeType       String   @map("scope_type") @db.VarChar(20)
+  scopeId         String   @map("scope_id") @db.Uuid
+  subjectType     String   @map("subject_type") @db.VarChar(30)
+  subjectKey      String   @map("subject_key") @db.VarChar(100)
+  permissionKey   String   @map("permission_key") @db.VarChar(150)
+  effect          String   @db.VarChar(10)
+  createdByUserId String?  @map("created_by_user_id") @db.Uuid
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, scopeType, scopeId, subjectType, subjectKey, permissionKey], map: "authorization_policies_subject_permission_key")
+  @@index([tenantId, scopeType, scopeId, permissionKey], map: "authorization_policies_scope_permission_idx")
+  @@index([tenantId, subjectType, subjectKey], map: "authorization_policies_subject_idx")
+  @@map("authorization_policies")
+}
