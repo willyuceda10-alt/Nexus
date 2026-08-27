@@ -38,6 +38,7 @@ export const Header: React.FC = () => {
       case 'home': return 'Centro de mando';
       case 'project': return selectedProject?.title || 'Proyecto';
       case 'projects': return 'Proyectos';
+      case 'boards': return 'Tableros';
       case 'portfolios': return 'Portafolios';
       case 'resources': return 'Recursos';
       case 'materials': return 'Materiales';
