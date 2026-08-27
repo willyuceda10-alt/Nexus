@@ -7,6 +7,7 @@ import { registerRequestContext } from './auth.js';
 import { ProjectScheduleV2ValidationError } from './domain/project-schedule-v2.js';
 import { registerHierarchyWriteGuards } from './hierarchy-guard.js';
 import { authorizationV2Routes } from './routes/authorization-v2.js';
+import { automationActionsV2Routes } from './routes/automation-actions-v2.js';
 import { automationV1Routes } from './routes/automation-v1.js';
 import { baselineRoutes } from './routes/baselines.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
@@ -120,6 +121,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(authorizationV2Routes);
   await app.register(outboxAdminV2Routes);
   await app.register(automationV1Routes);
+  await app.register(automationActionsV2Routes);
   await app.register(inboxV1Routes);
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
