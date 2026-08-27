@@ -1,0 +1,142 @@
+// Bridata Project - Cost Engine V2
+// Project controlling only. This is not a general ledger.
+// Foreign keys, checks and RLS are enforced by SQL migrations.
+
+model ProjectCostProfileV2 {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  workspaceId     String   @map("workspace_id") @db.Uuid
+  projectObjectId String   @unique(map: "project_cost_profiles_project_object_id_key") @map("project_object_id") @db.Uuid
+  currency        String   @default("USD") @db.VarChar(3)
+  contingencyAmount Decimal @default(0) @map("contingency_amount") @db.Decimal(18, 4)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, workspaceId], map: "project_cost_profiles_workspace_idx")
+  @@map("project_cost_profiles")
+}
+
+model CostCodeV2 {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  workspaceId      String   @map("workspace_id") @db.Uuid
+  code             String   @db.VarChar(80)
+  name             String   @db.VarChar(255)
+  category         String   @default("OTHER") @db.VarChar(30)
+  parentCostCodeId String?  @map("parent_cost_code_id") @db.Uuid
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, workspaceId, code], map: "cost_codes_workspace_code_key")
+  @@index([tenantId, workspaceId, category], map: "cost_codes_workspace_category_idx")
+  @@map("cost_codes")
+}
+
+model ProjectBudgetLineV2 {
+  id                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                   String   @map("tenant_id") @db.Uuid
+  workspaceId                String   @map("workspace_id") @db.Uuid
+  projectObjectId            String   @map("project_object_id") @db.Uuid
+  workItemObjectId           String?  @map("work_item_object_id") @db.Uuid
+  costCodeId                 String   @map("cost_code_id") @db.Uuid
+  materialId                 String?  @map("material_id") @db.Uuid
+  description                String   @db.VarChar(500)
+  plannedAmount              Decimal  @default(0) @map("planned_amount") @db.Decimal(18, 4)
+  approvedAmount             Decimal  @default(0) @map("approved_amount") @db.Decimal(18, 4)
+  forecastRemainingUncommitted Decimal? @map("forecast_remaining_uncommitted") @db.Decimal(18, 4)
+  notes                      String?  @db.Text
+  createdAt                  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, projectObjectId, costCodeId], map: "project_budget_lines_project_cost_code_idx")
+  @@index([tenantId, workItemObjectId], map: "project_budget_lines_work_item_idx")
+  @@index([tenantId, materialId], map: "project_budget_lines_material_idx")
+  @@map("project_budget_lines")
+}
+
+model ProjectCommitmentV2 {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  workspaceId      String   @map("workspace_id") @db.Uuid
+  projectObjectId  String   @map("project_object_id") @db.Uuid
+  workItemObjectId String?  @map("work_item_object_id") @db.Uuid
+  costCodeId       String?  @map("cost_code_id") @db.Uuid
+  supplierId       String?  @map("supplier_id") @db.Uuid
+  description      String   @db.VarChar(500)
+  amount           Decimal  @db.Decimal(18, 4)
+  releasedAmount   Decimal  @default(0) @map("released_amount") @db.Decimal(18, 4)
+  currency         String   @db.VarChar(3)
+  status           String   @default("OPEN") @db.VarChar(30)
+  sourceType       String   @default("MANUAL") @map("source_type") @db.VarChar(40)
+  sourceReference  String?  @map("source_reference") @db.VarChar(255)
+  committedAt      DateTime @default(now()) @map("committed_at") @db.Timestamptz(6)
+  notes            String?  @db.Text
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, projectObjectId, status], map: "project_commitments_project_status_idx")
+  @@index([tenantId, costCodeId], map: "project_commitments_cost_code_idx")
+  @@map("project_commitments")
+}
+
+model ProjectActualCostV2 {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  workspaceId      String   @map("workspace_id") @db.Uuid
+  projectObjectId  String   @map("project_object_id") @db.Uuid
+  workItemObjectId String?  @map("work_item_object_id") @db.Uuid
+  costCodeId       String?  @map("cost_code_id") @db.Uuid
+  materialId       String?  @map("material_id") @db.Uuid
+  description      String   @db.VarChar(500)
+  amount           Decimal  @db.Decimal(18, 4)
+  currency         String   @db.VarChar(3)
+  sourceType       String   @default("MANUAL") @map("source_type") @db.VarChar(40)
+  sourceId         String?  @map("source_id") @db.Uuid
+  externalReference String? @map("external_reference") @db.VarChar(255)
+  occurredAt       DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  notes            String?  @db.Text
+  createdByUserId  String?  @map("created_by_user_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId, projectObjectId, occurredAt], map: "project_actual_costs_project_date_idx")
+  @@index([tenantId, costCodeId], map: "project_actual_costs_cost_code_idx")
+  @@index([tenantId, workItemObjectId], map: "project_actual_costs_work_item_idx")
+  @@map("project_actual_costs")
+}
+
+model ProjectCostBaselineV2 {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  projectObjectId  String   @map("project_object_id") @db.Uuid
+  version          Int
+  name             String?  @db.VarChar(255)
+  currency         String   @db.VarChar(3)
+  contingencyAmount Decimal @default(0) @map("contingency_amount") @db.Decimal(18, 4)
+  capturedByUserId String?  @map("captured_by_user_id") @db.Uuid
+  capturedAt       DateTime @default(now()) @map("captured_at") @db.Timestamptz(6)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([projectObjectId, version], map: "project_cost_baselines_project_version_key")
+  @@index([tenantId, projectObjectId, capturedAt], map: "project_cost_baselines_project_date_idx")
+  @@map("project_cost_baselines")
+}
+
+model ProjectCostBaselineLineV2 {
+  id                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                   String   @map("tenant_id") @db.Uuid
+  baselineId                 String   @map("baseline_id") @db.Uuid
+  budgetLineId               String   @map("budget_line_id") @db.Uuid
+  workItemObjectId           String?  @map("work_item_object_id") @db.Uuid
+  costCodeId                 String   @map("cost_code_id") @db.Uuid
+  materialId                 String?  @map("material_id") @db.Uuid
+  description                String   @db.VarChar(500)
+  plannedAmount              Decimal  @map("planned_amount") @db.Decimal(18, 4)
+  approvedAmount             Decimal  @map("approved_amount") @db.Decimal(18, 4)
+  forecastRemainingUncommitted Decimal? @map("forecast_remaining_uncommitted") @db.Decimal(18, 4)
+  createdAt                  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([baselineId, budgetLineId], map: "project_cost_baseline_lines_line_key")
+  @@index([tenantId, baselineId], map: "project_cost_baseline_lines_baseline_idx")
+  @@map("project_cost_baseline_lines")
+}
