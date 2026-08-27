@@ -12,6 +12,7 @@ import { WorkspaceHome } from './components/views/WorkspaceHome';
 import { ProjectsOverviewView } from './components/views/ProjectsOverviewView';
 import { ProjectCenter } from './components/views/ProjectCenter';
 import { WorkBoardsConfigOptionsV1View } from './components/views/WorkBoardsConfigOptionsV1View';
+import { WorkCalendarTimelineV1View } from './components/views/WorkCalendarTimelineV1View';
 import { PortfoliosView } from './components/views/PortfoliosView';
 import { ResourceManagementView } from './components/views/ResourceManagementView';
 import { MaterialsInventoryV2View } from './components/views/MaterialsInventoryV2View';
@@ -33,6 +34,7 @@ const MainContentRouter: React.FC = () => {
     case 'projects': return <ProjectsOverviewView />;
     case 'project': return <ProjectCenter />;
     case 'boards': return <WorkBoardsConfigOptionsV1View />;
+    case 'calendar': return <WorkCalendarTimelineV1View />;
     case 'portfolios': return <PortfoliosView />;
     case 'resources': return <ResourceManagementView />;
     case 'materials': return <MaterialsInventoryV2View />;
