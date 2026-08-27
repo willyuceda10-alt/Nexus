@@ -5,13 +5,13 @@ import {
   CheckCircle2,
   ClipboardList,
   Factory,
-  PackageCheck,
   PackagePlus,
   Plus,
   RefreshCw,
   ShoppingCart,
   Sparkles,
   Truck,
+  UserRoundPlus,
   Warehouse,
   X,
 } from 'lucide-react';
@@ -23,6 +23,7 @@ import type {
 } from '../../api/materialInventoryV2Contracts';
 import { useApiBootstrap } from '../../context/ApiBootstrapContext';
 import { useNexus } from '../../context/NexusContext';
+import type { NexusObject } from '../../types/nexus';
 import { MaterialsView } from './MaterialsView';
 
 type Panel = 'material' | 'warehouse' | 'supplier' | 'requirement' | 'reserve' | 'order' | 'receive' | 'issue' | null;
@@ -182,6 +183,9 @@ export const MaterialsInventoryV2View: React.FC = () => {
             <button disabled={busy} onClick={() => setPanel('warehouse')} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-[10px] font-bold text-slate-700">
               <Warehouse className="h-3.5 w-3.5" /> Almacén
             </button>
+            <button disabled={busy} onClick={() => setPanel('supplier')} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-[10px] font-bold text-slate-700">
+              <UserRoundPlus className="h-3.5 w-3.5" /> Proveedor
+            </button>
             <button disabled={busy} onClick={() => setPanel('material')} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-[10px] font-bold text-slate-700">
               <PackagePlus className="h-3.5 w-3.5" /> Material
             </button>
@@ -305,7 +309,7 @@ type OperationPanelProps = {
   workspaceId: string;
   onClose: () => void;
   onRun: (action: () => Promise<void>, success: string) => Promise<void>;
-  createNexusObject: (data: Record<string, unknown>) => Promise<{ id: string }>;
+  createNexusObject: (data: Partial<NexusObject>) => Promise<NexusObject>;
 };
 
 const OperationPanel: React.FC<OperationPanelProps> = ({ panel, busy, setup, projects, workItems, requirement, defaultProjectId, workspaceId, onClose, onRun, createNexusObject }) => {
@@ -397,12 +401,12 @@ const OperationPanel: React.FC<OperationPanelProps> = ({ panel, busy, setup, pro
             {(panel === 'requirement' || ['reserve','order','receive','issue'].includes(panel)) && <Field label="Cantidad"><input type="number" min="0.0001" step="0.0001" value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} className="form-control mt-0" required /></Field>}
             {panel === 'requirement' && <><Field label="Fecha requerida"><input type="date" value={requiredDate} onChange={(e) => setRequiredDate(e.target.value)} className="form-control mt-0" required /></Field><Field label="Prioridad"><select value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)} className="form-control mt-0"><option value="LOW">Baja</option><option value="MEDIUM">Media</option><option value="HIGH">Alta</option><option value="CRITICAL">Crítica</option></select></Field></>}
 
-            {panel === 'order' && <><div className="flex items-end justify-between"><p className="text-[9px] font-bold text-slate-600">Proveedor</p><button type="button" onClick={() => window.alert('Crea el proveedor desde el botón Almacén/Materiales en la vista principal o mediante administración tenant.')} className="text-[8px] font-bold text-green-700">Administrar</button></div><select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="form-control mt-0" required>{setup.suppliers.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}</select><Field label="Número OC"><input value={number} onChange={(e) => setNumber(e.target.value)} className="form-control mt-0" placeholder="OC-2026-0001" required /></Field><Field label="Fecha esperada"><input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} className="form-control mt-0" required /></Field></>}
+            {panel === 'order' && <><Field label="Proveedor"><select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="form-control mt-0" required>{setup.suppliers.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}</select></Field><Field label="Número OC"><input value={number} onChange={(e) => setNumber(e.target.value)} className="form-control mt-0" placeholder="OC-2026-0001" required /></Field><Field label="Fecha esperada"><input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} className="form-control mt-0" required /></Field></>}
             {(panel === 'order' || panel === 'receive' || panel === 'issue') && <Field label="Costo unitario"><input type="number" min="0" step="0.01" value={unitCost} onChange={(e) => setUnitCost(Number(e.target.value))} className="form-control mt-0" /></Field>}
             {panel === 'receive' && <Field label="Número recepción"><input value={number} onChange={(e) => setNumber(e.target.value)} className="form-control mt-0" placeholder="GR-2026-0001" required /></Field>}
 
             {setup.warehouses.length === 0 && ['requirement','reserve','receive','issue'].includes(panel) && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[9px] font-semibold text-amber-800">Primero registra un almacén para operar stock.</div>}
-            {setup.suppliers.length === 0 && panel === 'order' && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[9px] font-semibold text-amber-800">No existen proveedores V2. Crea uno con permisos de administrador tenant.</div>}
+            {setup.suppliers.length === 0 && panel === 'order' && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[9px] font-semibold text-amber-800">No existen proveedores V2. Crea uno desde el botón Proveedor de la vista principal.</div>}
           </div>
           <div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-100 bg-white px-5 py-4"><button type="button" disabled={busy} onClick={onClose} className="h-10 rounded-xl border border-slate-200 px-4 text-[10px] font-bold text-slate-600">Cancelar</button><button type="submit" disabled={busy} className="inline-flex h-10 items-center gap-2 rounded-xl bg-green-700 px-5 text-[10px] font-bold text-white disabled:opacity-50">{busy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Guardar</button></div>
         </form>
