@@ -63,23 +63,47 @@ const envSchema = z
   .superRefine((env, ctx) => {
     if (env.AUTH_MODE === 'entra') {
       if (!env.ENTRA_API_CLIENT_ID) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ENTRA_API_CLIENT_ID'], message: 'ENTRA_API_CLIENT_ID is required when AUTH_MODE=entra' });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['ENTRA_API_CLIENT_ID'],
+          message: 'ENTRA_API_CLIENT_ID is required when AUTH_MODE=entra',
+        });
       }
       if (!env.ENTRA_TENANT_ID) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ENTRA_TENANT_ID'], message: 'ENTRA_TENANT_ID is required when AUTH_MODE=entra' });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['ENTRA_TENANT_ID'],
+          message: 'ENTRA_TENANT_ID is required when AUTH_MODE=entra',
+        });
       }
     }
 
     if (env.AUTH_MODE === 'dev') {
       if (env.NODE_ENV === 'production') {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['AUTH_MODE'], message: 'AUTH_MODE=dev is forbidden in production' });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['AUTH_MODE'],
+          message: 'AUTH_MODE=dev is forbidden in production',
+        });
       }
       if (!env.DEV_AUTH_ENABLED || !env.DEV_USER_ID || !env.DEV_TENANT_ID) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['DEV_AUTH_ENABLED'], message: 'Dev auth requires DEV_AUTH_ENABLED=true, DEV_USER_ID and DEV_TENANT_ID' });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['DEV_AUTH_ENABLED'],
+          message: 'Dev auth requires DEV_AUTH_ENABLED=true, DEV_USER_ID and DEV_TENANT_ID',
+        });
       }
     }
 
-    if ((env.OUTBOX_WORKER_ENABLED || env.AUTOMATION_WORKER_ENABLED || env.NOTIFICATION_WORKER_ENABLED || env.MEETING_CALENDAR_WORKER_ENABLED) && !env.SERVICE_BUS_NAMESPACE) {
+    if (
+      (
+        env.OUTBOX_WORKER_ENABLED
+        || env.AUTOMATION_WORKER_ENABLED
+        || env.NOTIFICATION_WORKER_ENABLED
+        || env.MEETING_CALENDAR_WORKER_ENABLED
+      )
+      && !env.SERVICE_BUS_NAMESPACE
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['SERVICE_BUS_NAMESPACE'],
@@ -97,7 +121,9 @@ if (!parsed.success) {
 
 export const config = {
   ...parsed.data,
-  corsOrigins: parsed.data.CORS_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean),
+  corsOrigins: parsed.data.CORS_ORIGINS.split(',')
+    .map((value) => value.trim())
+    .filter(Boolean),
 };
 
 export type BridataConfig = typeof config;
