@@ -2,6 +2,7 @@ import React from 'react';
 import {
   CalendarClock,
   CalendarDays,
+  CircleDollarSign,
   FileText,
   Kanban,
   ListTree,
@@ -15,6 +16,8 @@ import { TableView } from './TableView';
 import { KanbanView } from './KanbanView';
 import { WbsGanttV2View } from './WbsGanttV2View';
 import { ProjectMaterialRiskStrip } from './ProjectMaterialRiskStrip';
+import { ProjectCostRiskStrip } from './ProjectCostRiskStrip';
+import { ProjectCostsV2View } from './ProjectCostsV2View';
 import { TimelineView } from './TimelineView';
 import { GovernanceRiskView } from './GovernanceRiskView';
 import { MeetingsDecisionsView } from './MeetingsDecisionsView';
@@ -99,6 +102,7 @@ export const ProjectCenter: React.FC = () => {
     { id: 'table', label: 'Tabla', icon: Table2 },
     { id: 'kanban', label: 'Kanban', icon: Kanban },
     { id: 'gantt', label: 'Gantt', icon: CalendarClock },
+    { id: 'costs', label: 'Costos', icon: CircleDollarSign },
     { id: 'timeline', label: 'Timeline', icon: ListTree },
     { id: 'governance', label: 'Riesgos', icon: ShieldAlert },
     { id: 'meetings', label: 'Reuniones', icon: CalendarDays },
@@ -160,7 +164,7 @@ export const ProjectCenter: React.FC = () => {
         <div className="command-kpi-card !min-h-[122px] !p-4">
           <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Fecha objetivo</p>
           <p className="mt-4 text-[16px] font-extrabold text-slate-950">{shortDate(project.endDate)}</p>
-          <p className="mt-1 text-[9px] font-medium text-slate-400">{budgetConfigured ? `${health.budgetBurnPercentage}% presupuesto usado` : 'Sin presupuesto cargado'}</p>
+          <p className="mt-1 text-[9px] font-medium text-slate-400">{budgetConfigured ? `${health.budgetBurnPercentage}% presupuesto legado usado` : 'Cost Engine V2 disponible'}</p>
         </div>
       </section>
 
@@ -190,9 +194,11 @@ export const ProjectCenter: React.FC = () => {
           {projectActiveSubTab === 'gantt' && (
             <>
               <ProjectMaterialRiskStrip projectId={project.id} />
+              <ProjectCostRiskStrip projectId={project.id} />
               <WbsGanttV2View projectId={project.id} />
             </>
           )}
+          {projectActiveSubTab === 'costs' && <ProjectCostsV2View projectId={project.id} embedded />}
           {projectActiveSubTab === 'timeline' && <TimelineView projectId={project.id} />}
           {projectActiveSubTab === 'governance' && <GovernanceRiskView projectId={project.id} />}
           {projectActiveSubTab === 'meetings' && <MeetingsDecisionsView projectId={project.id} />}
