@@ -19,6 +19,16 @@ const envSchema = z
     DEV_AUTH_ENABLED: booleanFromEnv.default('false'),
     DEV_USER_ID: z.string().uuid().optional(),
     DEV_TENANT_ID: z.string().uuid().optional(),
+    OUTBOX_WORKER_ENABLED: booleanFromEnv.default('false'),
+    OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(50),
+    OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(50).default(8),
+    OUTBOX_LOCK_TIMEOUT_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
+    OUTBOX_IDLE_DELAY_MS: z.coerce.number().int().min(250).max(60000).default(5000),
+    OUTBOX_LOOP_DELAY_MS: z.coerce.number().int().min(100).max(10000).default(1000),
+    OUTBOX_TENANT_SCAN_LIMIT: z.coerce.number().int().min(1).max(1000).default(100),
+    SERVICE_BUS_NAMESPACE: z.string().trim().min(1).optional(),
+    SERVICE_BUS_TOPIC: z.string().trim().min(1).default('bridata-domain-events'),
+    AZURE_CLIENT_ID: z.string().uuid().optional(),
   })
   .superRefine((env, ctx) => {
     if (env.AUTH_MODE === 'entra') {
@@ -53,6 +63,14 @@ const envSchema = z
           message: 'Dev auth requires DEV_AUTH_ENABLED=true, DEV_USER_ID and DEV_TENANT_ID',
         });
       }
+    }
+
+    if (env.OUTBOX_WORKER_ENABLED && !env.SERVICE_BUS_NAMESPACE) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['SERVICE_BUS_NAMESPACE'],
+        message: 'SERVICE_BUS_NAMESPACE is required when OUTBOX_WORKER_ENABLED=true',
+      });
     }
   });
 
