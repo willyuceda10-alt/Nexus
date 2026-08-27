@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { authenticate, resolveActor } from '../auth.js';
 import { authorizePermission } from '../authorization.js';
+import { prisma } from '../db.js';
 import { withTenant } from '../tenant-transaction.js';
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
@@ -60,13 +61,18 @@ export async function outboxAdminV2Routes(app: FastifyInstance): Promise<void> {
       });
       if (result.kind === 'forbidden') return reply.code(403).send({ error: 'outbox_operations_denied' });
 
-      const partitionRows = await app.prisma?.$queryRaw?.<PartitionRow[]>(Prisma.sql`
+      const partitionRows = await prisma.$queryRaw<PartitionRow[]>(Prisma.sql`
         SELECT next_scan_at, last_event_at, last_scanned_at
         FROM outbox_tenant_partitions
         WHERE tenant_id = ${actor.tenantId}::uuid
-      `).catch(() => [] as PartitionRow[]) ?? [];
+      `).catch(() => [] as PartitionRow[]);
 
-      const counts = Object.fromEntries(['PENDING', 'PROCESSING', 'PROCESSED', 'FAILED'].map((status) => [status, 0]));
+      const counts: Record<string, number> = {
+        PENDING: 0,
+        PROCESSING: 0,
+        PROCESSED: 0,
+        FAILED: 0,
+      };
       for (const row of result.counts) counts[row.status] = Number(row.count);
       const partition = partitionRows[0];
       return {
