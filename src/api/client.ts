@@ -16,6 +16,11 @@ import type {
   UpdateApiDependencyInput,
   UpdateApiObjectInput,
 } from './contracts';
+import type {
+  ApiGenericRelation,
+  ApiGenericRelationListResponse,
+  CreateApiGenericRelationInput,
+} from './relationContracts';
 import type { ApiResourceCapacityResponse } from './resourceCapacityContracts';
 
 export type AccessTokenProvider = () => Promise<string | null>;
@@ -103,6 +108,16 @@ export const bridataApi = {
   },
   deleteObject(id: string): Promise<void> {
     return request<void>(`/api/v1/objects/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+  listRelations(workspaceId: string, signal?: AbortSignal): Promise<ApiGenericRelationListResponse> {
+    const query = new URLSearchParams({ workspaceId });
+    return request<ApiGenericRelationListResponse>(`/api/v1/relations?${query.toString()}`, { signal });
+  },
+  createRelation(input: CreateApiGenericRelationInput): Promise<ApiGenericRelation> {
+    return request<ApiGenericRelation>('/api/v1/relations', { method: 'POST', body: JSON.stringify(input) });
+  },
+  deleteRelation(id: string): Promise<void> {
+    return request<void>(`/api/v1/relations/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
   listDependencies(workspaceId: string, signal?: AbortSignal): Promise<ApiDependencyListResponse> {
     const query = new URLSearchParams({ workspaceId });
