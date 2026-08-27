@@ -14,6 +14,7 @@ import { PortfoliosView } from './components/views/PortfoliosView';
 import { ResourceManagementView } from './components/views/ResourceManagementView';
 import { MaterialsInventoryV2View } from './components/views/MaterialsInventoryV2View';
 import { CostControlV2View } from './components/views/CostControlV2View';
+import { AutomationsV1View } from './components/views/AutomationsV1View';
 import { GovernanceRiskView } from './components/views/GovernanceRiskView';
 import { MeetingsDecisionsView } from './components/views/MeetingsDecisionsView';
 import { DocumentsApprovalsView } from './components/views/DocumentsApprovalsView';
@@ -38,6 +39,8 @@ const MainContentRouter: React.FC = () => {
       return <MaterialsInventoryV2View />;
     case 'costs':
       return <CostControlV2View />;
+    case 'automations':
+      return <AutomationsV1View />;
     case 'governance':
       return <GovernanceRiskView />;
     case 'meetings':
