@@ -98,8 +98,8 @@ export async function meetingCalendarProjectionV1Routes(app: FastifyInstance): P
             occ.lifecycle_status,
             c.sync_status,
             occ.is_exception,
-            CASE WHEN occ.lifecycle_status = 'SCHEDULED'::"MeetingLifecycleStatusV2" THEN c.join_url ELSE NULL END AS join_url,
-            CASE WHEN occ.lifecycle_status = 'SCHEDULED'::"MeetingLifecycleStatusV2" THEN c.web_link ELSE NULL END AS web_link,
+            NULL::text AS join_url,
+            NULL::text AS web_link,
             c.location
           FROM meeting_recurrence_occurrences_v1 occ
           JOIN meeting_recurrence_series_v1 s
