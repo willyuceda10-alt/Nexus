@@ -45,4 +45,14 @@ export const meetingsV1Api = {
   retrySync(tenantId: string, meetingObjectId: string): Promise<{ syncStatus: 'PENDING' }> {
     return request(tenantId, `/api/v1/meetings-v1/${encodeURIComponent(meetingObjectId)}/retry-sync`, { method: 'POST' });
   },
+  deriveTask(
+    tenantId: string,
+    meetingObjectId: string,
+    input: { title?: string; description?: string | null; assigneeId?: string | null; dueDate?: string | null } = {},
+  ): Promise<{ taskObjectId: string; relationId: string; version: number }> {
+    return request(tenantId, `/api/v1/meetings-v1/${encodeURIComponent(meetingObjectId)}/derive-task`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
 };
