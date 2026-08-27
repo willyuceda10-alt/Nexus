@@ -104,7 +104,6 @@ export async function processMeetingCalendarSyncEventV1(
       JOIN meeting_resources_v1 r ON r.id = b.meeting_resource_id
       WHERE b.tenant_id = ${event.tenantId}::uuid
         AND b.meeting_collaboration_id = ${row.id}::uuid
-        AND r.is_active = true
       ORDER BY r.resource_type, r.name, r.id
     `);
 
