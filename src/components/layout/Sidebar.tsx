@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   BarChart3,
   CalendarClock,
@@ -16,8 +16,10 @@ import {
   UsersRound,
   Workflow,
 } from 'lucide-react';
-import { useNexus } from '../../context/NexusContext';
+import { bridataApi } from '../../api/client';
 import { BRAND } from '../../config/brand';
+import { useApiBootstrap } from '../../context/ApiBootstrapContext';
+import { useNexus } from '../../context/NexusContext';
 
 interface NavigationItem {
   id: string;
@@ -27,6 +29,7 @@ interface NavigationItem {
 }
 
 export const Sidebar: React.FC = () => {
+  const apiBootstrap = useApiBootstrap();
   const {
     activeTab,
     setActiveTab,
@@ -36,13 +39,45 @@ export const Sidebar: React.FC = () => {
     approvals,
     currentUser,
   } = useNexus();
+  const [inboxUnread, setInboxUnread] = useState(0);
 
   const projects = objects.filter((object) => object.type === 'PROJECT');
   const pendingApprovals = approvals.filter((approval) => approval.status === 'PENDING').length;
+  const apiReady = apiBootstrap.dataMode === 'api' && apiBootstrap.status === 'ready';
+
+  useEffect(() => {
+    if (!apiReady) {
+      setInboxUnread(0);
+      return;
+    }
+
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const result = await bridataApi.inboxV1({ status: 'OPEN', limit: 1 });
+        if (!cancelled) setInboxUnread(result.summary.unread);
+      } catch {
+        // The full Inbox view owns user-visible error handling. Navigation badges fail quietly.
+      }
+    };
+
+    const initial = window.setTimeout(() => { void refresh(); }, 500);
+    const interval = window.setInterval(() => { void refresh(); }, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
+  }, [apiReady, activeTab]);
 
   const commandItems: NavigationItem[] = [
     { id: 'home', label: 'Centro de mando', icon: Gauge },
-    { id: 'inbox', label: 'Mi trabajo', icon: CheckSquare2, badge: pendingApprovals },
+    {
+      id: 'inbox',
+      label: 'Mi trabajo',
+      icon: CheckSquare2,
+      badge: apiReady ? inboxUnread : pendingApprovals,
+    },
   ];
 
   const planningItems: NavigationItem[] = [
