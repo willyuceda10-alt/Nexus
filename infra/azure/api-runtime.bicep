@@ -9,6 +9,8 @@ param apiIdentityResourceId string
 param apiIdentityClientId string
 param automationIdentityResourceId string
 param automationIdentityClientId string
+param notificationIdentityResourceId string
+param notificationIdentityClientId string
 param apiImage string
 param migrationImage string
 param runtimeDatabaseSecretUri string
@@ -20,9 +22,16 @@ param deployApi bool = true
 param deployMigrationJob bool = true
 param deployOutboxWorker bool = false
 param deployAutomationWorker bool = false
+param deployNotificationWorker bool = false
 param serviceBusNamespaceFqdn string = ''
 param serviceBusTopicName string = 'bridata-domain-events'
 param serviceBusAutomationSubscriptionName string = 'automation-v1'
+param serviceBusNotificationSubscriptionName string = 'notifications-v1'
+param m365GraphDeliveryEnabled bool = false
+param m365OutlookSenderUser string = ''
+param m365TeamsActivityType string = ''
+param m365TeamsTopicWebUrl string = ''
+param m365TeamsTopicValue string = 'Bridata'
 
 var baseName = 'nexus-${environment}'
 
@@ -205,6 +214,54 @@ resource automationWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployA
   }
 }
 
+resource notificationWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployNotificationWorker) {
+  name: '${baseName}-notifications'
+  location: location
+  tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${notificationIdentityResourceId}': {} }
+  }
+  properties: {
+    managedEnvironmentId: managedEnvironmentId
+    configuration: {
+      activeRevisionsMode: 'Single'
+      registries: [{ server: registryServer, identity: notificationIdentityResourceId }]
+      secrets: [{ name: 'runtime-database-url', keyVaultUrl: runtimeDatabaseSecretUri, identity: notificationIdentityResourceId }]
+    }
+    template: {
+      containers: [
+        {
+          name: 'notifications'
+          image: apiImage
+          command: ['node']
+          args: ['apps/api/dist/notification-worker.js']
+          env: [
+            { name: 'NODE_ENV', value: 'production' }
+            { name: 'LOG_LEVEL', value: environment == 'prod' ? 'info' : 'debug' }
+            { name: 'DATABASE_URL', secretRef: 'runtime-database-url' }
+            { name: 'AUTH_MODE', value: 'entra' }
+            { name: 'ENTRA_API_CLIENT_ID', value: entraApiClientId }
+            { name: 'ENTRA_TENANT_ID', value: entraTenantId }
+            { name: 'NOTIFICATION_WORKER_ENABLED', value: 'true' }
+            { name: 'SERVICE_BUS_NAMESPACE', value: serviceBusNamespaceFqdn }
+            { name: 'SERVICE_BUS_TOPIC', value: serviceBusTopicName }
+            { name: 'SERVICE_BUS_NOTIFICATION_SUBSCRIPTION', value: serviceBusNotificationSubscriptionName }
+            { name: 'M365_GRAPH_DELIVERY_ENABLED', value: string(m365GraphDeliveryEnabled) }
+            { name: 'M365_OUTLOOK_SENDER_USER', value: m365OutlookSenderUser }
+            { name: 'M365_TEAMS_ACTIVITY_TYPE', value: m365TeamsActivityType }
+            { name: 'M365_TEAMS_TOPIC_WEB_URL', value: m365TeamsTopicWebUrl }
+            { name: 'M365_TEAMS_TOPIC_VALUE', value: m365TeamsTopicValue }
+            { name: 'AZURE_CLIENT_ID', value: notificationIdentityClientId }
+          ]
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+        }
+      ]
+      scale: { minReplicas: 1, maxReplicas: environment == 'prod' ? 3 : 1 }
+    }
+  }
+}
+
 resource migrations 'Microsoft.App/jobs@2024-03-01' = if (deployMigrationJob) {
   name: '${baseName}-migrate'
   location: location
@@ -247,4 +304,5 @@ output apiName string = deployApi ? api.name : ''
 output apiFqdn string = deployApi ? api.properties.configuration.ingress.fqdn : ''
 output outboxWorkerName string = deployOutboxWorker ? outboxWorker.name : ''
 output automationWorkerName string = deployAutomationWorker ? automationWorker.name : ''
+output notificationWorkerName string = deployNotificationWorker ? notificationWorker.name : ''
 output migrationJobName string = deployMigrationJob ? migrations.name : ''
