@@ -19,6 +19,7 @@ import { materialOperationsV2Routes } from './routes/material-operations-v2.js';
 import { materialOverviewV2Routes } from './routes/material-overview-v2.js';
 import { meRoutes } from './routes/me.js';
 import { objectRoutes } from './routes/objects.js';
+import { outboxAdminV2Routes } from './routes/outbox-admin-v2.js';
 import { projectEngineV2BackfillRoutes } from './routes/project-engine-v2-backfill.js';
 import { projectScheduleV2Routes } from './routes/project-schedule-v2.js';
 import { resourceCapacityRoutes } from './routes/resource-capacity.js';
@@ -115,6 +116,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(sessionRoutes);
   await app.register(meRoutes);
   await app.register(authorizationV2Routes);
+  await app.register(outboxAdminV2Routes);
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
   await app.register(dependencyRoutes);
