@@ -26,6 +26,8 @@ Automation Worker
 Platform event projector
         ↓
 InboxItemV1 + NotificationDeliveryV1
+        ↓
+Mi trabajo / Inbox V1
 ```
 
 The runner therefore remains small and auditable while product-level actions can be added as versioned event contracts.
@@ -82,6 +84,8 @@ Payload fields:
 
 The projector validates the target as an active tenant member and validates that project/workspace scope belongs to the same tenant.
 
+For workspace/project-scoped notifications, the target must also remain an active member of the scoped workspace. This check exists both when the automation version is published and when the notification event is projected. A previously valid automation therefore cannot keep notifying a user after that user loses workspace membership.
+
 ## Safe action publishing API
 
 `POST /api/v1/automations-v1/:id/internal-notification-version-v2`
@@ -91,11 +95,12 @@ The API:
 1. locks the automation definition;
 2. checks `workspace.manage_automation` or `tenant.manage_automation`;
 3. validates the target user;
-4. builds a typed notification event action;
-5. validates the resulting V1 rule;
-6. creates a new immutable automation version;
-7. optionally activates the version;
-8. emits audit/domain-event records.
+4. validates workspace membership for scoped automations;
+5. builds a typed notification event action;
+6. validates the resulting V1 rule;
+7. creates a new immutable automation version;
+8. optionally activates the version;
+9. emits audit/domain-event records.
 
 The target is revalidated again when the notification event is projected, so publication-time membership does not become permanent authority.
 
@@ -108,6 +113,25 @@ The target is revalidated again when the notification event is projected, so pub
 - `POST /api/v1/inbox-v1/:id/snooze`
 
 Every operation is restricted to `actor.userId` inside the active tenant transaction. The list response also returns unread, requires-action, and snoozed counts.
+
+## Frontend
+
+`src/components/views/InboxV1View.tsx` is now the real `Mi trabajo` route.
+
+It provides:
+
+- unread / requires-action / snoozed KPIs;
+- OPEN / RESOLVED / DISMISSED views;
+- priority and action-required indicators;
+- mark read;
+- resolve;
+- dismiss;
+- snooze until tomorrow at 08:00;
+- project/source context.
+
+`src/components/layout/Sidebar.tsx` uses the real Inbox unread count in API mode instead of the legacy mock approval count. It refreshes quietly and leaves full error handling to the Inbox view.
+
+`src/components/views/AutomationsV2View.tsx` replaces the routed Automation Center V1 experience. It exposes `Enviar notificación interna` alongside task, approval and custom-event actions, and avoids the nested-button HTML problem from the previous list implementation.
 
 ## Why internal delivery comes before Graph
 
@@ -131,11 +155,13 @@ This prevents Microsoft 365 availability from controlling whether a Bridata user
 ## Current limitations
 
 - No Outlook/Teams/email delivery yet.
-- No frontend Inbox client has been connected in this block yet; the backend API is ready.
-- No push/WebSocket real-time badge yet.
+- Sidebar unread refresh is polling, not push/WebSocket.
 - No notification preference engine yet.
 - No escalation policy yet.
+- No cross-channel retry/read model yet because INTERNAL is the only delivery channel in V1.
 
 ## Validation status
 
 Tests for deterministic notification contract parsing are versioned, but no toolchain PASS is claimed until Prisma, TypeScript, tests, build, Bicep and migrations are actually executed.
+
+A local clone attempt from the execution environment failed because DNS access to GitHub was unavailable, so the current validation remains static/repository-level rather than an executed build.
