@@ -31,14 +31,22 @@ export function BoardDataModelPanelV1({
 
   const effectiveOptionText = useMemo(() => {
     if (optionText) return optionText;
-    return (activeOptionSet?.options.filter((option) => option.isActive !== false) ?? []).map((option) => `${option.label}|${option.color ?? ''}`).join('\n');
+    return (activeOptionSet?.options.filter((option) => option.isActive !== false) ?? [])
+      .map((option) => `${option.key}|${option.label}|${option.color ?? ''}`)
+      .join('\n');
   }, [optionText, activeOptionSet]);
 
-  const parseOptions = () => effectiveOptionText.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
-    const [labelPart, colorPart] = line.split('|');
-    const label = (labelPart ?? '').trim();
-    return { key: safeBoardFieldKey(label), label, color: colorPart?.trim() || null };
-  }).filter((option) => option.label);
+  const parseOptions = () => effectiveOptionText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [keyPart, labelPart, colorPart] = line.split('|');
+      const key = (keyPart ?? '').trim();
+      const label = (labelPart ?? keyPart ?? '').trim();
+      return { key, label, color: colorPart?.trim() || null };
+    })
+    .filter((option) => /^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(option.key) && option.label);
 
   const formulaExpression: BoardFormulaExpressionV1 = {
     kind: 'BINARY', op: formula.op,
@@ -62,13 +70,13 @@ export function BoardDataModelPanelV1({
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="flex items-start gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><ListChecks className="h-4 w-4" /></span><div><h3 className="text-[12px] font-extrabold text-slate-900">Opciones administradas</h3><p className="mt-1 text-[9px] text-slate-400">Estados, prioridades y etiquetas mantienen un diccionario versionable por columna.</p></div></div>
+            <div className="flex items-start gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><ListChecks className="h-4 w-4" /></span><div><h3 className="text-[12px] font-extrabold text-slate-900">Opciones administradas</h3><p className="mt-1 text-[9px] text-slate-400">El código técnico se mantiene estable; la etiqueta visible puede cambiar sin romper datos históricos.</p></div></div>
             <div className="mt-4 space-y-3">
               <select value={optionColumnId} onChange={(event) => { setOptionColumnId(event.target.value); setOptionText(''); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700">
                 {configurableOptions.map((column) => <option key={column.id} value={column.id}>{column.label} · {column.data_type}</option>)}
               </select>
-              <textarea value={effectiveOptionText} onChange={(event) => setOptionText(event.target.value)} rows={6} placeholder={'Pendiente|#94a3b8\nEn curso|#16a34a\nCompletado|#059669'} className="w-full rounded-xl border border-slate-200 px-3 py-3 font-mono text-[9px] leading-5 text-slate-600 outline-none focus:border-green-500" />
-              <p className="text-[8px] text-slate-400">Una opción por línea: <span className="font-mono">Etiqueta|#color</span>. Las opciones retiradas se desactivan; no se borran del histórico.</p>
+              <textarea value={effectiveOptionText} onChange={(event) => setOptionText(event.target.value)} rows={7} placeholder={'DRAFT|Borrador|#94a3b8\nIN_PROGRESS|En curso|#16a34a\nCOMPLETED|Completado|#059669'} className="w-full rounded-xl border border-slate-200 px-3 py-3 font-mono text-[9px] leading-5 text-slate-600 outline-none focus:border-green-500" />
+              <p className="text-[8px] text-slate-400">Formato: <span className="font-mono">CODIGO|Etiqueta visible|#color</span>. Al retirar una opción se desactiva, no se borra.</p>
               <button disabled={!optionColumnId || saving || parseOptions().length === 0} onClick={() => { const column = columns.find((item) => item.id === optionColumnId); if (column) void onSaveOptions(column, parseOptions()).then(() => setOptionText('')); }} className="h-9 w-full rounded-xl bg-green-700 text-[9px] font-black text-white disabled:opacity-40">Guardar diccionario</button>
             </div>
           </section>
