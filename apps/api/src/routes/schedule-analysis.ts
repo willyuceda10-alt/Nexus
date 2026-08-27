@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
-import { authenticate, resolveActor, type ActorContext } from '../auth.js';
+import { authenticate, resolveActor } from '../auth.js';
+import { canAccessWorkspace } from '../authorization.js';
 import {
   calculateCpm,
   ScheduleCycleError,
@@ -20,23 +21,6 @@ const querySchema = z.object({
 });
 
 const dependencyTypeSchema = z.enum(['FS', 'SS', 'FF', 'SF']);
-
-function isTenantAdmin(actor: ActorContext): boolean {
-  return actor.role === 'OWNER' || actor.role === 'TENANT_ADMIN';
-}
-
-async function canAccessWorkspace(
-  tx: Prisma.TransactionClient,
-  actor: ActorContext,
-  workspaceId: string,
-): Promise<boolean> {
-  if (isTenantAdmin(actor)) return true;
-  const membership = await tx.workspaceMember.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId: actor.userId } },
-    select: { tenantId: true },
-  });
-  return membership?.tenantId === actor.tenantId;
-}
 
 function jsonRecord(value: Prisma.JsonValue | null): Record<string, Prisma.JsonValue> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -67,7 +51,14 @@ function durationForObject(
   startDate: Date | null,
   dueDate: Date | null,
   calendar: ScheduleCalendarConfig,
+  typedDurationMinutes: number | undefined,
+  minutesPerDay: number,
 ): number | null {
+  if (typedDurationMinutes !== undefined) {
+    if (objectTypeKey === 'MILESTONE') return 0;
+    return typedDurationMinutes / Math.max(1, minutesPerDay);
+  }
+
   if (!startDate && !dueDate) return null;
   if (objectTypeKey === 'MILESTONE') return 0;
 
@@ -102,46 +93,80 @@ export async function scheduleAnalysisRoutes(app: FastifyInstance): Promise<void
           return { kind: 'forbidden' as const };
         }
 
+        // Calendar date arithmetic remains V1-compatible in this transition.
+        // V2 already owns explicit durations in minutes; calendar exception
+        // arithmetic will move to the V2 calendar engine in the next phase.
         const calendar = calendarFromMetadata(project.metadata);
 
-        const candidateObjects = await tx.nexusObject.findMany({
-          where: {
-            tenantId: actor.tenantId,
-            workspaceId: project.workspaceId,
-            deletedAt: null,
-            objectTypeKey: { in: ['TASK', 'DELIVERABLE', 'MILESTONE'] },
-          },
-          select: {
-            id: true,
-            objectTypeKey: true,
-            title: true,
-            startDate: true,
-            dueDate: true,
-            metadata: true,
-          },
-        });
+        const [profile, candidateObjects] = await Promise.all([
+          tx.projectScheduleProfile.findUnique({
+            where: { projectObjectId: project.id },
+            select: { minutesPerDay: true },
+          }),
+          tx.nexusObject.findMany({
+            where: {
+              tenantId: actor.tenantId,
+              workspaceId: project.workspaceId,
+              deletedAt: null,
+              objectTypeKey: { in: ['TASK', 'DELIVERABLE', 'MILESTONE'] },
+            },
+            select: {
+              id: true,
+              objectTypeKey: true,
+              title: true,
+              startDate: true,
+              dueDate: true,
+              metadata: true,
+            },
+          }),
+        ]);
 
         const projectObjects = candidateObjects.filter(
           (object) => projectIdFromMetadata(object.metadata) === project.id,
         );
         const projectObjectIds = new Set(projectObjects.map((object) => object.id));
+        const typedSchedules = await tx.workItemSchedule.findMany({
+          where: {
+            tenantId: actor.tenantId,
+            projectObjectId: project.id,
+            objectId: { in: [...projectObjectIds] },
+          },
+          select: {
+            objectId: true,
+            durationMinutes: true,
+            constraintType: true,
+            constraintDate: true,
+          },
+        });
+        const typedByObjectId = new Map(typedSchedules.map((row) => [row.objectId, row]));
+        const minutesPerDay = profile?.minutesPerDay ?? 480;
 
         const scheduled = projectObjects
-          .map((object) => ({
-            object,
-            durationDays: durationForObject(
-              object.objectTypeKey,
-              object.startDate,
-              object.dueDate,
-              calendar,
-            ),
-          }))
+          .map((object) => {
+            const typed = typedByObjectId.get(object.id);
+            return {
+              object,
+              source: typed ? 'V2' as const : 'V1_FALLBACK' as const,
+              constraintType: typed?.constraintType ?? 'AS_SOON_AS_POSSIBLE',
+              constraintDate: typed?.constraintDate ?? null,
+              durationDays: durationForObject(
+                object.objectTypeKey,
+                object.startDate,
+                object.dueDate,
+                calendar,
+                typed?.durationMinutes,
+                minutesPerDay,
+              ),
+            };
+          })
           .filter(
             (entry): entry is typeof entry & { durationDays: number } =>
               entry.durationDays !== null,
           );
         const scheduledIds = new Set(scheduled.map((entry) => entry.object.id));
 
+        // Dependencies remain read from V1 ObjectRelation during the dual-write
+        // migration. This keeps current Gantt behavior stable while V2 rows fill.
         const relationRows = projectObjectIds.size === 0
           ? []
           : await tx.objectRelation.findMany({
@@ -192,26 +217,40 @@ export async function scheduleAnalysisRoutes(app: FastifyInstance): Promise<void
           return {
             kind: 'ok' as const,
             analysis: {
+              engineVersion: 2,
               projectId: project.id,
               workspaceId: project.workspaceId,
               calendar: calendar.mode,
+              calendarSource: 'V1_COMPATIBILITY' as const,
               workingWeekdays: calendar.workingWeekdays,
               holidays: calendar.holidays,
+              minutesPerDay,
               projectDurationDays: analysis.projectDurationDays,
               criticalTaskIds: analysis.criticalTaskIds,
               topologicalOrder: analysis.topologicalOrder,
               tasks: analysis.tasks.map((task) => {
-                const object = scheduled.find((entry) => entry.object.id === task.id)!.object;
+                const scheduledEntry = scheduled.find((entry) => entry.object.id === task.id)!;
                 return {
                   ...task,
-                  title: object.title,
-                  objectTypeKey: object.objectTypeKey,
+                  title: scheduledEntry.object.title,
+                  objectTypeKey: scheduledEntry.object.objectTypeKey,
+                  scheduleSource: scheduledEntry.source,
+                  constraintType: scheduledEntry.constraintType,
+                  constraintDate: scheduledEntry.constraintDate
+                    ? scheduledEntry.constraintDate.toISOString().slice(0, 10)
+                    : null,
+                  constraintAppliedToCpm: false,
                 };
               }),
               dependencies,
               unscheduledObjectIds: projectObjects
                 .filter((object) => !scheduledIds.has(object.id))
                 .map((object) => object.id),
+              migration: {
+                typedWorkItems: scheduled.filter((entry) => entry.source === 'V2').length,
+                fallbackWorkItems: scheduled.filter((entry) => entry.source === 'V1_FALLBACK').length,
+                dependencyReadSource: 'V1_DUAL_WRITE_TRANSITION' as const,
+              },
             },
           };
         } catch (error) {
