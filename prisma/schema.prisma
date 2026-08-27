@@ -24,20 +24,27 @@ model Tenant {
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  memberships         TenantMembership[]
-  workspaces           Workspace[]
-  workspaceMemberships WorkspaceMember[]
-  objectDefinitions    ObjectDefinition[]
-  nexusObjects         NexusObject[]
-  objectFieldValues    ObjectFieldValue[]
-  objectRelations      ObjectRelation[]
-  objectHistory        ObjectHistory[]
-  objectComments       ObjectComment[]
-  objectAttachments    ObjectAttachment[]
-  workflowDefs         WorkflowDefinition[]
-  integrationConnections IntegrationConnection[]
-  domainEvents         DomainEvent[]
-  auditLogs            AuditLog[]
+  memberships              TenantMembership[]
+  workspaces                Workspace[]
+  workspaceMemberships      WorkspaceMember[]
+  objectDefinitions         ObjectDefinition[]
+  nexusObjects              NexusObject[]
+  objectFieldValues         ObjectFieldValue[]
+  objectRelations           ObjectRelation[]
+  objectHistory             ObjectHistory[]
+  objectComments            ObjectComment[]
+  objectAttachments         ObjectAttachment[]
+  workflowDefs              WorkflowDefinition[]
+  integrationConnections    IntegrationConnection[]
+  domainEvents              DomainEvent[]
+  auditLogs                 AuditLog[]
+  workCalendars             WorkCalendar[]
+  workCalendarExceptions    WorkCalendarException[]
+  projectScheduleProfiles   ProjectScheduleProfile[]
+  workItemSchedules         WorkItemSchedule[]
+  scheduleDependenciesV2    ScheduleDependencyV2[]
+  projectBaselines          ProjectBaseline[]
+  projectBaselineItems      ProjectBaselineItem[]
 
   @@map("tenants")
 }
@@ -67,11 +74,12 @@ model User {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  identities           UserIdentity[]
-  tenantMemberships    TenantMembership[]
-  workspaceMemberships WorkspaceMember[]
-  ownedObjects         NexusObject[] @relation("OwnedObjects")
-  assignedObjects      NexusObject[] @relation("AssignedObjects")
+  identities               UserIdentity[]
+  tenantMemberships        TenantMembership[]
+  workspaceMemberships     WorkspaceMember[]
+  ownedObjects             NexusObject[]     @relation("OwnedObjects")
+  assignedObjects          NexusObject[]     @relation("AssignedObjects")
+  capturedProjectBaselines ProjectBaseline[] @relation("CapturedProjectBaselines")
 
   @@index([email])
   @@map("users")
@@ -142,9 +150,10 @@ model Workspace {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  memberships  WorkspaceMember[]
-  nexusObjects NexusObject[]
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships   WorkspaceMember[]
+  nexusObjects  NexusObject[]
+  workCalendars WorkCalendar[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -227,17 +236,26 @@ model NexusObject {
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  objectDefinition ObjectDefinition @relation(fields: [objectDefinitionId], references: [id])
-  owner            User             @relation("OwnedObjects", fields: [ownerId], references: [id])
-  assignee         User?            @relation("AssignedObjects", fields: [assigneeId], references: [id])
-  fieldValues      ObjectFieldValue[]
-  sourceRelations  ObjectRelation[] @relation("SourceRelations")
-  targetRelations  ObjectRelation[] @relation("TargetRelations")
-  history          ObjectHistory[]
-  comments         ObjectComment[]
-  attachments      ObjectAttachment[]
+  tenant                   Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workspace                Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  objectDefinition         ObjectDefinition       @relation(fields: [objectDefinitionId], references: [id])
+  owner                    User                   @relation("OwnedObjects", fields: [ownerId], references: [id])
+  assignee                 User?                  @relation("AssignedObjects", fields: [assigneeId], references: [id])
+  fieldValues              ObjectFieldValue[]
+  sourceRelations          ObjectRelation[]       @relation("SourceRelations")
+  targetRelations          ObjectRelation[]       @relation("TargetRelations")
+  history                  ObjectHistory[]
+  comments                 ObjectComment[]
+  attachments              ObjectAttachment[]
+  projectScheduleProfile   ProjectScheduleProfile? @relation("ProjectScheduleProfileProject")
+  workItemSchedule         WorkItemSchedule?       @relation("WorkItemScheduleObject")
+  projectWorkItemSchedules WorkItemSchedule[]      @relation("WorkItemScheduleProject")
+  childWorkItemSchedules   WorkItemSchedule[]      @relation("WorkItemScheduleParent")
+  projectDependenciesV2    ScheduleDependencyV2[]  @relation("ScheduleDependencyProject")
+  predecessorDependenciesV2 ScheduleDependencyV2[] @relation("ScheduleDependencyPredecessor")
+  successorDependenciesV2  ScheduleDependencyV2[]  @relation("ScheduleDependencySuccessor")
+  projectBaselines         ProjectBaseline[]       @relation("ProjectBaselineProject")
+  baselineItems            ProjectBaselineItem[]   @relation("ProjectBaselineItemWorkItem")
 
   @@index([tenantId, workspaceId])
   @@index([tenantId, objectTypeKey])
@@ -280,9 +298,10 @@ model ObjectRelation {
   metadata       Json?    @db.JsonB
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  sourceObject NexusObject @relation("SourceRelations", fields: [sourceObjectId], references: [id], onDelete: Cascade)
-  targetObject NexusObject @relation("TargetRelations", fields: [targetObjectId], references: [id], onDelete: Cascade)
+  tenant                    Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sourceObject              NexusObject            @relation("SourceRelations", fields: [sourceObjectId], references: [id], onDelete: Cascade)
+  targetObject              NexusObject            @relation("TargetRelations", fields: [targetObjectId], references: [id], onDelete: Cascade)
+  scheduleDependencyV2      ScheduleDependencyV2?  @relation("ScheduleDependencyLegacyRelation")
 
   @@unique([sourceObjectId, targetObjectId, relationType])
   @@index([tenantId, sourceObjectId])
@@ -291,7 +310,200 @@ model ObjectRelation {
 }
 
 // -----------------------------------------------------------------------------
-// 4. WORKFLOW ENGINE
+// 4. PROJECT ENGINE V2 - TYPED SCHEDULING, WBS & IMMUTABLE BASELINES
+// -----------------------------------------------------------------------------
+
+enum SchedulingModeV2 {
+  AUTO
+  MANUAL
+}
+
+enum ScheduleConstraintTypeV2 {
+  AS_SOON_AS_POSSIBLE
+  AS_LATE_AS_POSSIBLE
+  MUST_START_ON
+  MUST_FINISH_ON
+  START_NO_EARLIER_THAN
+  START_NO_LATER_THAN
+  FINISH_NO_EARLIER_THAN
+  FINISH_NO_LATER_THAN
+}
+
+enum ScheduleProgressMethodV2 {
+  DURATION
+  PHYSICAL
+}
+
+enum ScheduleDependencyTypeV2 {
+  FS
+  SS
+  FF
+  SF
+}
+
+model WorkCalendar {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  workspaceId     String   @map("workspace_id") @db.Uuid
+  name            String   @db.VarChar(255)
+  timezone        String   @default("UTC") @db.VarChar(100)
+  workingWeekdays Int[]    @default([1, 2, 3, 4, 5]) @map("working_weekdays")
+  minutesPerDay   Int      @default(480) @map("minutes_per_day")
+  isDefault       Boolean  @default(false) @map("is_default")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant           Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workspace        Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  exceptions       WorkCalendarException[]
+  scheduleProfiles ProjectScheduleProfile[]
+
+  @@unique([tenantId, workspaceId, name])
+  @@index([tenantId, workspaceId])
+  @@map("work_calendars")
+}
+
+model WorkCalendarException {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  calendarId     String    @map("calendar_id") @db.Uuid
+  exceptionDate  DateTime  @map("exception_date") @db.Date
+  name           String?   @db.VarChar(255)
+  isWorking      Boolean   @default(false) @map("is_working")
+  workingMinutes Int?      @map("working_minutes")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calendar WorkCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, exceptionDate])
+  @@index([tenantId, exceptionDate])
+  @@map("work_calendar_exceptions")
+}
+
+model ProjectScheduleProfile {
+  id              String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String                   @map("tenant_id") @db.Uuid
+  projectObjectId String                   @unique @map("project_object_id") @db.Uuid
+  calendarId      String?                  @map("calendar_id") @db.Uuid
+  schedulingMode  SchedulingModeV2         @default(AUTO) @map("scheduling_mode")
+  progressMethod  ScheduleProgressMethodV2 @default(DURATION) @map("progress_method")
+  timezone        String                   @default("UTC") @db.VarChar(100)
+  minutesPerDay   Int                      @default(480) @map("minutes_per_day")
+  minutesPerWeek  Int                      @default(2400) @map("minutes_per_week")
+  statusDate      DateTime?                @map("status_date") @db.Timestamptz(6)
+  plannedStart    DateTime?                @map("planned_start") @db.Timestamptz(6)
+  targetFinish    DateTime?                @map("target_finish") @db.Timestamptz(6)
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant  Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project NexusObject   @relation("ProjectScheduleProfileProject", fields: [projectObjectId], references: [id], onDelete: Cascade)
+  calendar WorkCalendar? @relation(fields: [calendarId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, projectObjectId])
+  @@map("project_schedule_profiles")
+}
+
+model WorkItemSchedule {
+  id                        String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                  String                   @map("tenant_id") @db.Uuid
+  projectObjectId           String                   @map("project_object_id") @db.Uuid
+  objectId                  String                   @unique @map("object_id") @db.Uuid
+  parentWorkItemId          String?                  @map("parent_work_item_id") @db.Uuid
+  wbsCode                   String?                  @map("wbs_code") @db.VarChar(100)
+  outlineLevel              Int                      @default(0) @map("outline_level")
+  sortOrder                 Int                      @default(0) @map("sort_order")
+  schedulingMode            SchedulingModeV2         @default(AUTO) @map("scheduling_mode")
+  durationMinutes           Int                      @default(0) @map("duration_minutes")
+  remainingDurationMinutes  Int                      @default(0) @map("remaining_duration_minutes")
+  constraintType            ScheduleConstraintTypeV2 @default(AS_SOON_AS_POSSIBLE) @map("constraint_type")
+  constraintDate            DateTime?                @map("constraint_date") @db.Timestamptz(6)
+  actualStart               DateTime?                @map("actual_start") @db.Timestamptz(6)
+  actualFinish              DateTime?                @map("actual_finish") @db.Timestamptz(6)
+  physicalPercentComplete   Decimal?                 @map("physical_percent_complete") @db.Decimal(5, 2)
+  createdAt                 DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project    NexusObject  @relation("WorkItemScheduleProject", fields: [projectObjectId], references: [id], onDelete: Cascade)
+  object     NexusObject  @relation("WorkItemScheduleObject", fields: [objectId], references: [id], onDelete: Cascade)
+  parent     NexusObject? @relation("WorkItemScheduleParent", fields: [parentWorkItemId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, projectObjectId, sortOrder])
+  @@index([tenantId, parentWorkItemId])
+  @@map("work_item_schedules")
+}
+
+model ScheduleDependencyV2 {
+  id                  String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                   @map("tenant_id") @db.Uuid
+  projectObjectId     String                   @map("project_object_id") @db.Uuid
+  predecessorObjectId String                   @map("predecessor_object_id") @db.Uuid
+  successorObjectId   String                   @map("successor_object_id") @db.Uuid
+  dependencyType      ScheduleDependencyTypeV2 @default(FS) @map("dependency_type")
+  lagMinutes          Int                      @default(0) @map("lag_minutes")
+  notes               String?                  @db.Text
+  legacyRelationId    String?                  @unique @map("legacy_relation_id") @db.Uuid
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project        NexusObject     @relation("ScheduleDependencyProject", fields: [projectObjectId], references: [id], onDelete: Cascade)
+  predecessor    NexusObject     @relation("ScheduleDependencyPredecessor", fields: [predecessorObjectId], references: [id], onDelete: Cascade)
+  successor      NexusObject     @relation("ScheduleDependencySuccessor", fields: [successorObjectId], references: [id], onDelete: Cascade)
+  legacyRelation ObjectRelation? @relation("ScheduleDependencyLegacyRelation", fields: [legacyRelationId], references: [id], onDelete: SetNull)
+
+  @@unique([projectObjectId, predecessorObjectId, successorObjectId])
+  @@index([tenantId, projectObjectId])
+  @@map("schedule_dependencies_v2")
+}
+
+model ProjectBaseline {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  projectObjectId  String   @map("project_object_id") @db.Uuid
+  version          Int
+  name             String?  @db.VarChar(255)
+  capturedByUserId String?  @map("captured_by_user_id") @db.Uuid
+  capturedAt       DateTime @default(now()) @map("captured_at") @db.Timestamptz(6)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant     Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project    NexusObject           @relation("ProjectBaselineProject", fields: [projectObjectId], references: [id], onDelete: Cascade)
+  capturedBy User?                 @relation("CapturedProjectBaselines", fields: [capturedByUserId], references: [id], onDelete: SetNull)
+  items      ProjectBaselineItem[]
+
+  @@unique([projectObjectId, version])
+  @@index([tenantId, projectObjectId, capturedAt])
+  @@map("project_baselines")
+}
+
+model ProjectBaselineItem {
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                 String    @map("tenant_id") @db.Uuid
+  baselineId               String    @map("baseline_id") @db.Uuid
+  workItemObjectId         String    @map("work_item_object_id") @db.Uuid
+  wbsCode                  String?   @map("wbs_code") @db.VarChar(100)
+  plannedStart             DateTime? @map("planned_start") @db.Timestamptz(6)
+  plannedFinish            DateTime? @map("planned_finish") @db.Timestamptz(6)
+  durationMinutes          Int       @default(0) @map("duration_minutes")
+  remainingDurationMinutes Int       @default(0) @map("remaining_duration_minutes")
+  progress                 Int       @default(0)
+  physicalPercentComplete  Decimal?  @map("physical_percent_complete") @db.Decimal(5, 2)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  baseline ProjectBaseline @relation(fields: [baselineId], references: [id], onDelete: Cascade)
+  workItem NexusObject     @relation("ProjectBaselineItemWorkItem", fields: [workItemObjectId], references: [id], onDelete: Cascade)
+
+  @@unique([baselineId, workItemObjectId])
+  @@index([tenantId, baselineId])
+  @@map("project_baseline_items")
+}
+
+// -----------------------------------------------------------------------------
+// 5. WORKFLOW ENGINE
 // -----------------------------------------------------------------------------
 
 model WorkflowDefinition {
@@ -314,7 +526,7 @@ model WorkflowDefinition {
 }
 
 // -----------------------------------------------------------------------------
-// 5. AUDIT, COLLABORATION & FILE METADATA
+// 6. AUDIT, COLLABORATION & FILE METADATA
 // -----------------------------------------------------------------------------
 
 model ObjectHistory {
@@ -354,15 +566,15 @@ model ObjectComment {
 }
 
 model ObjectAttachment {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  objectId    String   @map("object_id") @db.Uuid
-  fileName    String   @map("file_name") @db.VarChar(255)
-  storageKey  String   @map("storage_key") @db.Text
-  fileSize    BigInt   @map("file_size")
-  mimeType    String   @map("mime_type") @db.VarChar(150)
-  checksumSha256 String? @map("checksum_sha256") @db.VarChar(64)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  objectId       String   @map("object_id") @db.Uuid
+  fileName       String   @map("file_name") @db.VarChar(255)
+  storageKey     String   @map("storage_key") @db.Text
+  fileSize       BigInt   @map("file_size")
+  mimeType       String   @map("mime_type") @db.VarChar(150)
+  checksumSha256 String?  @map("checksum_sha256") @db.VarChar(64)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   object NexusObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
@@ -372,7 +584,7 @@ model ObjectAttachment {
 }
 
 // -----------------------------------------------------------------------------
-// 6. EXTERNAL INTEGRATIONS (secrets stay in Azure Key Vault)
+// 7. EXTERNAL INTEGRATIONS (secrets stay in Azure Key Vault)
 // -----------------------------------------------------------------------------
 
 model IntegrationConnection {
@@ -412,7 +624,7 @@ enum IntegrationStatus {
 }
 
 // -----------------------------------------------------------------------------
-// 7. TRANSACTIONAL OUTBOX & AUDIT LOG
+// 8. TRANSACTIONAL OUTBOX & AUDIT LOG
 // -----------------------------------------------------------------------------
 
 model DomainEvent {
