@@ -47,6 +47,21 @@ export async function projectPlatformEventV1(event: AutomationEventEnvelopeV1): 
       if (!workspace) throw new Error('Notification workspace does not exist in the tenant.');
     }
 
+    if (resolvedWorkspaceId) {
+      const workspaceMembership = await tx.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId: resolvedWorkspaceId,
+            userId: request.targetUserId,
+          },
+        },
+        select: { tenantId: true },
+      });
+      if (!workspaceMembership || workspaceMembership.tenantId !== request.tenantId) {
+        throw new Error('Notification target is not a member of the automation workspace.');
+      }
+    }
+
     const inboxRows = await tx.$queryRaw<ProjectedInboxRow[]>(Prisma.sql`
       INSERT INTO inbox_items_v1
         (tenant_id, user_id, workspace_id, project_object_id, source_type, source_id,
