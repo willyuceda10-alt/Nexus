@@ -14,19 +14,38 @@ describe('material inventory engine v2', () => {
     ])).toBe(60);
   });
 
-  it('marks stock as available when current free inventory covers demand', () => {
+  it('marks stock as available when free inventory plus own allocation covers demand', () => {
     const result = calculateMaterialAvailabilityV2({
       requiredQty: 40,
       issuedQty: 0,
       onHandQty: 80,
-      reservedQty: 20,
+      ownReservedQty: 10,
+      otherReservedQty: 20,
       requiredDate: '2026-08-30',
       today: '2026-08-26',
       openPurchaseSupply: [],
     });
     expect(result.state).toBe('AVAILABLE');
-    expect(result.availableQty).toBe(60);
+    expect(result.reservedQty).toBe(10);
+    expect(result.competingReservedQty).toBe(20);
+    expect(result.availableQty).toBe(50);
     expect(result.taskAtRisk).toBe(false);
+  });
+
+  it('does not treat another requirement reservation as supply for this task', () => {
+    const result = calculateMaterialAvailabilityV2({
+      requiredQty: 70,
+      issuedQty: 0,
+      onHandQty: 80,
+      ownReservedQty: 0,
+      otherReservedQty: 60,
+      requiredDate: '2026-08-30',
+      today: '2026-08-26',
+      openPurchaseSupply: [],
+    });
+    expect(result.state).toBe('SHORTAGE');
+    expect(result.availableQty).toBe(20);
+    expect(result.deficitQty).toBe(50);
   });
 
   it('uses purchase order dates to detect a late material risk', () => {
@@ -34,7 +53,8 @@ describe('material inventory engine v2', () => {
       requiredQty: 100,
       issuedQty: 0,
       onHandQty: 20,
-      reservedQty: 0,
+      ownReservedQty: 0,
+      otherReservedQty: 0,
       requiredDate: '2026-08-29',
       today: '2026-08-26',
       openPurchaseSupply: [
@@ -53,13 +73,14 @@ describe('material inventory engine v2', () => {
       requiredQty: 100,
       issuedQty: 10,
       onHandQty: 20,
-      reservedQty: 5,
+      ownReservedQty: 5,
+      otherReservedQty: 0,
       requiredDate: '2026-08-29',
       today: '2026-08-26',
       openPurchaseSupply: [{ quantity: 30, expectedDate: '2026-08-28' }],
     });
     expect(result.state).toBe('SHORTAGE');
-    expect(result.deficitQty).toBe(45);
+    expect(result.deficitQty).toBe(40);
     expect(result.riskLevel).toBe('HIGH');
     expect(result.taskAtRisk).toBe(true);
   });
