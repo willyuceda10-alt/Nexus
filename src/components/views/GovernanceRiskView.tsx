@@ -455,8 +455,9 @@ export const GovernanceRiskView: React.FC<{ projectId?: string }> = ({ projectId
           <div className="flex flex-wrap gap-2 text-[9px] font-bold">
             <span className="rounded-lg bg-slate-50 px-2.5 py-1.5 text-slate-600">Pendientes: {projection.summary.pendingChangeCount}</span>
             <span className="rounded-lg bg-green-50 px-2.5 py-1.5 text-green-700">Aprobados: {projection.summary.approvedChangeCount}</span>
-            <span className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-amber-700">Plazo: +{projection.summary.changeTimeImpactDays} d</span>
-            <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-slate-700">Costo: {currency.format(projection.summary.changeCostImpact)}</span>
+            {projection.summary.unestimatedChangeCount > 0 && <span className="rounded-lg bg-yellow-50 px-2.5 py-1.5 text-yellow-700">Sin estimar: {projection.summary.unestimatedChangeCount}</span>}
+            <span className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-amber-700">Plazo informado: +{projection.summary.changeTimeImpactDays} d</span>
+            <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-slate-700">Costo informado: {currency.format(projection.summary.changeCostImpact)}</span>
           </div>
         </div>
 
@@ -480,11 +481,11 @@ export const GovernanceRiskView: React.FC<{ projectId?: string }> = ({ projectId
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <div className="rounded-xl bg-slate-50 px-3 py-2.5">
                     <div className="flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[0.08em] text-slate-400"><CircleDollarSign className="h-3.5 w-3.5" /> Impacto costo</div>
-                    <p className="mt-1 text-[13px] font-extrabold text-slate-800">{currency.format(change.costImpact)}</p>
+                    <p className="mt-1 text-[13px] font-extrabold text-slate-800">{change.costImpact !== undefined ? currency.format(change.costImpact) : 'Sin estimar'}</p>
                   </div>
                   <div className="rounded-xl bg-slate-50 px-3 py-2.5">
                     <div className="flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[0.08em] text-slate-400"><Clock3 className="h-3.5 w-3.5" /> Impacto plazo</div>
-                    <p className="mt-1 text-[13px] font-extrabold text-slate-800">+{change.timeImpactDays} días</p>
+                    <p className="mt-1 text-[13px] font-extrabold text-slate-800">{change.timeImpactDays !== undefined ? `+${change.timeImpactDays} días` : 'Sin estimar'}</p>
                   </div>
                 </div>
 
