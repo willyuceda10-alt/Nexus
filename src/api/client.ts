@@ -74,6 +74,14 @@ import type {
   UpdateApiWorkItemScheduleV2Input,
 } from './projectScheduleV2Contracts';
 import type { ApiResourceCapacityResponse } from './resourceCapacityContracts';
+import type {
+  ApiWorkBoardColumnSourceV1,
+  ApiWorkBoardColumnTypeV1,
+  ApiWorkBoardDataV1,
+  ApiWorkBoardDetailV1,
+  ApiWorkBoardSummaryV1,
+  ApiWorkViewTypeV1,
+} from './workOsBoardV1Contracts';
 
 export type AccessTokenProvider = () => Promise<string | null>;
 export type TenantIdProvider = () => string | null;
@@ -363,6 +371,41 @@ export const bridataApi = {
   },
   notificationCapabilitiesV1(signal?: AbortSignal): Promise<ApiNotificationCapabilitiesV1> {
     return request<ApiNotificationCapabilitiesV1>('/api/v1/notification-capabilities-v1', { signal });
+  },
+  workBoardsV1(workspaceId: string, signal?: AbortSignal): Promise<{ items: ApiWorkBoardSummaryV1[] }> {
+    const query = new URLSearchParams({ workspaceId });
+    return request<{ items: ApiWorkBoardSummaryV1[] }>(`/api/v1/work-os/boards-v1?${query.toString()}`, { signal });
+  },
+  workBoardV1(boardId: string, signal?: AbortSignal): Promise<ApiWorkBoardDetailV1> {
+    return request<ApiWorkBoardDetailV1>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}`, { signal });
+  },
+  workBoardDataV1(boardId: string, viewId?: string | null, signal?: AbortSignal): Promise<ApiWorkBoardDataV1> {
+    const query = new URLSearchParams();
+    if (viewId) query.set('viewId', viewId);
+    const suffix = query.toString();
+    return request<ApiWorkBoardDataV1>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/data${suffix ? `?${suffix}` : ''}`, { signal });
+  },
+  createWorkBoardV1(input: { workspaceId: string; objectDefinitionId: string; name: string; description?: string | null; icon?: string | null }): Promise<{ id: string }> {
+    return request<{ id: string }>('/api/v1/work-os/boards-v1', { method: 'POST', body: JSON.stringify(input) });
+  },
+  createWorkBoardGroupV1(boardId: string, input: { name: string; key?: string; color?: string | null; sortOrder?: number }): Promise<Record<string, unknown>> {
+    return request<Record<string, unknown>>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/groups`, { method: 'POST', body: JSON.stringify(input) });
+  },
+  createWorkBoardColumnV1(boardId: string, input: {
+    label: string; key?: string; source: ApiWorkBoardColumnSourceV1; dataType: ApiWorkBoardColumnTypeV1;
+    fieldKey: string; width?: number | null; sortOrder?: number; isVisible?: boolean; isEditable?: boolean;
+    config?: Record<string, unknown> | null;
+  }): Promise<Record<string, unknown>> {
+    return request<Record<string, unknown>>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/columns`, { method: 'POST', body: JSON.stringify(input) });
+  },
+  createWorkViewV1(boardId: string, input: { name: string; viewType: ApiWorkViewTypeV1; isDefault?: boolean; sortOrder?: number; config?: Record<string, unknown> }): Promise<Record<string, unknown>> {
+    return request<Record<string, unknown>>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/views`, { method: 'POST', body: JSON.stringify(input) });
+  },
+  placeWorkBoardItemV1(boardId: string, input: { objectId: string; groupId?: string | null; sortOrder?: number }): Promise<void> {
+    return request<void>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/items`, { method: 'POST', body: JSON.stringify(input) });
+  },
+  updateWorkBoardPlacementV1(boardId: string, objectId: string, input: { groupId?: string | null; sortOrder?: number }): Promise<void> {
+    return request<void>(`/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/items/${encodeURIComponent(objectId)}`, { method: 'PATCH', body: JSON.stringify(input) });
   },
   projectForecast(projectId: string, asOf?: string, signal?: AbortSignal): Promise<ApiProjectForecast> {
     const query = new URLSearchParams({ projectId });
