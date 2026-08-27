@@ -3,6 +3,7 @@ export type ObjectType =
   | 'PROGRAM'
   | 'PROJECT'
   | 'RESOURCE'
+  | 'MATERIAL'
   | 'TASK'
   | 'RISK'
   | 'DOCUMENT'
