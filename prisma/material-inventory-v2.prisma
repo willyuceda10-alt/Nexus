@@ -1,0 +1,231 @@
+// Material / Inventory Engine V2
+// Scalar-only Prisma projection of the typed operational tables.
+// Foreign keys and RLS are enforced by SQL migrations. Keeping these models
+// in Prisma prevents schema drift without coupling the engine to Object metadata.
+
+model UnitOfMeasureV2 {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  code          String   @db.VarChar(30)
+  name          String   @db.VarChar(100)
+  decimalPlaces Int      @default(2) @map("decimal_places")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, code], map: "unit_of_measures_tenant_code_key")
+  @@map("unit_of_measures")
+}
+
+model MaterialMasterV2 {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  workspaceId      String   @map("workspace_id") @db.Uuid
+  materialObjectId String   @unique(map: "material_masters_material_object_id_key") @map("material_object_id") @db.Uuid
+  code             String   @db.VarChar(100)
+  baseUomId        String   @map("base_uom_id") @db.Uuid
+  unitCost         Decimal  @default(0) @map("unit_cost") @db.Decimal(18, 4)
+  currency         String   @default("USD") @db.VarChar(3)
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, workspaceId, code], map: "material_masters_workspace_code_key")
+  @@index([tenantId, workspaceId], map: "material_masters_workspace_idx")
+  @@map("material_masters")
+}
+
+model WarehouseV2 {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  code        String   @db.VarChar(50)
+  name        String   @db.VarChar(255)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, workspaceId, code], map: "warehouses_workspace_code_key")
+  @@index([tenantId, workspaceId], map: "warehouses_workspace_idx")
+  @@map("warehouses")
+}
+
+model SupplierV2 {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  code      String   @db.VarChar(50)
+  name      String   @db.VarChar(255)
+  taxId     String?  @map("tax_id") @db.VarChar(50)
+  email     String?  @db.VarChar(255)
+  phone     String?  @db.VarChar(80)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, code], map: "suppliers_tenant_code_key")
+  @@map("suppliers")
+}
+
+model MaterialRequirementV2 {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String   @map("tenant_id") @db.Uuid
+  workspaceId          String   @map("workspace_id") @db.Uuid
+  projectObjectId      String   @map("project_object_id") @db.Uuid
+  workItemObjectId     String?  @map("work_item_object_id") @db.Uuid
+  materialId           String   @map("material_id") @db.Uuid
+  preferredWarehouseId String?  @map("preferred_warehouse_id") @db.Uuid
+  requiredQty          Decimal  @map("required_qty") @db.Decimal(18, 4)
+  requiredDate         DateTime @map("required_date") @db.Date
+  status               String   @default("OPEN") @db.VarChar(40)
+  priority             String   @default("MEDIUM") @db.VarChar(20)
+  notes                String?  @db.Text
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, projectObjectId, requiredDate], map: "material_requirements_project_date_idx")
+  @@index([tenantId, workItemObjectId], map: "material_requirements_work_item_idx")
+  @@index([tenantId, materialId], map: "material_requirements_material_idx")
+  @@map("material_requirements")
+}
+
+model StockReservationV2 {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  requirementId String   @map("requirement_id") @db.Uuid
+  materialId    String   @map("material_id") @db.Uuid
+  warehouseId   String   @map("warehouse_id") @db.Uuid
+  quantity      Decimal  @db.Decimal(18, 4)
+  status        String   @default("OPEN") @db.VarChar(30)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, requirementId, status], map: "stock_reservations_requirement_idx")
+  @@map("stock_reservations")
+}
+
+model PurchaseRequisitionV2 {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  projectObjectId   String?  @map("project_object_id") @db.Uuid
+  number            String   @db.VarChar(80)
+  status            String   @default("DRAFT") @db.VarChar(30)
+  requiredDate      DateTime? @map("required_date") @db.Date
+  requestedByUserId String?  @map("requested_by_user_id") @db.Uuid
+  notes             String?  @db.Text
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, workspaceId, number], map: "purchase_requisitions_workspace_number_key")
+  @@map("purchase_requisitions")
+}
+
+model PurchaseRequisitionLineV2 {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  requisitionId     String   @map("requisition_id") @db.Uuid
+  materialId        String   @map("material_id") @db.Uuid
+  requirementId     String?  @map("requirement_id") @db.Uuid
+  uomId             String   @map("uom_id") @db.Uuid
+  quantity          Decimal  @db.Decimal(18, 4)
+  estimatedUnitCost Decimal  @default(0) @map("estimated_unit_cost") @db.Decimal(18, 4)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId, requisitionId], map: "purchase_requisition_lines_req_idx")
+  @@map("purchase_requisition_lines")
+}
+
+model PurchaseOrderV2 {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  workspaceId     String   @map("workspace_id") @db.Uuid
+  projectObjectId String?  @map("project_object_id") @db.Uuid
+  supplierId      String   @map("supplier_id") @db.Uuid
+  number          String   @db.VarChar(80)
+  status          String   @default("DRAFT") @db.VarChar(30)
+  orderDate       DateTime @default(now()) @map("order_date") @db.Date
+  expectedDate    DateTime? @map("expected_date") @db.Date
+  currency        String   @default("USD") @db.VarChar(3)
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, workspaceId, number], map: "purchase_orders_workspace_number_key")
+  @@index([tenantId, projectObjectId, status], map: "purchase_orders_project_status_idx")
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLineV2 {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  purchaseOrderId String   @map("purchase_order_id") @db.Uuid
+  materialId      String   @map("material_id") @db.Uuid
+  requirementId   String?  @map("requirement_id") @db.Uuid
+  uomId           String   @map("uom_id") @db.Uuid
+  quantity        Decimal  @db.Decimal(18, 4)
+  receivedQty     Decimal  @default(0) @map("received_qty") @db.Decimal(18, 4)
+  unitCost        Decimal  @default(0) @map("unit_cost") @db.Decimal(18, 4)
+  expectedDate    DateTime? @map("expected_date") @db.Date
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, purchaseOrderId], map: "purchase_order_lines_po_idx")
+  @@index([tenantId, requirementId], map: "purchase_order_lines_requirement_idx")
+  @@map("purchase_order_lines")
+}
+
+model GoodsReceiptV2 {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  workspaceId      String   @map("workspace_id") @db.Uuid
+  warehouseId      String   @map("warehouse_id") @db.Uuid
+  purchaseOrderId  String?  @map("purchase_order_id") @db.Uuid
+  number           String   @db.VarChar(80)
+  status           String   @default("POSTED") @db.VarChar(20)
+  receivedAt       DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  receivedByUserId String?  @map("received_by_user_id") @db.Uuid
+  notes            String?  @db.Text
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, workspaceId, number], map: "goods_receipts_workspace_number_key")
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptLineV2 {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String   @map("tenant_id") @db.Uuid
+  goodsReceiptId      String   @map("goods_receipt_id") @db.Uuid
+  purchaseOrderLineId String?  @map("purchase_order_line_id") @db.Uuid
+  materialId          String   @map("material_id") @db.Uuid
+  requirementId       String?  @map("requirement_id") @db.Uuid
+  uomId               String   @map("uom_id") @db.Uuid
+  quantity            Decimal  @db.Decimal(18, 4)
+  unitCost            Decimal  @default(0) @map("unit_cost") @db.Decimal(18, 4)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId, goodsReceiptId], map: "goods_receipt_lines_receipt_idx")
+  @@map("goods_receipt_lines")
+}
+
+model InventoryMovementV2 {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  workspaceId     String   @map("workspace_id") @db.Uuid
+  warehouseId     String   @map("warehouse_id") @db.Uuid
+  materialId      String   @map("material_id") @db.Uuid
+  requirementId   String?  @map("requirement_id") @db.Uuid
+  workItemObjectId String? @map("work_item_object_id") @db.Uuid
+  movementType    String   @map("movement_type") @db.VarChar(30)
+  quantity        Decimal  @db.Decimal(18, 4)
+  unitCost        Decimal  @default(0) @map("unit_cost") @db.Decimal(18, 4)
+  occurredAt      DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  referenceType   String?  @map("reference_type") @db.VarChar(50)
+  referenceId     String?  @map("reference_id") @db.Uuid
+  createdByUserId String?  @map("created_by_user_id") @db.Uuid
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId, workspaceId, warehouseId, materialId, occurredAt], map: "inventory_movements_balance_idx")
+  @@index([tenantId, requirementId, occurredAt], map: "inventory_movements_requirement_idx")
+  @@map("inventory_movements")
+}
