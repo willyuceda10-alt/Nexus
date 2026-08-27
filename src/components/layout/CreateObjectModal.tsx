@@ -9,6 +9,8 @@ const projectChildTypes = new Set<ObjectType>([
   'CHANGE_REQUEST', 'DOCUMENT', 'INCIDENT',
 ]);
 
+type OptionalNumber = number | '';
+
 export const CreateObjectModal: React.FC = () => {
   const {
     isCreateModalOpen,
@@ -30,10 +32,13 @@ export const CreateObjectModal: React.FC = () => {
   const [programId, setProgramId] = useState('');
   const [code, setCode] = useState('');
   const [strategicObjective, setStrategicObjective] = useState('');
-  const [probability, setProbability] = useState(3);
-  const [impact, setImpact] = useState(3);
-  const [costImpact, setCostImpact] = useState(50000);
-  const [timeImpactDays, setTimeImpactDays] = useState(7);
+  const [probability, setProbability] = useState<OptionalNumber>('');
+  const [impact, setImpact] = useState<OptionalNumber>('');
+  const [mitigationPlan, setMitigationPlan] = useState('');
+  const [riskTargetDate, setRiskTargetDate] = useState('');
+  const [costImpact, setCostImpact] = useState<OptionalNumber>('');
+  const [timeImpactDays, setTimeImpactDays] = useState<OptionalNumber>('');
+  const [changeReason, setChangeReason] = useState('');
 
   const portfolios = useMemo(() => objects.filter((item) => item.type === 'PORTFOLIO'), [objects]);
   const programs = useMemo(() => objects.filter((item) => item.type === 'PROGRAM'), [objects]);
@@ -55,6 +60,13 @@ export const CreateObjectModal: React.FC = () => {
     setProgramId('');
     setCode('');
     setStrategicObjective('');
+    setProbability('');
+    setImpact('');
+    setMitigationPlan('');
+    setRiskTargetDate('');
+    setCostImpact('');
+    setTimeImpactDays('');
+    setChangeReason('');
   }, [isCreateModalOpen, createModalDefaultType, selectedProjectId, projects, portfolios]);
 
   if (!isCreateModalOpen) return null;
@@ -69,6 +81,7 @@ export const CreateObjectModal: React.FC = () => {
 
     const selectedProgram = programId ? programs.find((program) => program.id === programId) : undefined;
     const resolvedPortfolioId = selectedProgram?.portfolioId ?? (portfolioId || undefined);
+    const hasRiskScore = typeof probability === 'number' && typeof impact === 'number';
 
     try {
       await createNexusObject({
@@ -88,8 +101,14 @@ export const CreateObjectModal: React.FC = () => {
             : type === 'CHANGE_REQUEST' ? 'PENDING_APPROVAL'
               : ['PORTFOLIO', 'PROGRAM', 'PROJECT'].includes(type) ? 'PLANNING'
                 : 'IN_PROGRESS',
-        ...(type === 'RISK' ? { probability, impact, riskScore: probability * impact } : {}),
-        ...(type === 'CHANGE_REQUEST' ? { costImpact, timeImpactDays } : {}),
+        ...(type === 'RISK' && typeof probability === 'number' ? { probability } : {}),
+        ...(type === 'RISK' && typeof impact === 'number' ? { impact } : {}),
+        ...(type === 'RISK' && hasRiskScore ? { riskScore: probability * impact } : {}),
+        ...(type === 'RISK' && mitigationPlan.trim() ? { mitigationPlan: mitigationPlan.trim() } : {}),
+        ...(type === 'RISK' && riskTargetDate ? { endDate: riskTargetDate } : {}),
+        ...(type === 'CHANGE_REQUEST' && typeof costImpact === 'number' ? { costImpact } : {}),
+        ...(type === 'CHANGE_REQUEST' && typeof timeImpactDays === 'number' ? { timeImpactDays } : {}),
+        ...(type === 'CHANGE_REQUEST' && changeReason.trim() ? { changeReason: changeReason.trim() } : {}),
       });
       setTitle('');
       setDescription('');
@@ -149,8 +168,35 @@ export const CreateObjectModal: React.FC = () => {
           <Field label="Descripción / contexto"><textarea rows={3} maxLength={20000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Describe el alcance, resultado esperado o contexto..." className="form-control" /></Field>
           {hierarchyObject && <Field label="Objetivo estratégico"><textarea rows={2} maxLength={2000} value={strategicObjective} onChange={(event) => setStrategicObjective(event.target.value)} placeholder="Resultado estratégico esperado..." className="form-control bg-green-50/30" /></Field>}
 
-          {type === 'RISK' && <div className="grid grid-cols-2 gap-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3"><NumberField label="Probabilidad (1-5)" value={probability} onChange={setProbability} min={1} max={5} /><NumberField label="Impacto (1-5)" value={impact} onChange={setImpact} min={1} max={5} /></div>}
-          {type === 'CHANGE_REQUEST' && <div className="grid grid-cols-2 gap-3 rounded-xl border border-rose-200 bg-rose-50/50 p-3"><NumberField label="Impacto costo" value={costImpact} onChange={setCostImpact} min={0} /><NumberField label="Impacto tiempo (días)" value={timeImpactDays} onChange={setTimeImpactDays} min={0} /></div>}
+          {type === 'RISK' && (
+            <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-amber-800">Evaluación del riesgo</p>
+                <p className="mt-0.5 text-[9px] text-amber-700/75">Déjalo vacío si todavía no existe una evaluación aprobada. Bridata no inventará un score.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <NumberField label="Probabilidad (1-5)" value={probability} onChange={setProbability} min={1} max={5} placeholder="Sin evaluar" />
+                <NumberField label="Impacto (1-5)" value={impact} onChange={setImpact} min={1} max={5} placeholder="Sin evaluar" />
+              </div>
+              <Field label="Plan de mitigación"><textarea rows={2} maxLength={4000} value={mitigationPlan} onChange={(event) => setMitigationPlan(event.target.value)} placeholder="Acción concreta para reducir probabilidad o impacto..." className="form-control bg-white" /></Field>
+              <Field label="Fecha objetivo de mitigación"><input type="date" value={riskTargetDate} onChange={(event) => setRiskTargetDate(event.target.value)} className="form-control bg-white" /></Field>
+            </div>
+          )}
+
+          {type === 'CHANGE_REQUEST' && (
+            <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-700">Impacto declarado</p>
+                <p className="mt-0.5 text-[9px] text-slate-500">Costo y plazo son opcionales hasta que exista una estimación. Los campos vacíos se mostrarán como “Sin estimar”.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <NumberField label="Impacto costo" value={costImpact} onChange={setCostImpact} min={0} placeholder="Sin estimar" />
+                <NumberField label="Impacto tiempo (días)" value={timeImpactDays} onChange={setTimeImpactDays} min={0} placeholder="Sin estimar" />
+              </div>
+              <Field label="Motivo del cambio"><textarea rows={2} maxLength={4000} value={changeReason} onChange={(event) => setChangeReason(event.target.value)} placeholder="Por qué se solicita el cambio y qué necesidad resuelve..." className="form-control bg-white" /></Field>
+            </div>
+          )}
+
           {!hierarchyObject && <Field label="Prioridad"><PrioritySelect value={priority} onChange={setPriority} /></Field>}
 
           {objectDataError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-[11px] font-medium text-rose-700">{objectDataError}</div>}
@@ -171,4 +217,24 @@ const PrioritySelect: React.FC<{ value: Priority; onChange: (value: Priority) =>
   <select value={value} onChange={(event) => onChange(event.target.value as Priority)} className="form-control"><option value="LOW">Baja</option><option value="MEDIUM">Media</option><option value="HIGH">Alta</option><option value="CRITICAL">Crítica</option></select>
 );
 
-const NumberField: React.FC<{ label: string; value: number; onChange: (value: number) => void; min: number; max?: number }> = ({ label, value, onChange, min, max }) => <div><label className="font-semibold text-slate-600">{label}</label><input type="number" min={min} {...(max !== undefined ? { max } : {})} value={value} onChange={(event) => onChange(Number(event.target.value))} className="mt-1 w-full rounded border border-slate-200 bg-white p-2 font-bold text-slate-800" /></div>;
+const NumberField: React.FC<{
+  label: string;
+  value: OptionalNumber;
+  onChange: (value: OptionalNumber) => void;
+  min: number;
+  max?: number;
+  placeholder?: string;
+}> = ({ label, value, onChange, min, max, placeholder }) => (
+  <div>
+    <label className="font-semibold text-slate-600">{label}</label>
+    <input
+      type="number"
+      min={min}
+      {...(max !== undefined ? { max } : {})}
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value === '' ? '' : Number(event.target.value))}
+      className="mt-1 w-full rounded border border-slate-200 bg-white p-2 font-bold text-slate-800"
+    />
+  </div>
+);
