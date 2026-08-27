@@ -81,7 +81,7 @@ export const workOsBoardConfigV1Api = {
     name?: string;
     options: Array<{ key: string; label: string; color?: string | null }>;
   }): Promise<BoardOptionSetV1> {
-    return request(tenantId, `/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/columns/${encodeURIComponent(columnId)}/options`, {
+    return request(tenantId, `/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/columns/${encodeURIComponent(columnId)}/managed-options`, {
       method: 'PUT', body: JSON.stringify(input),
     });
   },
