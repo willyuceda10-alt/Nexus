@@ -141,7 +141,6 @@ export async function projectPlatformEventV1(event: AutomationEventEnvelopeV1): 
       where: {
         userId: request.targetUserId,
         provider: 'ENTRA_ID',
-        providerTenantId: request.tenantId,
       },
       select: { subject: true },
     });
