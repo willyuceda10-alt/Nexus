@@ -48,7 +48,7 @@ describe('toGraphRecurrenceV1', () => {
     }), '2026-08-31');
     expect(graph).toEqual({
       pattern: { type: 'weekly', interval: 2, daysOfWeek: ['monday', 'wednesday'], firstDayOfWeek: 'monday' },
-      range: { type: 'endDate', startDate: '2026-08-31', endDate: '2026-10-31', recurrenceTimeZone: 'UTC' },
+      range: { type: 'endDate', startDate: '2026-08-31', endDate: '2026-10-31', recurrenceTimeZone: 'SA Pacific Standard Time' },
     });
   });
 });
