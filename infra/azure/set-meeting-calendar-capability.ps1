@@ -25,27 +25,22 @@ $api = az containerapp show `
     --name $ApiContainerAppName `
     --query '{name:name,provisioningState:properties.provisioningState}' `
     -o json | ConvertFrom-Json
-
 if (-not $api.name) { throw 'Bridata API Container App was not found.' }
 
-if ($Mode -eq 'Enable') {
-    $worker = az containerapp show `
-        --resource-group $ResourceGroup `
-        --name $MeetingWorkerName `
-        --query '{name:name,provisioningState:properties.provisioningState,runningStatus:properties.runningStatus}' `
-        -o json | ConvertFrom-Json
-
-    if (-not $worker.name) { throw 'Meeting Calendar worker was not found. Do not advertise M365 calendar capability before the worker exists.' }
-    if ($worker.provisioningState -ne 'Succeeded') {
-        throw "Meeting Calendar worker provisioning state is '$($worker.provisioningState)', not Succeeded."
-    }
+$worker = az containerapp show `
+    --resource-group $ResourceGroup `
+    --name $MeetingWorkerName `
+    --query '{name:name,provisioningState:properties.provisioningState,runningStatus:properties.runningStatus}' `
+    -o json | ConvertFrom-Json
+if (-not $worker.name) { throw 'Meeting Calendar worker was not found.' }
+if ($Mode -eq 'Enable' -and $worker.provisioningState -ne 'Succeeded') {
+    throw "Meeting Calendar worker provisioning state is '$($worker.provisioningState)', not Succeeded."
 }
 
-$available = if ($Mode -eq 'Enable') { 'true' } else { 'false' }
-$syncEnabled = $available
-
-Write-Host "MEETING_CALENDAR_WORKER_AVAILABLE=$available"
-Write-Host "M365_CALENDAR_SYNC_ENABLED=$syncEnabled"
+$enabled = if ($Mode -eq 'Enable') { 'true' } else { 'false' }
+Write-Host "Worker M365_CALENDAR_SYNC_ENABLED=$enabled"
+Write-Host "API    M365_CALENDAR_SYNC_ENABLED=$enabled"
+Write-Host "API    MEETING_CALENDAR_WORKER_AVAILABLE=$enabled"
 
 if (-not $Apply) {
     Write-Host ''
@@ -54,15 +49,25 @@ if (-not $Apply) {
     exit 0
 }
 
+# Change the worker first when enabling. The API must not advertise calendar write
+# capability until the actual consumer is configured to perform Graph operations.
+az containerapp update `
+    --resource-group $ResourceGroup `
+    --name $MeetingWorkerName `
+    --set-env-vars "M365_CALENDAR_SYNC_ENABLED=$enabled" `
+    -o none
+if ($LASTEXITCODE -ne 0) { throw 'Could not update Meeting Calendar worker capability.' }
+
 az containerapp update `
     --resource-group $ResourceGroup `
     --name $ApiContainerAppName `
     --set-env-vars `
-        "MEETING_CALENDAR_WORKER_AVAILABLE=$available" `
-        "M365_CALENDAR_SYNC_ENABLED=$syncEnabled" `
+        "MEETING_CALENDAR_WORKER_AVAILABLE=$enabled" `
+        "M365_CALENDAR_SYNC_ENABLED=$enabled" `
     -o none
+if ($LASTEXITCODE -ne 0) { throw 'Could not update Bridata API calendar capability.' }
 
-Write-Host 'Bridata API capability flags updated.'
+Write-Host 'Bridata Meeting Calendar worker/API capability flags updated.'
 if ($Mode -eq 'Enable') {
     Write-Warning 'Verify /api/v1/meetings-v1/capabilities and perform one controlled test meeting before broader use.'
 }
