@@ -98,6 +98,52 @@ export async function outboxAdminV2Routes(app: FastifyInstance): Promise<void> {
   );
 
   app.post(
+    '/api/v1/outbox/backfill-tenant-v2',
+    { preHandler: [authenticate, resolveActor] },
+    async (request, reply) => {
+      const actor = request.actor!;
+      const result = await withTenant(actor.tenantId, async (tx) => {
+        const permission = await authorizePermission(tx, actor, 'tenant.manage_automation');
+        if (!permission.allowed) return { kind: 'forbidden' as const };
+
+        const rows = await tx.$queryRaw<Array<{ count: bigint | number | string; last_event_at: Date | null }>>(Prisma.sql`
+          SELECT COUNT(*) AS count, MAX(created_at) AS last_event_at
+          FROM domain_events
+          WHERE tenant_id = ${actor.tenantId}::uuid
+            AND status IN ('PENDING'::"EventStatus", 'PROCESSING'::"EventStatus")
+        `);
+        const pendingCount = Number(rows[0]?.count ?? 0);
+        const lastEventAt = rows[0]?.last_event_at ?? null;
+        if (pendingCount === 0 || !lastEventAt) {
+          return { kind: 'ok' as const, pendingCount: 0, registered: false };
+        }
+
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO outbox_tenant_partitions (tenant_id, next_scan_at, last_event_at)
+          VALUES (${actor.tenantId}::uuid, CURRENT_TIMESTAMP, ${lastEventAt})
+          ON CONFLICT (tenant_id)
+          DO UPDATE SET next_scan_at = CURRENT_TIMESTAMP,
+                        last_event_at = GREATEST(outbox_tenant_partitions.last_event_at, EXCLUDED.last_event_at)
+        `);
+        await tx.auditLog.create({
+          data: {
+            tenantId: actor.tenantId,
+            userId: actor.userId,
+            action: 'OUTBOX_TENANT_BACKFILL_REGISTERED',
+            resource: 'DOMAIN_EVENT',
+            correlationId: request.id,
+            ipAddress: request.ip,
+            details: { pendingCount, lastEventAt: lastEventAt.toISOString() },
+          },
+        });
+        return { kind: 'ok' as const, pendingCount, registered: true };
+      });
+      if (result.kind === 'forbidden') return reply.code(403).send({ error: 'outbox_operations_denied' });
+      return { tenantId: actor.tenantId, pendingCount: result.pendingCount, registered: result.registered };
+    },
+  );
+
+  app.post(
     '/api/v1/outbox/events/:id/retry-v2',
     { preHandler: [authenticate, resolveActor] },
     async (request, reply) => {
