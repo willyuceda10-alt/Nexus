@@ -17,6 +17,16 @@ import type {
   UpdateApiObjectInput,
 } from './contracts';
 import type {
+  ApiAutomationApprovalStatusV1,
+  ApiAutomationApprovalV1,
+  ApiAutomationDefinitionV1,
+  ApiAutomationRunV1,
+  ApiAutomationStatusV1,
+  ApiAutomationVersionV1,
+  CreateApiAutomationDefinitionV1Input,
+  PublishApiAutomationVersionV1Input,
+} from './automationV1Contracts';
+import type {
   ApiCostBackfillV2Response,
   ApiCostCatalogV2,
   ApiProjectCostOverviewV2,
@@ -155,48 +165,31 @@ export const bridataApi = {
     return request<ApiScheduleAnalysis>(`/api/v1/schedule-analysis?${query.toString()}`, { signal });
   },
   projectScheduleAnalysisV2(projectId: string, signal?: AbortSignal): Promise<ApiScheduleAnalysisV2> {
-    return request<ApiScheduleAnalysisV2>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/schedule-analysis-v2`,
-      { signal },
-    );
+    return request<ApiScheduleAnalysisV2>(`/api/v1/projects/${encodeURIComponent(projectId)}/schedule-analysis-v2`, { signal });
   },
   projectWbsV2(projectId: string, signal?: AbortSignal): Promise<ApiWbsV2Response> {
-    return request<ApiWbsV2Response>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/wbs-v2`,
-      { signal },
-    );
+    return request<ApiWbsV2Response>(`/api/v1/projects/${encodeURIComponent(projectId)}/wbs-v2`, { signal });
   },
   updateProjectWbsV2(projectId: string, input: UpdateApiWbsV2Input): Promise<UpdateApiWbsV2Response> {
-    return request<UpdateApiWbsV2Response>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/wbs-v2`,
-      { method: 'PUT', body: JSON.stringify(input) },
-    );
+    return request<UpdateApiWbsV2Response>(`/api/v1/projects/${encodeURIComponent(projectId)}/wbs-v2`, {
+      method: 'PUT', body: JSON.stringify(input),
+    });
   },
-  updateWorkItemScheduleV2(
-    objectId: string,
-    input: UpdateApiWorkItemScheduleV2Input,
-  ): Promise<ApiWorkItemScheduleV2> {
-    return request<ApiWorkItemScheduleV2>(
-      `/api/v1/work-items/${encodeURIComponent(objectId)}/schedule`,
-      { method: 'PATCH', body: JSON.stringify(input) },
-    );
+  updateWorkItemScheduleV2(objectId: string, input: UpdateApiWorkItemScheduleV2Input): Promise<ApiWorkItemScheduleV2> {
+    return request<ApiWorkItemScheduleV2>(`/api/v1/work-items/${encodeURIComponent(objectId)}/schedule`, {
+      method: 'PATCH', body: JSON.stringify(input),
+    });
   },
   backfillProjectEngineV2(projectId: string, dryRun = true): Promise<ApiProjectEngineV2BackfillResponse> {
     return request<ApiProjectEngineV2BackfillResponse>('/api/v1/project-engine-v2/backfill', {
-      method: 'POST',
-      body: JSON.stringify({ projectId, dryRun }),
+      method: 'POST', body: JSON.stringify({ projectId, dryRun }),
     });
   },
   materialSetupV2(workspaceId: string, signal?: AbortSignal): Promise<ApiMaterialSetupV2> {
     const query = new URLSearchParams({ workspaceId });
     return request<ApiMaterialSetupV2>(`/api/v1/material-engine-v2/setup?${query.toString()}`, { signal });
   },
-  materialOverviewV2(
-    workspaceId: string,
-    projectId?: string | null,
-    asOf?: string,
-    signal?: AbortSignal,
-  ): Promise<ApiMaterialOverviewV2> {
+  materialOverviewV2(workspaceId: string, projectId?: string | null, asOf?: string, signal?: AbortSignal): Promise<ApiMaterialOverviewV2> {
     const query = new URLSearchParams({ workspaceId });
     if (projectId) query.set('projectId', projectId);
     if (asOf) query.set('asOf', asOf);
@@ -221,102 +214,97 @@ export const bridataApi = {
     });
   },
   createWarehouseV2(input: { workspaceId: string; code: string; name: string }): Promise<ApiWarehouseV2> {
-    return request<ApiWarehouseV2>('/api/v1/material-engine-v2/warehouses', {
-      method: 'POST', body: JSON.stringify(input),
-    });
+    return request<ApiWarehouseV2>('/api/v1/material-engine-v2/warehouses', { method: 'POST', body: JSON.stringify(input) });
   },
-  createSupplierV2(input: {
-    code: string; name: string; taxId?: string | null; email?: string | null; phone?: string | null;
-  }): Promise<ApiSupplierV2> {
-    return request<ApiSupplierV2>('/api/v1/material-engine-v2/suppliers', {
-      method: 'POST', body: JSON.stringify(input),
-    });
+  createSupplierV2(input: { code: string; name: string; taxId?: string | null; email?: string | null; phone?: string | null }): Promise<ApiSupplierV2> {
+    return request<ApiSupplierV2>('/api/v1/material-engine-v2/suppliers', { method: 'POST', body: JSON.stringify(input) });
   },
   createMaterialRequirementV2(input: CreateMaterialRequirementV2Input): Promise<{ id: string; status: string }> {
-    return request<{ id: string; status: string }>('/api/v1/material-engine-v2/requirements', {
-      method: 'POST', body: JSON.stringify(input),
-    });
+    return request<{ id: string; status: string }>('/api/v1/material-engine-v2/requirements', { method: 'POST', body: JSON.stringify(input) });
   },
   createReservationV2(input: CreateReservationV2Input): Promise<{ id: string; availableAfter: number }> {
-    return request<{ id: string; availableAfter: number }>('/api/v1/material-engine-v2/reservations', {
-      method: 'POST', body: JSON.stringify(input),
-    });
+    return request<{ id: string; availableAfter: number }>('/api/v1/material-engine-v2/reservations', { method: 'POST', body: JSON.stringify(input) });
   },
   createPurchaseOrderV2(input: CreatePurchaseOrderV2Input): Promise<{ id: string; number: string; status: string; lineCount: number }> {
-    return request<{ id: string; number: string; status: string; lineCount: number }>('/api/v1/material-engine-v2/purchase-orders', {
-      method: 'POST', body: JSON.stringify(input),
-    });
+    return request<{ id: string; number: string; status: string; lineCount: number }>('/api/v1/material-engine-v2/purchase-orders', { method: 'POST', body: JSON.stringify(input) });
   },
   createGoodsReceiptV2(input: CreateGoodsReceiptV2Input): Promise<{ id: string; number: string; status: string; lineCount: number }> {
-    return request<{ id: string; number: string; status: string; lineCount: number }>('/api/v1/material-engine-v2/goods-receipts', {
-      method: 'POST', body: JSON.stringify(input),
-    });
+    return request<{ id: string; number: string; status: string; lineCount: number }>('/api/v1/material-engine-v2/goods-receipts', { method: 'POST', body: JSON.stringify(input) });
   },
   issueMaterialV2(input: CreateMaterialIssueV2Input): Promise<{ id: string; type: 'ISSUE'; quantity: number }> {
-    return request<{ id: string; type: 'ISSUE'; quantity: number }>('/api/v1/material-engine-v2/issues', {
-      method: 'POST', body: JSON.stringify(input),
-    });
+    return request<{ id: string; type: 'ISSUE'; quantity: number }>('/api/v1/material-engine-v2/issues', { method: 'POST', body: JSON.stringify(input) });
   },
   costCatalogV2(workspaceId: string, signal?: AbortSignal): Promise<ApiCostCatalogV2> {
     const query = new URLSearchParams({ workspaceId });
     return request<ApiCostCatalogV2>(`/api/v1/cost-engine-v2/catalog?${query.toString()}`, { signal });
   },
   projectCostOverviewV2(projectId: string, signal?: AbortSignal): Promise<ApiProjectCostOverviewV2> {
-    return request<ApiProjectCostOverviewV2>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/cost-overview-v2`,
-      { signal },
-    );
+    return request<ApiProjectCostOverviewV2>(`/api/v1/projects/${encodeURIComponent(projectId)}/cost-overview-v2`, { signal });
   },
   createCostCodeV2(input: CreateApiCostCodeV2Input): Promise<{ id: string }> {
-    return request<{ id: string }>('/api/v1/cost-engine-v2/cost-codes', {
-      method: 'POST', body: JSON.stringify(input),
-    });
+    return request<{ id: string }>('/api/v1/cost-engine-v2/cost-codes', { method: 'POST', body: JSON.stringify(input) });
   },
   updateProjectCostProfileV2(projectId: string, input: UpdateApiCostProfileV2Input): Promise<{ id: string }> {
-    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/cost-profile-v2`, {
-      method: 'PUT', body: JSON.stringify(input),
-    });
+    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/cost-profile-v2`, { method: 'PUT', body: JSON.stringify(input) });
   },
   createBudgetLineV2(projectId: string, input: CreateApiBudgetLineV2Input): Promise<{ id: string }> {
-    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/budget-lines-v2`, {
-      method: 'POST', body: JSON.stringify(input),
-    });
+    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/budget-lines-v2`, { method: 'POST', body: JSON.stringify(input) });
   },
   updateBudgetLineV2(id: string, input: UpdateApiBudgetLineV2Input): Promise<{ id: string }> {
-    return request<{ id: string }>(`/api/v1/cost-engine-v2/budget-lines/${encodeURIComponent(id)}`, {
-      method: 'PATCH', body: JSON.stringify(input),
-    });
+    return request<{ id: string }>(`/api/v1/cost-engine-v2/budget-lines/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
   },
   createCommitmentV2(projectId: string, input: CreateApiCommitmentV2Input): Promise<{ id: string }> {
-    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/commitments-v2`, {
-      method: 'POST', body: JSON.stringify(input),
-    });
+    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/commitments-v2`, { method: 'POST', body: JSON.stringify(input) });
   },
   updateCommitmentV2(id: string, input: { releasedAmount?: number; status?: 'OPEN' | 'CLOSED' | 'CANCELLED'; notes?: string | null }): Promise<{ id: string }> {
-    return request<{ id: string }>(`/api/v1/cost-engine-v2/commitments/${encodeURIComponent(id)}`, {
-      method: 'PATCH', body: JSON.stringify(input),
-    });
+    return request<{ id: string }>(`/api/v1/cost-engine-v2/commitments/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
   },
   createActualCostV2(projectId: string, input: CreateApiActualCostV2Input): Promise<{ id: string }> {
-    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/actual-costs-v2`, {
+    return request<{ id: string }>(`/api/v1/projects/${encodeURIComponent(projectId)}/actual-costs-v2`, { method: 'POST', body: JSON.stringify(input) });
+  },
+  captureCostBaselineV2(projectId: string, name?: string | null): Promise<{ id: string; version: number; lineCount: number }> {
+    return request<{ id: string; version: number; lineCount: number }>(`/api/v1/projects/${encodeURIComponent(projectId)}/cost-baseline-v2`, {
+      method: 'POST', body: JSON.stringify({ name: name ?? null }),
+    });
+  },
+  listCostBaselinesV2(projectId: string, signal?: AbortSignal): Promise<{ items: Array<Record<string, unknown>> }> {
+    return request<{ items: Array<Record<string, unknown>> }>(`/api/v1/projects/${encodeURIComponent(projectId)}/cost-baselines-v2`, { signal });
+  },
+  backfillCostEngineV2(projectId: string, dryRun = true): Promise<ApiCostBackfillV2Response> {
+    return request<ApiCostBackfillV2Response>('/api/v1/cost-engine-v2/backfill', { method: 'POST', body: JSON.stringify({ projectId, dryRun }) });
+  },
+  listAutomationsV1(params: { workspaceId?: string; projectId?: string; status?: ApiAutomationStatusV1 } = {}, signal?: AbortSignal): Promise<{ items: ApiAutomationDefinitionV1[] }> {
+    const query = new URLSearchParams();
+    if (params.workspaceId) query.set('workspaceId', params.workspaceId);
+    if (params.projectId) query.set('projectId', params.projectId);
+    if (params.status) query.set('status', params.status);
+    const suffix = query.toString();
+    return request<{ items: ApiAutomationDefinitionV1[] }>(`/api/v1/automations-v1${suffix ? `?${suffix}` : ''}`, { signal });
+  },
+  createAutomationV1(input: CreateApiAutomationDefinitionV1Input): Promise<ApiAutomationDefinitionV1> {
+    return request<ApiAutomationDefinitionV1>('/api/v1/automations-v1', { method: 'POST', body: JSON.stringify(input) });
+  },
+  publishAutomationVersionV1(id: string, input: PublishApiAutomationVersionV1Input): Promise<ApiAutomationVersionV1> {
+    return request<ApiAutomationVersionV1>(`/api/v1/automations-v1/${encodeURIComponent(id)}/versions`, {
       method: 'POST', body: JSON.stringify(input),
     });
   },
-  captureCostBaselineV2(projectId: string, name?: string | null): Promise<{ id: string; version: number; lineCount: number }> {
-    return request<{ id: string; version: number; lineCount: number }>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/cost-baseline-v2`,
-      { method: 'POST', body: JSON.stringify({ name: name ?? null }) },
-    );
+  setAutomationStatusV1(id: string, status: ApiAutomationStatusV1): Promise<ApiAutomationDefinitionV1> {
+    return request<ApiAutomationDefinitionV1>(`/api/v1/automations-v1/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH', body: JSON.stringify({ status }),
+    });
   },
-  listCostBaselinesV2(projectId: string, signal?: AbortSignal): Promise<{ items: Array<Record<string, unknown>> }> {
-    return request<{ items: Array<Record<string, unknown>> }>(
-      `/api/v1/projects/${encodeURIComponent(projectId)}/cost-baselines-v2`,
-      { signal },
-    );
+  automationRunsV1(id: string, limit = 50, signal?: AbortSignal): Promise<{ items: ApiAutomationRunV1[] }> {
+    const query = new URLSearchParams({ limit: String(limit) });
+    return request<{ items: ApiAutomationRunV1[] }>(`/api/v1/automations-v1/${encodeURIComponent(id)}/runs?${query.toString()}`, { signal });
   },
-  backfillCostEngineV2(projectId: string, dryRun = true): Promise<ApiCostBackfillV2Response> {
-    return request<ApiCostBackfillV2Response>('/api/v1/cost-engine-v2/backfill', {
-      method: 'POST', body: JSON.stringify({ projectId, dryRun }),
+  automationApprovalsV1(status: ApiAutomationApprovalStatusV1 = 'PENDING', signal?: AbortSignal): Promise<{ items: ApiAutomationApprovalV1[] }> {
+    const query = new URLSearchParams({ status });
+    return request<{ items: ApiAutomationApprovalV1[] }>(`/api/v1/automation-approvals-v1?${query.toString()}`, { signal });
+  },
+  decideAutomationApprovalV1(id: string, decision: 'APPROVED' | 'REJECTED', comment?: string | null): Promise<{ id: string; status: string; decidedAt: string | null }> {
+    return request<{ id: string; status: string; decidedAt: string | null }>(`/api/v1/automation-approvals-v1/${encodeURIComponent(id)}/decision`, {
+      method: 'POST', body: JSON.stringify({ decision, comment: comment ?? null }),
     });
   },
   projectForecast(projectId: string, asOf?: string, signal?: AbortSignal): Promise<ApiProjectForecast> {
@@ -324,12 +312,7 @@ export const bridataApi = {
     if (asOf) query.set('asOf', asOf);
     return request<ApiProjectForecast>(`/api/v1/forecast?${query.toString()}`, { signal });
   },
-  resourceCapacity(
-    workspaceId: string,
-    from?: string,
-    to?: string,
-    signal?: AbortSignal,
-  ): Promise<ApiResourceCapacityResponse> {
+  resourceCapacity(workspaceId: string, from?: string, to?: string, signal?: AbortSignal): Promise<ApiResourceCapacityResponse> {
     const query = new URLSearchParams({ workspaceId });
     if (from) query.set('from', from);
     if (to) query.set('to', to);
@@ -337,8 +320,7 @@ export const bridataApi = {
   },
   saveProjectBaseline(projectId: string, overwrite = false): Promise<ApiBaselineSummary> {
     return request<ApiBaselineSummary>(`/api/v1/projects/${encodeURIComponent(projectId)}/baseline`, {
-      method: 'POST',
-      body: JSON.stringify({ overwrite }),
+      method: 'POST', body: JSON.stringify({ overwrite }),
     });
   },
 };
