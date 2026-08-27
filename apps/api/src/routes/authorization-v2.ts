@@ -111,7 +111,13 @@ export async function authorizationV2Routes(app: FastifyInstance): Promise<void>
     async (request) => ({
       version: 2,
       permissions: PERMISSIONS_V2,
-      precedence: ['EXPLICIT_DENY', 'EXPLICIT_ALLOW', 'BASE_ROLE', 'DEFAULT_DENY'],
+      precedence: [
+        'BREAK_GLASS_OWNER_FOR_TENANT_PERMISSION_ADMIN',
+        'EXPLICIT_DENY',
+        'EXPLICIT_ALLOW',
+        'BASE_ROLE',
+        'DEFAULT_DENY',
+      ],
       actorRole: request.actor!.role,
     }),
   );
@@ -154,15 +160,17 @@ export async function authorizationV2Routes(app: FastifyInstance): Promise<void>
       if (!query.success) return reply.code(400).send({ error: 'validation_error' });
       const actor = request.actor!;
       const result = await withTenant(actor.tenantId, async (tx) => {
+        let effectiveWorkspaceId = query.data.workspaceId ?? null;
         if (query.data.projectId) {
           const project = await tx.nexusObject.findFirst({
             where: { id: query.data.projectId, tenantId: actor.tenantId, objectTypeKey: 'PROJECT', deletedAt: null },
             select: { workspaceId: true },
           });
           if (!project) return { kind: 'not_found' as const };
+          effectiveWorkspaceId = project.workspaceId;
           if (!(await canManageWorkspacePermissions(tx, actor, project.workspaceId))) return { kind: 'forbidden' as const };
-        } else if (query.data.workspaceId) {
-          if (!(await canManageWorkspacePermissions(tx, actor, query.data.workspaceId))) return { kind: 'forbidden' as const };
+        } else if (effectiveWorkspaceId) {
+          if (!(await canManageWorkspacePermissions(tx, actor, effectiveWorkspaceId))) return { kind: 'forbidden' as const };
         } else if (!isTenantAdministrator(actor)) {
           return { kind: 'forbidden' as const };
         }
@@ -172,15 +180,16 @@ export async function authorizationV2Routes(app: FastifyInstance): Promise<void>
               SELECT * FROM authorization_policies
               WHERE tenant_id = ${actor.tenantId}::uuid
                 AND ((scope_type = 'TENANT' AND scope_id = ${actor.tenantId}::uuid)
+                  OR (scope_type = 'WORKSPACE' AND scope_id = ${effectiveWorkspaceId}::uuid)
                   OR (scope_type = 'PROJECT' AND scope_id = ${query.data.projectId}::uuid))
               ORDER BY scope_type, permission_key, subject_type, subject_key
             `)
-          : query.data.workspaceId
+          : effectiveWorkspaceId
             ? await tx.$queryRaw<PolicyRow[]>(Prisma.sql`
                 SELECT * FROM authorization_policies
                 WHERE tenant_id = ${actor.tenantId}::uuid
                   AND ((scope_type = 'TENANT' AND scope_id = ${actor.tenantId}::uuid)
-                    OR (scope_type = 'WORKSPACE' AND scope_id = ${query.data.workspaceId}::uuid))
+                    OR (scope_type = 'WORKSPACE' AND scope_id = ${effectiveWorkspaceId}::uuid))
                 ORDER BY scope_type, permission_key, subject_type, subject_key
               `)
             : await tx.$queryRaw<PolicyRow[]>(Prisma.sql`
@@ -241,7 +250,7 @@ export async function authorizationV2Routes(app: FastifyInstance): Promise<void>
               tenantId: actor.tenantId,
               aggregateId: row.id,
               eventType: 'bridata.authorization.policy.changed',
-              idempotencyKey: `auth-policy:${row.id}:${row.updated_at.toISOString()}`,
+              idempotencyKey: `auth-policy:${row.id}:${request.id}`,
               payload: {
                 policyId: row.id,
                 scopeType: row.scope_type,
@@ -307,18 +316,38 @@ export async function authorizationV2Routes(app: FastifyInstance): Promise<void>
         await tx.$executeRaw(Prisma.sql`
           DELETE FROM authorization_policies WHERE id = ${row.id}::uuid AND tenant_id = ${actor.tenantId}::uuid
         `);
-        await tx.auditLog.create({
-          data: {
-            tenantId: actor.tenantId,
-            userId: actor.userId,
-            action: 'AUTHORIZATION_POLICY_DELETED',
-            resource: 'AUTHORIZATION_POLICY',
-            resourceId: row.id,
-            correlationId: request.id,
-            ipAddress: request.ip,
-            details: { permissionKey: row.permission_key, subjectType: row.subject_type, subjectKey: row.subject_key },
-          },
-        });
+        await Promise.all([
+          tx.domainEvent.create({
+            data: {
+              tenantId: actor.tenantId,
+              aggregateId: row.id,
+              eventType: 'bridata.authorization.policy.deleted',
+              idempotencyKey: `auth-policy-delete:${row.id}:${request.id}`,
+              payload: {
+                policyId: row.id,
+                scopeType: row.scope_type,
+                scopeId: row.scope_id,
+                subjectType: row.subject_type,
+                subjectKey: row.subject_key,
+                permissionKey: row.permission_key,
+                previousEffect: row.effect,
+                actorId: actor.userId,
+              },
+            },
+          }),
+          tx.auditLog.create({
+            data: {
+              tenantId: actor.tenantId,
+              userId: actor.userId,
+              action: 'AUTHORIZATION_POLICY_DELETED',
+              resource: 'AUTHORIZATION_POLICY',
+              resourceId: row.id,
+              correlationId: request.id,
+              ipAddress: request.ip,
+              details: { permissionKey: row.permission_key, subjectType: row.subject_type, subjectKey: row.subject_key },
+            },
+          }),
+        ]);
         return { kind: 'ok' as const };
       });
       if (result.kind === 'not_found') return reply.code(404).send({ error: 'authorization_policy_not_found' });
