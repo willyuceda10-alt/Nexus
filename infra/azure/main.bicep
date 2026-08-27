@@ -51,8 +51,14 @@ param deployAsyncMessaging bool = false
 @description('Creates the standalone outbox dispatcher Container App. Requires deployApiRuntime and deployAsyncMessaging.')
 param deployOutboxWorker bool = false
 
+@description('Creates the standalone Automation Engine worker. Requires deployApiRuntime and deployAsyncMessaging.')
+param deployAutomationWorker bool = false
+
 @description('Service Bus topic that receives versioned Bridata domain event envelopes.')
 param domainEventsTopicName string = 'bridata-domain-events'
+
+@description('Service Bus subscription dedicated to Automation Engine V1.')
+param automationSubscriptionName string = 'automation-v1'
 
 @description('Immutable API runtime image reference, preferably ACR repo@sha256:digest.')
 param apiImage string = 'not-configured'
@@ -92,20 +98,15 @@ var postgresPrivateDnsZoneName = '${baseName}.postgres.database.azure.com'
 var postgresFqdnValue = '${postgresServerResourceName}.postgres.database.azure.com'
 var adminDatabaseConnectionString = 'postgresql://${postgresAdministratorLogin}:${postgresAdministratorPassword}@${postgresFqdnValue}:5432/${postgresDatabaseName}?sslmode=require'
 var runtimeDatabaseConnectionString = 'postgresql://${postgresRuntimeRole}:${postgresRuntimePassword}@${postgresFqdnValue}:5432/${postgresDatabaseName}?sslmode=require'
+var acrPullRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+var keyVaultSecretsUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
 
-// Private address plan kept intentionally simple for the first environment.
-// Container Apps uses a dedicated delegated subnet.
-// PostgreSQL Flexible Server private access requires its own delegated subnet.
 resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   name: '${baseName}-vnet'
   location: location
   tags: tags
   properties: {
-    addressSpace: {
-      addressPrefixes: [
-        '10.40.0.0/16'
-      ]
-    }
+    addressSpace: { addressPrefixes: ['10.40.0.0/16'] }
   }
 }
 
@@ -117,9 +118,7 @@ resource containerAppsSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-
     delegations: [
       {
         name: 'container-apps-environment'
-        properties: {
-          serviceName: 'Microsoft.App/environments'
-        }
+        properties: { serviceName: 'Microsoft.App/environments' }
       }
     ]
   }
@@ -133,9 +132,7 @@ resource postgresSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' =
     delegations: [
       {
         name: 'postgres-flexible-server'
-        properties: {
-          serviceName: 'Microsoft.DBforPostgreSQL/flexibleServers'
-        }
+        properties: { serviceName: 'Microsoft.DBforPostgreSQL/flexibleServers' }
       }
     ]
   }
@@ -153,9 +150,7 @@ resource postgresPrivateDnsLink 'Microsoft.Network/privateDnsZones/virtualNetwor
   location: 'global'
   properties: {
     registrationEnabled: false
-    virtualNetwork: {
-      id: virtualNetwork.id
-    }
+    virtualNetwork: { id: virtualNetwork.id }
   }
 }
 
@@ -165,13 +160,9 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   tags: tags
   properties: {
     retentionInDays: environment == 'prod' ? 90 : 30
-    features: {
-      enableLogAccessUsingOnlyResourcePermissions: true
-    }
+    features: { enableLogAccessUsingOnlyResourcePermissions: true }
   }
-  sku: {
-    name: 'PerGB2018'
-  }
+  sku: { name: 'PerGB2018' }
 }
 
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
@@ -190,9 +181,7 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageName
   location: location
   tags: tags
-  sku: {
-    name: 'Standard_LRS'
-  }
+  sku: { name: 'Standard_LRS' }
   kind: 'StorageV2'
   properties: {
     accessTier: 'Hot'
@@ -208,14 +197,8 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
   parent: storage
   name: 'default'
   properties: {
-    deleteRetentionPolicy: {
-      enabled: true
-      days: environment == 'prod' ? 30 : 7
-    }
-    containerDeleteRetentionPolicy: {
-      enabled: true
-      days: environment == 'prod' ? 30 : 7
-    }
+    deleteRetentionPolicy: { enabled: true, days: environment == 'prod' ? 30 : 7 }
+    containerDeleteRetentionPolicy: { enabled: true, days: environment == 'prod' ? 30 : 7 }
   }
 }
 
@@ -229,10 +212,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableSoftDelete: true
     softDeleteRetentionInDays: 90
     publicNetworkAccess: 'Enabled'
-    sku: {
-      family: 'A'
-      name: 'standard'
-    }
+    sku: { family: 'A', name: 'standard' }
   }
 }
 
@@ -240,9 +220,7 @@ resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: acrName
   location: location
   tags: tags
-  sku: {
-    name: environment == 'prod' ? 'Standard' : 'Basic'
-  }
+  sku: { name: environment == 'prod' ? 'Standard' : 'Basic' }
   properties: {
     adminUserEnabled: false
     publicNetworkAccess: 'Enabled'
@@ -253,6 +231,32 @@ resource apiIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-3
   name: '${baseName}-api-mi'
   location: location
   tags: tags
+}
+
+resource automationIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${baseName}-automation-mi'
+  location: location
+  tags: tags
+}
+
+resource automationAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: registry
+  name: guid(registry.id, automationIdentity.properties.principalId, acrPullRoleId)
+  properties: {
+    principalId: automationIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: acrPullRoleId
+  }
+}
+
+resource automationKeyVaultSecretsUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: keyVault
+  name: guid(keyVault.id, automationIdentity.properties.principalId, keyVaultSecretsUserRoleId)
+  properties: {
+    principalId: automationIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: keyVaultSecretsUserRoleId
+  }
 }
 
 resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
@@ -267,9 +271,7 @@ resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
         sharedKey: listKeys(logAnalytics.id, '2022-10-01').primarySharedKey
       }
     }
-    vnetConfiguration: {
-      infrastructureSubnetId: containerAppsSubnet.id
-    }
+    vnetConfiguration: { infrastructureSubnetId: containerAppsSubnet.id }
   }
 }
 
@@ -285,39 +287,23 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' =
     administratorLogin: postgresAdministratorLogin
     administratorLoginPassword: postgresAdministratorPassword
     version: '16'
-    authConfig: {
-      activeDirectoryAuth: 'Disabled'
-      passwordAuth: 'Enabled'
-    }
-    backup: {
-      backupRetentionDays: environment == 'prod' ? 14 : 7
-      geoRedundantBackup: 'Disabled'
-    }
-    highAvailability: {
-      mode: environment == 'prod' ? 'ZoneRedundant' : 'Disabled'
-    }
+    authConfig: { activeDirectoryAuth: 'Disabled', passwordAuth: 'Enabled' }
+    backup: { backupRetentionDays: environment == 'prod' ? 14 : 7, geoRedundantBackup: 'Disabled' }
+    highAvailability: { mode: environment == 'prod' ? 'ZoneRedundant' : 'Disabled' }
     network: {
       delegatedSubnetResourceId: postgresSubnet.id
       privateDnsZoneArmResourceId: postgresPrivateDnsZone.id
       publicNetworkAccess: 'Disabled'
     }
-    storage: {
-      autoGrow: 'Enabled'
-      storageSizeGB: postgresStorageSizeGb
-    }
+    storage: { autoGrow: 'Enabled', storageSizeGB: postgresStorageSizeGb }
   }
-  dependsOn: [
-    postgresPrivateDnsLink
-  ]
+  dependsOn: [postgresPrivateDnsLink]
 }
 
 resource postgresDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2025-08-01' = if (deployPostgres) {
   parent: postgresServer
   name: postgresDatabaseName
-  properties: {
-    charset: 'UTF8'
-    collation: 'en_US.UTF8'
-  }
+  properties: { charset: 'UTF8', collation: 'en_US.UTF8' }
 }
 
 resource adminDatabaseSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (deployPostgres && storeDatabaseSecrets) {
@@ -327,9 +313,7 @@ resource adminDatabaseSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if
     contentType: 'PostgreSQL connection string for Bridata migration job'
     value: adminDatabaseConnectionString
   }
-  dependsOn: [
-    postgresDatabase
-  ]
+  dependsOn: [postgresDatabase]
 }
 
 resource runtimeDatabaseSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (deployPostgres && storeDatabaseSecrets) {
@@ -339,9 +323,7 @@ resource runtimeDatabaseSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = 
     contentType: 'Restricted PostgreSQL connection string for Bridata API'
     value: runtimeDatabaseConnectionString
   }
-  dependsOn: [
-    postgresDatabase
-  ]
+  dependsOn: [postgresDatabase]
 }
 
 module asyncMessaging './async-messaging.bicep' = if (deployAsyncMessaging) {
@@ -351,7 +333,9 @@ module asyncMessaging './async-messaging.bicep' = if (deployAsyncMessaging) {
     environment: environment
     tags: tags
     runtimeIdentityPrincipalId: apiIdentity.properties.principalId
+    automationIdentityPrincipalId: automationIdentity.properties.principalId
     topicName: domainEventsTopicName
+    automationSubscriptionName: automationSubscriptionName
   }
 }
 
@@ -365,6 +349,8 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     registryServer: registry.properties.loginServer
     apiIdentityResourceId: apiIdentity.id
     apiIdentityClientId: apiIdentity.properties.clientId
+    automationIdentityResourceId: automationIdentity.id
+    automationIdentityClientId: automationIdentity.properties.clientId
     apiImage: apiImage
     migrationImage: migrationImage
     runtimeDatabaseSecretUri: runtimeDatabaseSecretUri
@@ -373,9 +359,15 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     entraTenantId: entraTenantId
     corsOrigins: apiCorsOrigins
     deployOutboxWorker: deployOutboxWorker && deployAsyncMessaging
+    deployAutomationWorker: deployAutomationWorker && deployAsyncMessaging
     serviceBusNamespaceFqdn: asyncMessaging.?outputs.namespaceFqdn ?? ''
     serviceBusTopicName: domainEventsTopicName
+    serviceBusAutomationSubscriptionName: automationSubscriptionName
   }
+  dependsOn: [
+    automationAcrPullRole
+    automationKeyVaultSecretsUserRole
+  ]
 }
 
 output resourceGroupName string = resourceGroup().name
@@ -393,6 +385,9 @@ output containerRegistryLoginServer string = registry.properties.loginServer
 output apiManagedIdentityName string = apiIdentity.name
 output apiManagedIdentityPrincipalId string = apiIdentity.properties.principalId
 output apiManagedIdentityClientId string = apiIdentity.properties.clientId
+output automationManagedIdentityName string = automationIdentity.name
+output automationManagedIdentityPrincipalId string = automationIdentity.properties.principalId
+output automationManagedIdentityClientId string = automationIdentity.properties.clientId
 output containerAppsEnvironmentName string = containerEnvironment.name
 output postgresDeployed bool = deployPostgres
 output deployedPostgresServerName string = deployPostgres ? postgresServerResourceName : ''
@@ -402,5 +397,7 @@ output databaseSecretsStored bool = deployPostgres && storeDatabaseSecrets
 output asyncMessagingDeployed bool = deployAsyncMessaging
 output serviceBusNamespaceName string = asyncMessaging.?outputs.namespaceName ?? ''
 output domainEventsTopic string = asyncMessaging.?outputs.topicName ?? ''
+output automationServiceBusSubscription string = asyncMessaging.?outputs.automationSubscriptionName ?? ''
 output apiRuntimeDeployed bool = deployApiRuntime
 output outboxWorkerDeployed bool = deployApiRuntime && deployOutboxWorker && deployAsyncMessaging
+output automationWorkerDeployed bool = deployApiRuntime && deployAutomationWorker && deployAsyncMessaging
