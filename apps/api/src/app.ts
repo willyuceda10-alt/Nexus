@@ -33,6 +33,7 @@ import { scheduleAnalysisV2Routes } from './routes/schedule-analysis-v2.js';
 import { sessionRoutes } from './routes/session.js';
 import { wbsV2Routes } from './routes/wbs-v2.js';
 import { workCalendarV2Routes } from './routes/work-calendars-v2.js';
+import { workOsBoardsV1Routes } from './routes/work-os-boards-v1.js';
 
 type PrismaWrappedDatabaseError = FastifyError & {
   meta?: { code?: string; message?: string };
@@ -129,6 +130,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(notificationCapabilitiesV1Routes);
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
+  await app.register(workOsBoardsV1Routes);
   await app.register(dependencyRoutes);
   await app.register(scheduleAnalysisRoutes);
   await app.register(projectScheduleV2Routes);
