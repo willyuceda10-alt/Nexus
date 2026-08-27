@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { prisma } from './db.js';
 import { processAutomationEventV1, resumeAutomationApprovalRunV1 } from './automation-runner-v1.js';
+import { projectPlatformEventV1 } from './platform-event-projector-v1.js';
 import { AzureServiceBusAutomationReceiver } from './service-bus-receiver.js';
 
 if (!config.AUTOMATION_WORKER_ENABLED) {
@@ -40,6 +41,7 @@ async function main(): Promise<void> {
       }
 
       try {
+        const projection = await projectPlatformEventV1(locked.envelope);
         const resumed = await resumeAutomationApprovalRunV1(locked.envelope);
         const result = await processAutomationEventV1(locked.envelope);
         if (result.retryableFailure) {
@@ -50,6 +52,7 @@ async function main(): Promise<void> {
             eventId: locked.envelope.eventId,
             eventType: locked.envelope.eventType,
             deliveryCount: locked.deliveryCount,
+            projectedInboxItemId: projection.inboxItemId ?? null,
             resumedApproval: resumed,
             result,
           }));
@@ -61,6 +64,7 @@ async function main(): Promise<void> {
             eventId: locked.envelope.eventId,
             eventType: locked.envelope.eventType,
             deliveryCount: locked.deliveryCount,
+            projectedInboxItemId: projection.inboxItemId ?? null,
             resumedApproval: resumed,
             result,
           }));
