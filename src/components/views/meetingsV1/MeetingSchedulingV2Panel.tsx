@@ -94,12 +94,13 @@ export const MeetingSchedulingV2Panel: React.FC<{ projectId?: string; onSchedule
   const selectedRoom = rooms.find((resource) => resource.id === form.roomId) ?? null;
   const resourceIds = [form.roomId, ...form.equipmentIds].filter(Boolean);
   const externalEmails = [...new Set(form.externalEmails.split(',').map((value) => value.trim().toLowerCase()).filter(Boolean))];
-  const selectedPeopleEmails = form.attendeeUserIds.map((id) => people.find((person) => person.id === id)?.email.toLowerCase()).filter((value): value is string => Boolean(value));
+  const selectedPeopleEmails = form.attendeeUserIds
+    .map((id) => people.find((person) => person.id === id)?.email.toLowerCase())
+    .filter((value): value is string => Boolean(value));
   const organizerEmail = people.find((person) => person.isCurrentUser)?.email.toLowerCase() ?? users[0]?.email.toLowerCase() ?? '';
   const peopleCount = new Set([organizerEmail, ...selectedPeopleEmails, ...externalEmails].filter(Boolean)).size;
   const capacityExceeded = Boolean(selectedRoom?.capacity != null && selectedRoom.capacity < peopleCount);
-  const needsM365Validation = apiReady && form.requestM365Sync;
-  const availabilityUnavailable = needsM365Validation && !capabilities?.m365AvailabilityEnabled;
+  const availabilityUnavailable = apiReady && form.requestM365Sync && !capabilities?.m365AvailabilityEnabled;
 
   const toggleEquipment = (id: string) => setForm((current) => ({
     ...current,
@@ -142,7 +143,7 @@ export const MeetingSchedulingV2Panel: React.FC<{ projectId?: string; onSchedule
     if (!currentWorkspace || !form.title.trim()) return;
     const start = new Date(form.startAt);
     const end = new Date(form.endAt);
-    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start.getTime()) {
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end.getTime() <= start.getTime()) {
       setError('La hora de fin debe ser posterior al inicio.');
       return;
     }
@@ -151,9 +152,10 @@ export const MeetingSchedulingV2Panel: React.FC<{ projectId?: string; onSchedule
       return;
     }
     if (availabilityUnavailable) {
-      setError('Para enviar a Outlook/Teams, habilita primero la validación M365 de disponibilidad o guarda la reunión como LOCAL_ONLY.');
+      setError('Para enviar a Outlook/Teams, habilita primero M365 Availability o desactiva la sincronización y guarda LOCAL_ONLY.');
       return;
     }
+
     setSaving(true);
     setError(null);
     try {
@@ -199,14 +201,14 @@ export const MeetingSchedulingV2Panel: React.FC<{ projectId?: string; onSchedule
         <div>
           <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.14em] text-green-700"><Sparkles className="h-4 w-4" /> Programación inteligente V2</div>
           <h2 className="mt-2 text-[18px] font-extrabold text-slate-950">Personas + sala + equipos + Teams en una sola reserva</h2>
-          <p className="mt-1 max-w-3xl text-[9px] leading-4 text-slate-500">Valida capacidad y disponibilidad antes de crear la reunión. El servidor vuelve a comprobar el horario antes del commit.</p>
+          <p className="mt-1 max-w-3xl text-[9px] leading-4 text-slate-500">Valida capacidad y disponibilidad antes de crear. PostgreSQL evita reservas solapadas concurrentes.</p>
         </div>
         <button type="button" onClick={() => setOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-xl bg-green-700 px-4 text-[10px] font-black text-white"><Plus className="h-4 w-4" /> Programar reunión</button>
       </div>
       <div className="grid grid-cols-1 border-t border-slate-100 md:grid-cols-3">
-        <div className="px-5 py-3"><p className="text-[8px] font-black uppercase text-slate-400">Control</p><p className="mt-1 text-[9px] font-semibold text-slate-700">Capacidad de sala antes de reservar</p></div>
-        <div className="border-l border-slate-100 px-5 py-3"><p className="text-[8px] font-black uppercase text-slate-400">Disponibilidad</p><p className="mt-1 text-[9px] font-semibold text-slate-700">Intersección personas + recursos</p></div>
-        <div className="border-l border-slate-100 px-5 py-3"><p className="text-[8px] font-black uppercase text-slate-400">Commit</p><p className="mt-1 text-[9px] font-semibold text-slate-700">Reunión + reservas en una transacción</p></div>
+        <div className="px-5 py-3"><p className="text-[8px] font-black uppercase text-slate-400">Control</p><p className="mt-1 text-[9px] font-semibold text-slate-700">Capacidad antes de reservar</p></div>
+        <div className="border-l border-slate-100 px-5 py-3"><p className="text-[8px] font-black uppercase text-slate-400">Disponibilidad</p><p className="mt-1 text-[9px] font-semibold text-slate-700">Personas + recursos</p></div>
+        <div className="border-l border-slate-100 px-5 py-3"><p className="text-[8px] font-black uppercase text-slate-400">Commit</p><p className="mt-1 text-[9px] font-semibold text-slate-700">Reunión + reservas atómicas</p></div>
       </div>
 
       {open && (
@@ -235,22 +237,25 @@ export const MeetingSchedulingV2Panel: React.FC<{ projectId?: string; onSchedule
                 <div className="rounded-xl border border-slate-200 p-3">
                   <div className="flex items-center gap-2"><DoorOpen className="h-4 w-4 text-green-700" /><p className="text-[9px] font-black uppercase text-slate-500">Sala</p></div>
                   <select value={form.roomId} onChange={(event) => setForm({ ...form, roomId: event.target.value })} className="mt-2 h-10 w-full rounded-xl border border-slate-200 px-3 text-[9px] font-semibold"><option value="">Sin sala</option>{rooms.map((roomOption) => <option key={roomOption.id} value={roomOption.id}>{roomOption.name} · {roomOption.capacity ?? '?'} pers.</option>)}</select>
-                  <div className={`mt-2 rounded-lg px-2.5 py-2 text-[8px] font-semibold ${capacityExceeded ? 'bg-rose-50 text-rose-700' : 'bg-slate-50 text-slate-600'}`}>{selectedRoom ? `${peopleCount} personas previstas / capacidad ${selectedRoom.capacity ?? 'sin definir'}` : `${peopleCount} personas previstas`}</div>
+                  <div className={`mt-2 rounded-lg px-2.5 py-2 text-[8px] font-semibold ${capacityExceeded ? 'bg-rose-50 text-rose-700' : 'bg-slate-50 text-slate-600'}`}>{selectedRoom ? `${peopleCount} personas / capacidad ${selectedRoom.capacity ?? 'sin definir'}` : `${peopleCount} personas previstas`}</div>
                 </div>
+
                 <div className="rounded-xl border border-slate-200 p-3">
                   <div className="flex items-center gap-2"><MonitorUp className="h-4 w-4 text-green-700" /><p className="text-[9px] font-black uppercase text-slate-500">Equipamiento</p></div>
                   <div className="mt-2 space-y-1">{equipment.map((item) => <button key={item.id} type="button" onClick={() => toggleEquipment(item.id)} className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left text-[8px] font-semibold ${form.equipmentIds.includes(item.id) ? 'border-green-200 bg-green-50 text-green-800' : 'border-slate-200 text-slate-600'}`}><span>{item.name}</span><span>{form.equipmentIds.includes(item.id) ? '✓' : '+'}</span></button>)}</div>
                 </div>
+
                 <button type="button" disabled={checking || !apiReady || !capabilities?.m365AvailabilityEnabled} onClick={() => void checkAvailability()} className="flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-green-200 bg-green-50 text-[9px] font-black text-green-800 disabled:opacity-40"><Clock3 className="h-4 w-4" /> {checking ? 'Consultando...' : 'Buscar horarios comunes'}</button>
                 {availability && <div className="rounded-xl border border-slate-200 p-3"><p className="text-[8px] font-black uppercase text-slate-400">Sugerencias</p><div className="mt-2 space-y-1.5">{availability.suggestions.slice(0, 6).map((slot) => <button key={`${slot.start}-${slot.end}`} type="button" onClick={() => chooseSlot(slot)} className="flex w-full items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-2 text-left hover:border-green-300 hover:bg-green-50"><CheckCircle2 className="h-3.5 w-3.5 text-green-700" /><span className="text-[8px] font-bold text-slate-700">{slotLabel(slot.start, slot.end)}</span></button>)}</div>{!availability.suggestions.length && <p className="mt-2 text-[8px] text-slate-400">Sin franjas comunes en el día consultado.</p>}</div>}
+
                 <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-[8px] font-semibold text-slate-600"><input type="checkbox" checked={form.isOnline} onChange={(event) => setForm({ ...form, isOnline: event.target.checked })} /> Crear reunión Teams</label>
                 <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-[8px] font-semibold text-slate-600"><input type="checkbox" checked={form.requestM365Sync} onChange={(event) => setForm({ ...form, requestM365Sync: event.target.checked })} /> Sincronizar Outlook/M365</label>
-                {availabilityUnavailable && <p className="rounded-lg bg-amber-50 px-2.5 py-2 text-[8px] font-semibold text-amber-700">M365 Availability está deshabilitado. Para evitar conflictos, desactiva sincronización y guarda LOCAL_ONLY o habilita la capacidad.</p>}
+                {availabilityUnavailable && <p className="rounded-lg bg-amber-50 px-2.5 py-2 text-[8px] font-semibold text-amber-700">Para sincronizar, la validación M365 es obligatoria. Puedes desactivar sincronización y guardar LOCAL_ONLY.</p>}
               </div>
             </div>
 
             <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2 text-[8px] font-semibold text-slate-500"><ShieldCheck className="h-4 w-4 text-green-700" /> El servidor vuelve a validar capacidad y disponibilidad antes de crear la reunión.</div>
+              <div className="flex items-center gap-2 text-[8px] font-semibold text-slate-500"><ShieldCheck className="h-4 w-4 text-green-700" /> Graph valida disponibilidad y PostgreSQL evita doble reserva concurrente.</div>
               <button type="button" disabled={saving || !form.title.trim() || capacityExceeded || availabilityUnavailable} onClick={() => void schedule()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-green-700 px-5 text-[10px] font-black text-white disabled:opacity-40"><CalendarCheck2 className="h-4 w-4" /> {saving ? 'Programando...' : 'Programar reunión'}</button>
             </div>
           </div>
