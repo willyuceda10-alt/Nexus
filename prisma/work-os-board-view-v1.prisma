@@ -46,6 +46,7 @@ model WorkBoardV1 {
   columns    WorkBoardColumnV1[]
   views      WorkViewV1[]
   placements WorkBoardItemPlacementV1[]
+  optionSets WorkBoardOptionSetV1[]
 
   @@index([tenantId, workspaceId, isArchived])
   @@index([tenantId, objectDefinitionId])
@@ -88,7 +89,8 @@ model WorkBoardColumnV1 {
   createdAt DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  board WorkBoardV1 @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  board     WorkBoardV1           @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  optionSet WorkBoardOptionSetV1?
 
   @@unique([boardId, key])
   @@index([tenantId, boardId, sortOrder])
