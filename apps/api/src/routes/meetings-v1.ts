@@ -82,6 +82,10 @@ type AttendeeInput = {
   attendeeType: 'REQUIRED' | 'OPTIONAL';
 };
 
+function m365CalendarSyncAvailable(): boolean {
+  return config.M365_CALENDAR_SYNC_ENABLED && config.MEETING_CALENDAR_WORKER_AVAILABLE;
+}
+
 async function resolveAttendees(
   tx: Prisma.TransactionClient,
   tenantId: string,
@@ -334,6 +338,8 @@ export async function meetingsV1Routes(app: FastifyInstance): Promise<void> {
         const organizerGraphUser = request.authPrincipal?.provider === 'ENTRA_ID'
           ? request.authPrincipal.subject
           : organizer.email;
+        const syncAvailable = m365CalendarSyncAvailable();
+        const shouldSync = body.data.requestM365Sync && syncAvailable;
 
         const object = await tx.nexusObject.create({
           data: {
@@ -355,7 +361,7 @@ export async function meetingsV1Routes(app: FastifyInstance): Promise<void> {
           },
         });
 
-        const syncStatus = body.data.requestM365Sync ? 'PENDING' : 'LOCAL_ONLY';
+        const syncStatus: CollaborationRow['sync_status'] = shouldSync ? 'PENDING' : 'LOCAL_ONLY';
         const rows = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
           INSERT INTO meeting_collaboration_v1
             (tenant_id, workspace_id, meeting_object_id, project_id,
@@ -383,7 +389,7 @@ export async function meetingsV1Routes(app: FastifyInstance): Promise<void> {
         }
 
         await Promise.all([
-          body.data.requestM365Sync
+          shouldSync
             ? emitMeetingSyncEvent(tx, actor.tenantId, collaborationId, object.id)
             : Promise.resolve(),
           tx.auditLog.create({
@@ -401,6 +407,8 @@ export async function meetingsV1Routes(app: FastifyInstance): Promise<void> {
                 isOnline: body.data.isOnline,
                 attendeeCount: attendees.length,
                 requestM365Sync: body.data.requestM365Sync,
+                syncAvailable,
+                syncDeferred: body.data.requestM365Sync && !syncAvailable,
               },
             },
           }),
@@ -411,6 +419,7 @@ export async function meetingsV1Routes(app: FastifyInstance): Promise<void> {
           meetingObjectId: object.id,
           version: object.version,
           syncStatus,
+          syncDeferred: body.data.requestM365Sync && !syncAvailable,
         });
       });
     },
@@ -452,6 +461,14 @@ export async function meetingsV1Routes(app: FastifyInstance): Promise<void> {
           return reply.code(409).send({
             error: 'online_meeting_cannot_be_downgraded',
             message: 'A Teams meeting already synchronized with Microsoft 365 cannot be converted to offline in place.',
+          });
+        }
+
+        const syncAvailable = m365CalendarSyncAvailable();
+        if (collaboration.graph_event_id && !syncAvailable) {
+          return reply.code(409).send({
+            error: 'm365_sync_required_but_unavailable',
+            message: 'This meeting already exists in Microsoft 365. Re-enable calendar sync before editing it so Bridata and Outlook remain consistent.',
           });
         }
 
@@ -504,10 +521,9 @@ export async function meetingsV1Routes(app: FastifyInstance): Promise<void> {
           return reply.code(409).send({ error: 'version_conflict' });
         }
 
-        const shouldSync = Boolean(collaboration.graph_event_id) || body.data.requestM365Sync;
-        const nextStatus: CollaborationRow['sync_status'] = shouldSync
-          ? 'PENDING'
-          : collaboration.sync_status;
+        const shouldSync = Boolean(collaboration.graph_event_id)
+          || (body.data.requestM365Sync && syncAvailable);
+        const nextStatus: CollaborationRow['sync_status'] = shouldSync ? 'PENDING' : 'LOCAL_ONLY';
 
         await tx.$executeRaw(Prisma.sql`
           UPDATE meeting_collaboration_v1
@@ -565,6 +581,7 @@ export async function meetingsV1Routes(app: FastifyInstance): Promise<void> {
               isOnline: body.data.isOnline,
               attendeeCount: attendees.length,
               syncRequested: shouldSync,
+              syncDeferred: body.data.requestM365Sync && !syncAvailable && !collaboration.graph_event_id,
             },
           },
         });
@@ -573,6 +590,7 @@ export async function meetingsV1Routes(app: FastifyInstance): Promise<void> {
           meetingObjectId: collaboration.meeting_object_id,
           version: body.data.version + 1,
           syncStatus: nextStatus,
+          syncDeferred: body.data.requestM365Sync && !syncAvailable && !collaboration.graph_event_id,
         };
       });
     },
@@ -585,6 +603,12 @@ export async function meetingsV1Routes(app: FastifyInstance): Promise<void> {
       const params = meetingParams.safeParse(request.params);
       if (!params.success) {
         return reply.code(400).send({ error: 'validation_error' });
+      }
+      if (!m365CalendarSyncAvailable()) {
+        return reply.code(409).send({
+          error: 'm365_calendar_sync_unavailable',
+          message: 'Microsoft 365 calendar synchronization is not available in this environment.',
+        });
       }
 
       const actor = request.actor!;
