@@ -134,6 +134,15 @@ export const workOsBoardConfigV1Api = {
     });
   },
 
+  updateManagedOptionCell(tenantId: string, boardId: string, objectId: string, columnId: string, input: {
+    version: number;
+    value: string | string[] | null;
+  }): Promise<{ objectId: string; version: number; value: string | string[] | null }> {
+    return request(tenantId, `/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/items/${encodeURIComponent(objectId)}/managed-option-cells/${encodeURIComponent(columnId)}`, {
+      method: 'PATCH', body: JSON.stringify(input),
+    });
+  },
+
   computedValues(tenantId: string, boardId: string): Promise<{ valuesByObjectId: Record<string, Record<string, unknown>> }> {
     return request(tenantId, `/api/v1/work-os/boards-v1/${encodeURIComponent(boardId)}/computed-values`);
   },
