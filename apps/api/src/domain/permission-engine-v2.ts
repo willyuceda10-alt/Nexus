@@ -3,8 +3,10 @@ export const PERMISSIONS_V2 = [
   'tenant.manage_members',
   'tenant.manage_integrations',
   'tenant.manage_automation',
+  'tenant.manage_permissions',
   'workspace.read',
   'workspace.manage',
+  'workspace.manage_permissions',
   'project.read',
   'project.manage',
   'project.schedule.read',
@@ -64,13 +66,13 @@ const TENANT_ROLE_GRANTS: Record<string, ReadonlySet<PermissionKeyV2>> = {
 
 const WORKSPACE_ROLE_GRANTS: Record<string, ReadonlySet<PermissionKeyV2>> = {
   OWNER: new Set<PermissionKeyV2>([
-    'workspace.read', 'workspace.manage', 'project.read', 'project.manage',
+    'workspace.read', 'workspace.manage', 'workspace.manage_permissions', 'project.read', 'project.manage',
     'project.schedule.read', 'project.schedule.write', 'project.material.read', 'project.material.write',
     'project.cost.read', 'project.cost.write', 'project.baseline.create', 'governance.read', 'governance.write',
     'meetings.read', 'meetings.write', 'documents.read', 'documents.write',
   ]),
   ADMIN: new Set<PermissionKeyV2>([
-    'workspace.read', 'workspace.manage', 'project.read', 'project.manage',
+    'workspace.read', 'workspace.manage', 'workspace.manage_permissions', 'project.read', 'project.manage',
     'project.schedule.read', 'project.schedule.write', 'project.material.read', 'project.material.write',
     'project.cost.read', 'project.cost.write', 'project.baseline.create', 'governance.read', 'governance.write',
     'meetings.read', 'meetings.write', 'documents.read', 'documents.write',
