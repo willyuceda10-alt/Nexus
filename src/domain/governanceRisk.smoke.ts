@@ -99,6 +99,15 @@ const objects: NexusObject[] = [
     costImpact: 3000,
     timeImpactDays: 2,
   },
+  {
+    ...base,
+    id: 'change-unestimated',
+    type: 'CHANGE_REQUEST',
+    projectId: 'project-1',
+    title: 'Change without estimate',
+    status: 'DRAFT',
+    priority: 'LOW',
+  },
 ];
 
 const relations: ObjectRelation[] = [
@@ -120,8 +129,9 @@ assert.equal(result.summary.realizedRiskCount, 1);
 assert.equal(result.summary.mitigationOverdueCount, 1);
 assert.equal(result.summary.mitigationCoveragePct, 33);
 assert.equal(result.summary.exposureScore, 32);
-assert.equal(result.summary.pendingChangeCount, 1);
+assert.equal(result.summary.pendingChangeCount, 2);
 assert.equal(result.summary.approvedChangeCount, 1);
+assert.equal(result.summary.unestimatedChangeCount, 1);
 assert.equal(result.summary.changeCostImpact, 15000);
 assert.equal(result.summary.changeTimeImpactDays, 7);
 
@@ -141,6 +151,10 @@ const matrixCell = result.matrix.find((cell) => cell.probability === 5 && cell.i
 assert.ok(matrixCell);
 assert.equal(matrixCell.count, 1);
 assert.deepEqual(matrixCell.riskIds, ['risk-critical']);
+
+const closedCell = result.matrix.find((cell) => cell.probability === 5 && cell.impact === 5);
+assert.ok(closedCell);
+assert.equal(closedCell.count, 0);
 
 assert.equal(result.projectExposure.length, 1);
 assert.equal(result.projectExposure[0]?.projectName, 'Project Alpha');
