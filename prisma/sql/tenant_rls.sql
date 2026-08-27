@@ -54,7 +54,9 @@ BEGIN
     'automation_versions_v1',
     'automation_runs_v1',
     'automation_step_runs_v1',
-    'automation_approval_requests_v1'
+    'automation_approval_requests_v1',
+    'inbox_items_v1',
+    'notification_deliveries_v1'
   ]
   LOOP
     -- This script is also used as a defensive re-application step. During
