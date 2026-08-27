@@ -15,6 +15,27 @@ function relationItems(value: unknown): Array<{ id: string; title: string }> {
     : [];
 }
 
+function managedOptionDisplay(value: unknown, optionSet: BoardOptionSetV1, multiple: boolean): React.ReactNode {
+  const keys = multiple && Array.isArray(value) ? value.map(String) : value === null || value === undefined || value === '' ? [] : [String(value)];
+  if (!keys.length) return <span className="text-slate-300">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {keys.map((key) => {
+        const option = optionSet.options.find((candidate) => candidate.key === key);
+        return (
+          <span
+            key={key}
+            className="inline-flex rounded-full border px-2 py-0.5 text-[8px] font-black"
+            style={option?.color ? { borderColor: option.color, color: option.color } : undefined}
+          >
+            {option?.label ?? key}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export function BoardGovernedTableV1({
   items,
   groups,
@@ -24,6 +45,7 @@ export function BoardGovernedTableV1({
   editing,
   setEditing,
   onSaveCell,
+  onSaveManagedOption,
   onSavePerson,
   onSaveRelation,
   onMoveGroup,
@@ -36,6 +58,7 @@ export function BoardGovernedTableV1({
   editing: BoardEditingCellV1 | null;
   setEditing: (value: BoardEditingCellV1 | null) => void;
   onSaveCell: (item: ApiWorkBoardItemV1, column: ApiWorkBoardColumnV1, value: unknown) => Promise<void>;
+  onSaveManagedOption: (item: ApiWorkBoardItemV1, column: ApiWorkBoardColumnV1, value: string | string[] | null) => Promise<void>;
   onSavePerson: (item: ApiWorkBoardItemV1, column: ApiWorkBoardColumnV1, userId: string | null) => Promise<void>;
   onSaveRelation: (item: ApiWorkBoardItemV1, column: ApiWorkBoardColumnV1, targetObjectIds: string[]) => Promise<void>;
   onMoveGroup: (item: ApiWorkBoardItemV1, groupId: string | null) => Promise<void>;
@@ -67,7 +90,7 @@ export function BoardGovernedTableV1({
       return (
         <select
           multiple={multiple}
-          value={current.map((target) => target.id)}
+          value={multiple ? current.map((target) => target.id) : current[0]?.id ?? ''}
           onChange={(event) => {
             const targetIds = multiple
               ? Array.from(event.currentTarget.selectedOptions).map((option) => option.value)
@@ -88,7 +111,7 @@ export function BoardGovernedTableV1({
         <select
           multiple
           value={selected}
-          onChange={(event) => void onSaveCell(item, column, Array.from(event.currentTarget.selectedOptions).map((option) => option.value))}
+          onChange={(event) => void onSaveManagedOption(item, column, Array.from(event.currentTarget.selectedOptions).map((option) => option.value))}
           className="min-h-12 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[9px] font-semibold text-slate-700"
         >
           {optionSet.options.filter((option) => option.isActive !== false).map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
@@ -114,11 +137,15 @@ export function BoardGovernedTableV1({
         return (
           <select
             autoFocus
-            value={String(editing.draft ?? '')}
-            onChange={(event) => setEditing({ ...editing, draft: event.target.value })}
-            onBlur={() => void onSaveCell(item, column, editing.draft)}
+            value={String(value ?? '')}
+            onChange={(event) => {
+              setEditing(null);
+              void onSaveManagedOption(item, column, event.target.value || null);
+            }}
+            onKeyDown={(event) => { if (event.key === 'Escape') setEditing(null); }}
             className="h-8 w-full rounded-lg border border-green-300 bg-white px-2 text-[9px] font-bold outline-none"
           >
+            <option value="">—</option>
             {optionSet.options.filter((option) => option.isActive !== false).map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
           </select>
         );
@@ -126,13 +153,17 @@ export function BoardGovernedTableV1({
       return <BoardInlineEditorV1 column={column} value={editing.draft} onChange={(draft) => setEditing({ ...editing, draft })} onSave={() => void onSaveCell(item, column, editing.draft)} onCancel={() => setEditing(null)} />;
     }
 
+    const managedDisplay = optionSet && ['STATUS', 'PRIORITY'].includes(column.data_type)
+      ? managedOptionDisplay(value, optionSet, false)
+      : boardCellDisplay(item, column);
+
     return (
       <div
         onDoubleClick={() => editable && setEditing({ objectId: item.object.id, columnId: column.id, draft: value ?? '' })}
         className={editable ? 'cursor-text' : ''}
         title={editable ? 'Doble clic para editar' : undefined}
       >
-        {boardCellDisplay(item, column)}
+        {managedDisplay}
       </div>
     );
   };
