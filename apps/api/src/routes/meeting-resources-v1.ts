@@ -10,9 +10,10 @@ const uuid = z.string().uuid();
 const resourceType = z.enum(['ROOM', 'EQUIPMENT']);
 const resourceParams = z.object({ resourceId: uuid });
 const meetingParams = z.object({ meetingObjectId: uuid });
+const booleanQuery = z.union([z.boolean(), z.enum(['true', 'false'])]).default(false).transform((value) => value === true || value === 'true');
 const resourceQuery = z.object({
   workspaceId: uuid,
-  includeInactive: z.coerce.boolean().default(false),
+  includeInactive: booleanQuery,
 });
 const resourceInput = z.object({
   workspaceId: uuid,
@@ -237,6 +238,14 @@ export async function meetingResourcesV1Routes(app: FastifyInstance): Promise<vo
       }
 
       const ids = [...new Set(body.data.resourceIds)];
+      const currentRows = await tx.$queryRaw<Array<{ meeting_resource_id: string }>>(Prisma.sql`
+        SELECT meeting_resource_id
+        FROM meeting_resource_bookings_v1
+        WHERE tenant_id = ${actor.tenantId}::uuid
+          AND meeting_collaboration_id = ${collaboration.id}::uuid
+      `);
+      const currentIds = new Set(currentRows.map((row) => row.meeting_resource_id));
+
       const resources = ids.length
         ? await tx.$queryRaw<ResourceRow[]>(Prisma.sql`
             SELECT id, workspace_id, resource_type, name, email, location, capacity, features, is_active, created_at, updated_at
@@ -244,19 +253,32 @@ export async function meetingResourcesV1Routes(app: FastifyInstance): Promise<vo
             WHERE tenant_id = ${actor.tenantId}::uuid
               AND workspace_id = ${collaboration.workspace_id}::uuid
               AND id = ANY(${ids}::uuid[])
-              AND is_active = true
           `)
         : [];
       if (resources.length !== ids.length) {
-        return reply.code(409).send({ error: 'meeting_resource_invalid_or_inactive' });
+        return reply.code(409).send({ error: 'meeting_resource_invalid' });
+      }
+      if (resources.some((resource) => !resource.is_active && !currentIds.has(resource.id))) {
+        return reply.code(409).send({ error: 'meeting_resource_inactive', message: 'Inactive resources can be preserved on an existing booking but cannot be added to a meeting.' });
       }
 
-      await tx.$executeRaw(Prisma.sql`
-        DELETE FROM meeting_resource_bookings_v1
-        WHERE tenant_id = ${actor.tenantId}::uuid
-          AND meeting_collaboration_id = ${collaboration.id}::uuid
-      `);
+      if (ids.length) {
+        await tx.$executeRaw(Prisma.sql`
+          DELETE FROM meeting_resource_bookings_v1
+          WHERE tenant_id = ${actor.tenantId}::uuid
+            AND meeting_collaboration_id = ${collaboration.id}::uuid
+            AND NOT (meeting_resource_id = ANY(${ids}::uuid[]))
+        `);
+      } else {
+        await tx.$executeRaw(Prisma.sql`
+          DELETE FROM meeting_resource_bookings_v1
+          WHERE tenant_id = ${actor.tenantId}::uuid
+            AND meeting_collaboration_id = ${collaboration.id}::uuid
+        `);
+      }
+
       for (const resource of resources) {
+        if (currentIds.has(resource.id)) continue;
         await tx.$executeRaw(Prisma.sql`
           INSERT INTO meeting_resource_bookings_v1
             (tenant_id, meeting_collaboration_id, meeting_resource_id, created_by)
