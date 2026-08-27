@@ -41,9 +41,23 @@ BEGIN
     'object_attachments',
     'integration_connections',
     'domain_events',
-    'audit_logs'
+    'audit_logs',
+    'work_calendars',
+    'work_calendar_exceptions',
+    'project_schedule_profiles',
+    'work_item_schedules',
+    'schedule_dependencies_v2',
+    'project_baselines',
+    'project_baseline_items'
   ]
   LOOP
+    -- This script is also used as a defensive re-application step. During
+    -- staged rollouts a newly defined table may not exist yet, so skip it
+    -- until its migration has been applied.
+    IF to_regclass(table_name) IS NULL THEN
+      CONTINUE;
+    END IF;
+
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', table_name);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', table_name);
     EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', table_name);
