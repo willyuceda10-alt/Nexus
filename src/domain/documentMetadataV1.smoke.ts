@@ -9,7 +9,6 @@ const version: ApiDocumentVersionV1 = {
   id: 'version-2',
   objectId: 'document-1',
   fileName: 'memoria-calculo.pdf',
-  storageKey: 'documents/tenant/document-1/version-2.pdf',
   fileSize: String(2 * 1024 * 1024),
   mimeType: 'application/pdf',
   checksumSha256: 'a'.repeat(64),
