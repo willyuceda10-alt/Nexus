@@ -24,6 +24,24 @@ if new_optional not in parser:
         raise SystemExit('movement optional-header anchor missing')
     parser = parser.replace(old_optional, new_optional, 1)
 
+position_anchor = """function asPosition(value: SapCellScalar | undefined): string | null {
+  const document = asDocument(value);
+  if (!document) return null;
+  return /^\d+$/.test(document) ? document.padStart(5, '0') : document;
+}
+"""
+material_item_helper = position_anchor + """
+function asMaterialDocumentItem(value: SapCellScalar | undefined): string | null {
+  const document = asDocument(value);
+  if (!document) return null;
+  return /^\d+$/.test(document) ? document.padStart(4, '0') : document;
+}
+"""
+if material_item_helper not in parser:
+    if position_anchor not in parser:
+        raise SystemExit('position helper anchor missing')
+    parser = parser.replace(position_anchor, material_item_helper, 1)
+
 old_pick = """function pick(map: Map<string, SapCellScalar>, header: string): SapCellScalar | undefined {
   return map.get(normalizeSapHeader(header));
 }
@@ -75,7 +93,7 @@ new_movement = """  } else if (profileId === 'material_movements_v1') {
     const materialDocumentYear = asDocument(pickFirst(map, [
       'Ejercicio', 'Ejercicio doc.material', 'Ejercicio documento material',
     ]));
-    const materialDocumentItem = asPosition(pickFirst(map, [
+    const materialDocumentItem = asMaterialDocumentItem(pickFirst(map, [
       'Posición doc.material', 'Posición documento material', 'Pos.doc.material',
     ]));
     fields = compact({
@@ -116,7 +134,7 @@ if new_movement not in parser:
 parser_path.write_text(parser)
 
 # -----------------------------------------------------------------------------
-# 2. Harden V1-D2 route: stale-link conflict + exact 222 reversal guard.
+# 2. Harden V1-D2 route: stale-link conflict + exact reversal guards.
 # -----------------------------------------------------------------------------
 route_path = root / 'apps/api/src/routes/sap-integration-inventory-sync-v1d2.ts'
 route = route_path.read_text()
@@ -175,6 +193,21 @@ if issue_helper not in route:
     if refresh_anchor not in route:
         raise SystemExit('purchase order refresh anchor missing')
     route = route.replace(refresh_anchor, issue_helper + refresh_anchor, 1)
+
+old_po_lookup = """      const poLine = candidate.purchaseOrderExternalKey
+        ? await findPurchaseOrderLine(tx, tenantId, connectionId, candidate.purchaseOrderExternalKey)
+        : null;
+"""
+new_po_lookup = """      const needsPurchaseOrderReference = candidate.canonicalMovementType === 'RECEIPT'
+        || candidate.canonicalMovementType === 'ADJUSTMENT_OUT';
+      const poLine = needsPurchaseOrderReference && candidate.purchaseOrderExternalKey
+        ? await findPurchaseOrderLine(tx, tenantId, connectionId, candidate.purchaseOrderExternalKey)
+        : null;
+"""
+if new_po_lookup not in route:
+    if old_po_lookup not in route:
+        raise SystemExit('PO lookup anchor missing')
+    route = route.replace(old_po_lookup, new_po_lookup, 1)
 
 old_guard_tail = """      if (candidate.canonicalMovementType === 'ADJUSTMENT_OUT' && poLine) {
         const netReceived = await syncedReceiptQuantityForPoLine(tx, tenantId, poLine.id);
