@@ -199,7 +199,7 @@ where_anchor = """              AND COALESCE(po.project_object_id, mr.project_ob
 """
 where_new = """              AND COALESCE(po.project_object_id, mr.project_object_id) = ${project.id}::uuid
               AND gr.status = 'POSTED'
-              AND ${not sapDataPepAuthority}
+              AND ${!sapDataPepAuthority}
 """
 if where_new not in overview:
     if where_anchor not in overview:
