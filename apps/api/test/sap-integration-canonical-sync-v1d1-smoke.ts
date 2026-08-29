@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import ExcelJS from 'exceljs';
 import { Prisma } from '@prisma/client';
 import { buildApp } from '../src/app.js';
-import { createMemoryIntegrationBinaryStoreV1 } from '../src/integration-binary-store-v1.js';
-import { sapIntegrationCanonicalSyncV1d1Routes } from '../src/routes/sap-integration-canonical-sync-v1d1.js';
+import { MemoryIntegrationBinaryStoreV1 } from '../src/integration-binary-store-v1.js';
 import { withTenant } from '../src/tenant-transaction.js';
 
 const tenantId = process.env.DEV_TENANT_ID ?? '00000000-0000-4000-8000-000000000002';
@@ -32,8 +31,8 @@ async function counts() {
       tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`SELECT COUNT(*)::bigint n FROM material_masters WHERE tenant_id=${tenantId}::uuid AND workspace_id=${workspaceId}::uuid`),
       tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`SELECT COUNT(*)::bigint n FROM suppliers WHERE tenant_id=${tenantId}::uuid`),
       tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`SELECT COUNT(*)::bigint n FROM inventory_movements WHERE tenant_id=${tenantId}::uuid`),
-      tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`SELECT COUNT(*)::bigint n FROM project_commitments_v2 WHERE tenant_id=${tenantId}::uuid`),
-      tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`SELECT COUNT(*)::bigint n FROM project_actual_costs_v2 WHERE tenant_id=${tenantId}::uuid`),
+      tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`SELECT COUNT(*)::bigint n FROM project_commitments WHERE tenant_id=${tenantId}::uuid`),
+      tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`SELECT COUNT(*)::bigint n FROM project_actual_costs WHERE tenant_id=${tenantId}::uuid`),
     ]);
     return {
       pr: Number(pr[0]?.n ?? 0n), prl: Number(prl[0]?.n ?? 0n),
@@ -52,12 +51,11 @@ async function main() {
 
   await withTenant(tenantId, async (tx) => {
     await tx.integrationConnection.create({
-      data: { id: connectionId, tenantId, provider: 'SAP', status: 'CONNECTED', displayName: 'SAP V1-D1 smoke' },
+      data: { id: connectionId, tenantId, provider: 'SAP', status: 'ACTIVE', displayName: 'SAP V1-D1 smoke' },
     });
   });
 
-  const app = await buildApp({ integrationBinaryStore: createMemoryIntegrationBinaryStoreV1() });
-  await sapIntegrationCanonicalSyncV1d1Routes(app);
+  const app = await buildApp({ integrationBinaryStore: new MemoryIntegrationBinaryStoreV1() });
 
   const projectProcurement = await workbook([
     'Solicitud de pedido', 'Pos.solicitud pedido', 'Pedido', 'Posición de pedido', 'Entrada mercancías',
@@ -78,7 +76,7 @@ async function main() {
     const response = await app.inject({
       method: 'POST',
       url: `/api/v1/integrations/sap/connections/${connectionId}/imports:auto`,
-      headers: { 'content-type': 'application/octet-stream', 'x-file-name': name },
+      headers: { 'content-type': 'application/octet-stream', 'x-bridata-file-name': name },
       payload: content,
     });
     assert(response.statusCode === 201, `Import ${name} failed: ${response.statusCode} ${response.body}`);
