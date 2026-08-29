@@ -2,6 +2,7 @@ import { DefaultAzureCredential } from '@azure/identity';
 import {
   BlobSASPermissions,
   BlobServiceClient,
+  ContainerClient,
   SASProtocol,
   generateBlobSASQueryParameters,
 } from '@azure/storage-blob';
@@ -59,7 +60,7 @@ class AzureBlobDocumentBinaryStoreV1 implements DocumentBinaryStoreV1 {
   private readonly accountName: string;
   private readonly containerName: string;
   private readonly blobService: BlobServiceClient;
-  private readonly container;
+  private readonly container: ContainerClient;
 
   constructor() {
     this.accountName = config.AZURE_STORAGE_ACCOUNT_NAME!;
