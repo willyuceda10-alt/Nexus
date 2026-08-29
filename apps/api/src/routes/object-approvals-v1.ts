@@ -12,6 +12,8 @@ const listQuerySchema = z.object({
   status: approvalStatusSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
+const eligibleApproverQuerySchema = z.object({ objectId: uuid });
+
 const createApprovalSchema = z.object({
   objectId: uuid,
   approverUserId: uuid,
@@ -49,6 +51,15 @@ type UserSummary = {
   fullName: string;
   email: string;
   avatarUrl: string | null;
+};
+
+type EligibleApproverRow = {
+  id: string;
+  full_name: string;
+  email: string;
+  avatar_url: string | null;
+  tenant_role: string;
+  workspace_role: string | null;
 };
 
 function userAgentOf(request: { headers: Record<string, unknown> }): string | null {
@@ -144,6 +155,73 @@ async function approvalUsers(
 }
 
 export async function objectApprovalsV1Routes(app: FastifyInstance): Promise<void> {
+  app.get(
+    '/api/v1/object-approvals-v1/eligible-approvers',
+    { preHandler: [authenticate, resolveActor] },
+    async (request, reply) => {
+      const query = eligibleApproverQuerySchema.safeParse(request.query);
+      if (!query.success) {
+        return reply.code(400).send({ error: 'validation_error', details: query.error.flatten() });
+      }
+
+      const actor = request.actor!;
+      const result = await withTenant(actor.tenantId, async (tx) => {
+        const object = await accessibleObject(tx, actor, query.data.objectId);
+        if (!object) return { kind: 'not_found' as const };
+        if (object === 'forbidden') return { kind: 'forbidden' as const };
+
+        const rows = await tx.$queryRaw<EligibleApproverRow[]>(Prisma.sql`
+          SELECT
+            u.id,
+            u.full_name,
+            u.email,
+            u.avatar_url,
+            tm.role::text AS tenant_role,
+            wm.role::text AS workspace_role
+          FROM tenant_memberships tm
+          JOIN users u
+            ON u.id = tm.user_id
+          LEFT JOIN workspace_members wm
+            ON wm.tenant_id = tm.tenant_id
+           AND wm.user_id = tm.user_id
+           AND wm.workspace_id = ${object.workspaceId}::uuid
+          WHERE tm.tenant_id = ${actor.tenantId}::uuid
+            AND tm.status::text = 'ACTIVE'
+            AND u.is_active = TRUE
+            AND (
+              tm.role::text IN ('OWNER', 'TENANT_ADMIN')
+              OR wm.id IS NOT NULL
+            )
+          ORDER BY
+            CASE tm.role::text
+              WHEN 'OWNER' THEN 0
+              WHEN 'TENANT_ADMIN' THEN 1
+              ELSE 2
+            END,
+            u.full_name,
+            u.email
+        `);
+
+        return {
+          kind: 'ok' as const,
+          objectId: object.id,
+          items: rows.map((row) => ({
+            id: row.id,
+            fullName: row.full_name,
+            email: row.email,
+            avatarUrl: row.avatar_url,
+            tenantRole: row.tenant_role,
+            workspaceRole: row.workspace_role,
+          })),
+        };
+      });
+
+      if (result.kind === 'not_found') return reply.code(404).send({ error: 'object_not_found' });
+      if (result.kind === 'forbidden') return reply.code(403).send({ error: 'workspace_access_denied' });
+      return { objectId: result.objectId, items: result.items };
+    },
+  );
+
   app.get(
     '/api/v1/object-approvals-v1',
     { preHandler: [authenticate, resolveActor] },

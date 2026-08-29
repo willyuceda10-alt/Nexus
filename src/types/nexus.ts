@@ -120,9 +120,18 @@ export interface ApprovalStep {
   approverId: string;
   approverName: string;
   approverRole: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
   comment?: string;
   decidedAt?: string;
+  requestedById?: string;
+  requestedByName?: string;
+  title?: string;
+  description?: string;
+  previousObjectStatus?: string;
+  decisionById?: string;
+  decisionByName?: string;
+  decisionComment?: string;
+  createdAt?: string;
 }
 
 export interface NexusObject {
