@@ -69,15 +69,17 @@ function calendarDaysBetween(from: string, to: string): number {
 function deriveHealth(input: {
   project: NexusObject;
   analysis: ApiScheduleAnalysisV2 | null;
+  analysisError: string | null;
   startDate: string | null;
   finishDate: string | null;
   varianceCalendarDays: number | null;
 }): MasterScheduleHealthV1 {
-  const { project, analysis, startDate, finishDate, varianceCalendarDays } = input;
+  const { project, analysis, analysisError, startDate, finishDate, varianceCalendarDays } = input;
   if (!startDate || !finishDate) return 'UNSCHEDULED';
   if (project.status === 'BLOCKED' || analysis?.feasible === false) return 'CRITICAL';
   if (
-    (varianceCalendarDays ?? 0) > 0
+    analysisError
+    || (varianceCalendarDays ?? 0) > 0
     || (analysis?.violations.length ?? 0) > 0
     || (analysis?.unscheduledObjectIds.length ?? 0) > 0
   ) {
@@ -88,6 +90,7 @@ function deriveHealth(input: {
 
 export function buildMasterScheduleRowV1(input: MasterScheduleProjectResultV1): MasterScheduleRowV1 {
   const { project, analysis } = input;
+  const analysisError = input.analysisError ?? null;
   const startDate = analysis?.anchorDate ?? project.startDate ?? project.baselineStartDate ?? null;
   const finishDate = analysis?.scheduledProjectFinish ?? project.endDate ?? project.baselineEndDate ?? startDate;
   const targetFinish = analysis?.targetFinish ?? project.endDate ?? null;
@@ -112,9 +115,9 @@ export function buildMasterScheduleRowV1(input: MasterScheduleProjectResultV1): 
     violationCount: analysis?.violations.length ?? 0,
     fallbackWorkItemCount: analysis?.migration.fallbackWorkItems ?? 0,
     engineSource: analysis ? 'PROJECT_ENGINE_V2' : 'PROJECT_DATES_ONLY',
-    health: deriveHealth({ project, analysis, startDate, finishDate, varianceCalendarDays }),
+    health: deriveHealth({ project, analysis, analysisError, startDate, finishDate, varianceCalendarDays }),
     feasible: analysis?.feasible ?? null,
-    analysisError: input.analysisError ?? null,
+    analysisError,
   };
 }
 
