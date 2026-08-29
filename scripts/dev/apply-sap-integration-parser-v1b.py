@@ -113,5 +113,104 @@ patch(
     '  dependsOn: [\n    documentsContainer\n    apiDocumentsBlobContributorRole\n',
 )
 
+patch(
+    'apps/api/src/routes/sap-integration-parser-v1b.ts',
+    "      maxRows: 200000,\n      canonicalWriteEnabled: false,\n",
+    "      maxRows: 200000,\n"
+    "      stagingPersistence: 'postgresql',\n"
+    "      operationalDataSource: 'bridata_postgresql_canonical',\n"
+    "      excelRole: 'transport_and_audit_evidence_only',\n"
+    "      runtimeReadsImportedWorkbook: false,\n"
+    "      canonicalWriteEnabled: false,\n",
+)
+
+patch(
+    'apps/api/test/sap-integration-parser-v1b-smoke.ts',
+    "async function main() {\n",
+    "async function canonicalCounts() {\n"
+    "  return withTenant(TENANT_ID, async (tx) => {\n"
+    "    const rows = await tx.$queryRaw<Array<{\n"
+    "      purchase_requisitions: bigint;\n"
+    "      purchase_orders: bigint;\n"
+    "      inventory_movements: bigint;\n"
+    "      project_commitments: bigint;\n"
+    "      project_actual_costs: bigint;\n"
+    "    }>>`\n"
+    "      SELECT\n"
+    "        (SELECT COUNT(*) FROM purchase_requisitions WHERE tenant_id = ${TENANT_ID}::uuid) AS purchase_requisitions,\n"
+    "        (SELECT COUNT(*) FROM purchase_orders WHERE tenant_id = ${TENANT_ID}::uuid) AS purchase_orders,\n"
+    "        (SELECT COUNT(*) FROM inventory_movements WHERE tenant_id = ${TENANT_ID}::uuid) AS inventory_movements,\n"
+    "        (SELECT COUNT(*) FROM project_commitments WHERE tenant_id = ${TENANT_ID}::uuid) AS project_commitments,\n"
+    "        (SELECT COUNT(*) FROM project_actual_costs WHERE tenant_id = ${TENANT_ID}::uuid) AS project_actual_costs\n"
+    "    `;\n"
+    "    const row = rows[0]!;\n"
+    "    return {\n"
+    "      purchaseRequisitions: Number(row.purchase_requisitions),\n"
+    "      purchaseOrders: Number(row.purchase_orders),\n"
+    "      inventoryMovements: Number(row.inventory_movements),\n"
+    "      projectCommitments: Number(row.project_commitments),\n"
+    "      projectActualCosts: Number(row.project_actual_costs),\n"
+    "    };\n"
+    "  });\n"
+    "}\n\n"
+    "async function main() {\n",
+)
+
+patch(
+    'apps/api/test/sap-integration-parser-v1b-smoke.ts',
+    "  const app = await buildApp({ integrationBinaryStore: new MemoryIntegrationBinaryStoreV1() });\n  const workbookBytes = await makeProjectProcurementWorkbook();\n\n  try {\n",
+    "  const app = await buildApp({ integrationBinaryStore: new MemoryIntegrationBinaryStoreV1() });\n"
+    "  const workbookBytes = await makeProjectProcurementWorkbook();\n"
+    "  const canonicalBefore = await canonicalCounts();\n\n"
+    "  try {\n",
+)
+
+patch(
+    'apps/api/test/sap-integration-parser-v1b-smoke.ts',
+    "    assert(persisted.entityLinks === 0, 'V1-B wrote canonical entity links before reconciliation/application phase.');\n    assert(persisted.audits === 1 && persisted.events === 1, 'Automatic parsing audit/domain event missing or duplicated.');\n\n",
+    "    assert(persisted.entityLinks === 0, 'V1-B wrote canonical entity links before reconciliation/application phase.');\n"
+    "    assert(persisted.audits === 1 && persisted.events === 1, 'Automatic parsing audit/domain event missing or duplicated.');\n"
+    "    const canonicalAfter = await canonicalCounts();\n"
+    "    assert(\n"
+    "      JSON.stringify(canonicalAfter) === JSON.stringify(canonicalBefore),\n"
+    "      `V1-B mutated canonical Bridata tables: before=${JSON.stringify(canonicalBefore)} after=${JSON.stringify(canonicalAfter)}`,\n"
+    "    );\n\n",
+)
+
+patch(
+    'apps/api/test/sap-integration-parser-v1b-smoke.ts',
+    "      filenameUsedForDetection: boolean;\n      canonicalWriteEnabled: boolean;\n      servicePrincipalAuthenticationEnabled: boolean;\n",
+    "      filenameUsedForDetection: boolean;\n"
+    "      stagingPersistence: string;\n"
+    "      operationalDataSource: string;\n"
+    "      excelRole: string;\n"
+    "      runtimeReadsImportedWorkbook: boolean;\n"
+    "      canonicalWriteEnabled: boolean;\n"
+    "      servicePrincipalAuthenticationEnabled: boolean;\n",
+)
+
+patch(
+    'apps/api/test/sap-integration-parser-v1b-smoke.ts',
+    "    assert(capabilityBody.filenameUsedForDetection === false, 'Capabilities incorrectly claim filename-based detection.');\n    assert(capabilityBody.canonicalWriteEnabled === false, 'Parser phase unexpectedly enables canonical writes.');\n",
+    "    assert(capabilityBody.filenameUsedForDetection === false, 'Capabilities incorrectly claim filename-based detection.');\n"
+    "    assert(capabilityBody.stagingPersistence === 'postgresql', 'Parsed staging data is not declared PostgreSQL-backed.');\n"
+    "    assert(capabilityBody.operationalDataSource === 'bridata_postgresql_canonical', 'Operational data source is not Bridata canonical PostgreSQL.');\n"
+    "    assert(capabilityBody.excelRole === 'transport_and_audit_evidence_only', 'Excel is not restricted to transport/audit evidence.');\n"
+    "    assert(capabilityBody.runtimeReadsImportedWorkbook === false, 'Runtime incorrectly depends on imported workbook reads.');\n"
+    "    assert(capabilityBody.canonicalWriteEnabled === false, 'Parser phase unexpectedly enables canonical writes.');\n",
+)
+
+patch(
+    'apps/api/test/sap-integration-parser-v1b-smoke.ts',
+    "      unsupportedStructureRejected: true,\n      canonicalWritesDisabled: true,\n      rlsFailClosed: true,\n",
+    "      unsupportedStructureRejected: true,\n"
+    "      stagingPersistedInPostgreSql: true,\n"
+    "      excelIsTransportOnly: true,\n"
+    "      operationalRuntimeDoesNotReadExcel: true,\n"
+    "      canonicalTablesUnchanged: true,\n"
+    "      canonicalWritesDisabled: true,\n"
+    "      rlsFailClosed: true,\n",
+)
+
 SELF.unlink()
 print('SAP_INTEGRATION_PARSER_V1B_PATCH_OK')
