@@ -6,8 +6,8 @@ import { MemoryIntegrationBinaryStoreV1 } from '../src/integration-binary-store-
 import { withTenant } from '../src/tenant-transaction.js';
 
 const tenantId = process.env.DEV_TENANT_ID ?? '00000000-0000-4000-8000-000000000002';
+const userId = process.env.DEV_USER_ID ?? '00000000-0000-4000-8000-000000000001';
 const workspaceId = '00000000-0000-4000-8000-000000000003';
-const projectId = '00000000-0000-4000-8000-000000000101';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -42,7 +42,7 @@ async function importWorkbook(
   return response.json();
 }
 
-async function projectFinancialCounts() {
+async function projectFinancialCounts(projectId: string) {
   return withTenant(tenantId, async (tx) => {
     const [commitments, actuals] = await Promise.all([
       tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`
@@ -70,7 +70,33 @@ async function main() {
   const material = `13${suffix.slice(-6)}`;
   const supplier = `8${suffix.slice(-6)}`;
 
-  await withTenant(tenantId, async (tx) => {
+  const setup = await withTenant(tenantId, async (tx) => {
+    const definition = await tx.objectDefinition.findFirst({
+      where: { tenantId, key: 'PROJECT' },
+      select: { id: true },
+    });
+    assert(definition, 'PROJECT object definition missing');
+    const project = await tx.nexusObject.create({
+      data: {
+        tenantId,
+        workspaceId,
+        objectDefinitionId: definition.id,
+        objectTypeKey: 'PROJECT',
+        title: `SAP Financial V1-D3 ${suffix}`,
+        status: 'ACTIVE',
+        priority: 'MEDIUM',
+        progress: 0,
+        ownerId: userId,
+        metadata: { source: 'SAP_V1D3_SMOKE' },
+      },
+      select: { id: true },
+    });
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO project_cost_profiles
+        (tenant_id, workspace_id, project_object_id, currency, contingency_amount, updated_at)
+      VALUES
+        (${tenantId}::uuid, ${workspaceId}::uuid, ${project.id}::uuid, 'USD', 0, CURRENT_TIMESTAMP)
+    `);
     await tx.integrationConnection.create({
       data: {
         id: connectionId,
@@ -80,7 +106,9 @@ async function main() {
         displayName: 'SAP V1-D3 smoke',
       },
     });
+    return { projectId: project.id };
   });
+  const projectId = setup.projectId;
 
   const app = await buildApp({ integrationBinaryStore: new MemoryIntegrationBinaryStoreV1() });
 
@@ -108,7 +136,7 @@ async function main() {
     'Moneda sociedad CO', 'Material', 'Cantidad total reg.',
   ], [[wbs, 4, 'WE', '28.08.2026', `50${suffix}`, 'COIN', 'RMWE', 50, 'USD', material, 5]]), '2026-08-28T12:02:00.000Z');
 
-  const before = await projectFinancialCounts();
+  const before = await projectFinancialCounts(projectId);
   const dryRun = await app.inject({
     method: 'POST',
     url: `/api/v1/integrations/sap/connections/${connectionId}/financial-guard-v1d3`,
@@ -118,7 +146,7 @@ async function main() {
   const dryPayload = dryRun.json();
   assert(dryPayload.summary.prePoCommitments === 1, 'Expected one pre-PO commitment candidate');
   assert(dryPayload.summary.actualRecordsDeferred === 1, 'Expected DATA PEP actual to stay deferred');
-  assert(JSON.stringify(await projectFinancialCounts()) === JSON.stringify(before), 'V1-D3 dry-run modified financial tables');
+  assert(JSON.stringify(await projectFinancialCounts(projectId)) === JSON.stringify(before), 'V1-D3 dry-run modified financial tables');
 
   const firstApply = await app.inject({
     method: 'POST',
@@ -130,7 +158,7 @@ async function main() {
   assert(firstPayload.counters.prePoInserted === 1, 'Expected one pre-PO project commitment insert');
   assert(firstPayload.actualCostCanonicalWriteEnabled === false, 'DATA PEP actual writes must remain disabled');
 
-  const afterFirst = await projectFinancialCounts();
+  const afterFirst = await projectFinancialCounts(projectId);
   assert(afterFirst.commitments === before.commitments + 1, 'Expected exactly one project commitment');
   assert(afterFirst.actuals === before.actuals, 'V1-D3 must not create project actual costs');
 
@@ -140,7 +168,7 @@ async function main() {
     payload: { dryRun: false },
   });
   assert(secondApply.statusCode === 200, `V1-D3 repeated apply failed: ${secondApply.statusCode} ${secondApply.body}`);
-  assert((await projectFinancialCounts()).commitments === afterFirst.commitments, 'Repeated V1-D3 apply duplicated commitment');
+  assert((await projectFinancialCounts(projectId)).commitments === afterFirst.commitments, 'Repeated V1-D3 apply duplicated commitment');
 
   await importWorkbook(app, connectionId, 'sap-project-procurement-with-po-v1d3.xlsx', await workbook([
     'Solicitud de pedido', 'Pos.solicitud pedido', 'Pedido', 'Posición de pedido', 'Entrada mercancías',
@@ -211,15 +239,16 @@ async function main() {
   assert(overview.statusCode === 200, `Cost overview failed: ${overview.statusCode} ${overview.body}`);
   const cost = overview.json();
   assert(cost.summary.manualOpenCommitment === 0, `Expected closed PR commitment to contribute zero, got ${cost.summary.manualOpenCommitment}`);
-  assert(cost.summary.materialOpenCommitment >= 100, 'Expected PO ledger to be the active material commitment authority');
+  assert(cost.summary.materialOpenCommitment === 100, `Expected exactly 100 PO commitment, got ${cost.summary.materialOpenCommitment}`);
 
-  const afterTransition = await projectFinancialCounts();
+  const afterTransition = await projectFinancialCounts(projectId);
   assert(afterTransition.commitments === afterFirst.commitments, 'PO transition created a duplicate project commitment');
   assert(afterTransition.actuals === before.actuals, 'DATA PEP was written before V1-D4');
 
   await app.close();
   console.log(JSON.stringify({
     sapFinancialGuardV1d3: 'PASS',
+    isolatedProject: true,
     wbsProjectMappingRequired: true,
     prePoCommitmentCreated: true,
     repeatedApplyIdempotent: true,
