@@ -35,8 +35,8 @@ function Required([string]$Name, [string]$Value) {
     return $Value.Trim()
 }
 
-function AzTsv([string[]]$Args) {
-    $value = & az @Args 2>$null
+function AzTsv([string[]]$AzArgs) {
+    $value = & az @AzArgs 2>$null
     if ($LASTEXITCODE -ne 0) { return '' }
     return (($value | Out-String).Trim())
 }
@@ -89,8 +89,8 @@ function ArmParams([string]$Path, [hashtable]$Values) {
 }
 
 function WhatIf([string]$Name, [string]$Template, [string]$Params, [string[]]$Extra = @()) {
-    $args = @('deployment','group','what-if','-g',$ResourceGroup,'-n',$Name,'--template-file',$Template,'--parameters',"@$Params") + $Extra + @('--no-pretty-print')
-    & az @args
+    $azArgs = @('deployment','group','what-if','-g',$ResourceGroup,'-n',$Name,'--template-file',$Template,'--parameters',"@$Params") + $Extra + @('--no-pretty-print')
+    & az @azArgs
     if ($LASTEXITCODE -ne 0) { throw "Azure what-if failed: $Name" }
 }
 
@@ -99,8 +99,8 @@ function Deploy([string]$Name, [string]$Template, [string]$Params, [string[]]$Ex
         Write-Host "[DRY-RUN] Deployment '$Name' not applied." -ForegroundColor Yellow
         return
     }
-    $args = @('deployment','group','create','-g',$ResourceGroup,'-n',$Name,'--template-file',$Template,'--parameters',"@$Params") + $Extra + @('-o','none')
-    & az @args
+    $azArgs = @('deployment','group','create','-g',$ResourceGroup,'-n',$Name,'--template-file',$Template,'--parameters',"@$Params") + $Extra + @('-o','none')
+    & az @azArgs
     if ($LASTEXITCODE -ne 0) { throw "Azure deployment failed: $Name" }
 }
 
@@ -322,18 +322,18 @@ try {
 
     if ($GrantGraphAvailability) {
         Step 'Graph free/busy permission'
-        $args = @('-ResourceGroup',$ResourceGroup,'-IdentityName',"nexus-$Environment-api-mi")
-        if ($Apply) { $args += '-Apply' }
-        & ./infra/azure/grant-meeting-availability-graph.ps1 @args
+        $azArgs = @('-ResourceGroup',$ResourceGroup,'-IdentityName',"nexus-$Environment-api-mi")
+        if ($Apply) { $azArgs += '-Apply' }
+        & ./infra/azure/grant-meeting-availability-graph.ps1 @azArgs
         if ($LASTEXITCODE -ne 0) { throw 'Graph availability permission step failed.' }
     }
 
     if ($GrantGraphCalendar) {
         Step 'Graph Calendars.ReadWrite permission'
         $meetingPrincipal = Required 'meeting MI principal' (AzTsv @('identity','show','-g',$ResourceGroup,'-n',"nexus-$Environment-meetings-mi",'--query','principalId','-o','tsv'))
-        $args = @('-MeetingManagedIdentityPrincipalId',$meetingPrincipal)
-        if ($Apply) { $args += '-Apply' }
-        & ./infra/azure/grant-meeting-calendar-graph.ps1 @args
+        $azArgs = @('-MeetingManagedIdentityPrincipalId',$meetingPrincipal)
+        if ($Apply) { $azArgs += '-Apply' }
+        & ./infra/azure/grant-meeting-calendar-graph.ps1 @azArgs
         if ($LASTEXITCODE -ne 0) { throw 'Graph calendar permission step failed.' }
     }
 
@@ -347,9 +347,9 @@ try {
 
     if ($EnableM365CalendarSync) {
         Step 'Enable M365 calendar capability'
-        $args = @('-ResourceGroup',$ResourceGroup,'-Environment',$Environment,'-Mode','Enable')
-        if ($Apply) { $args += '-Apply' }
-        & ./infra/azure/set-meeting-calendar-capability.ps1 @args
+        $azArgs = @('-ResourceGroup',$ResourceGroup,'-Environment',$Environment,'-Mode','Enable')
+        if ($Apply) { $azArgs += '-Apply' }
+        & ./infra/azure/set-meeting-calendar-capability.ps1 @azArgs
         if ($LASTEXITCODE -ne 0) { throw 'Meeting calendar capability step failed.' }
     }
 } finally {
