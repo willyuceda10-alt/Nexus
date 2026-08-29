@@ -8,10 +8,10 @@ function record(id: string, externalKey: string | null, normalized: Record<strin
 describe('SAP inventory sync V1-D2', () => {
   it('accepts an exact MATDOC receipt identity', () => {
     const plan = buildSapInventorySyncPlanV1d2([
-      record('r1', 'MATDOC:2026:5001234567:00001', {
+      record('r1', 'MATDOC:2026:5001234567:0001', {
         materialDocumentNumber: '5001234567',
         materialDocumentYear: '2026',
-        materialDocumentItem: '00001',
+        materialDocumentItem: '0001',
         materialCode: '13042034',
         plant: '1000',
         warehouse: '0001',
@@ -49,10 +49,10 @@ describe('SAP inventory sync V1-D2', () => {
     ] as const;
     for (const [sapMovementType, semantics, expected] of rows) {
       const plan = buildSapInventorySyncPlanV1d2([
-        record(sapMovementType, `MATDOC:2026:500${sapMovementType}:00001`, {
+        record(sapMovementType, `MATDOC:2026:500${sapMovementType}:0001`, {
           materialDocumentNumber: `500${sapMovementType}`,
           materialDocumentYear: '2026',
-          materialDocumentItem: '00001',
+          materialDocumentItem: '0001',
           materialCode: '13042034', plant: '1000', warehouse: '0001', quantity: -2,
           sapMovementType, movementSemantics: semantics,
         }),
@@ -64,8 +64,8 @@ describe('SAP inventory sync V1-D2', () => {
 
   it('blocks transfer/ambiguous movement semantics until target identity is available', () => {
     const plan = buildSapInventorySyncPlanV1d2([
-      record('311', 'MATDOC:2026:500311:00001', {
-        materialDocumentNumber: '500311', materialDocumentYear: '2026', materialDocumentItem: '00001',
+      record('311', 'MATDOC:2026:500311:0001', {
+        materialDocumentNumber: '500311', materialDocumentYear: '2026', materialDocumentItem: '0001',
         materialCode: '13042034', plant: '1000', warehouse: '0001', quantity: 3,
         sapMovementType: '311', movementSemantics: 'TRANSFER',
       }),
