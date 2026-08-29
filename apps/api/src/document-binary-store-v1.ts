@@ -98,5 +98,8 @@ export function createConfiguredDocumentBinaryStoreV1(): DocumentBinaryStoreV1 {
   if (config.DOCUMENT_STORAGE_MODE === 'azure') {
     return new AzureBlobDocumentBinaryStoreV1();
   }
+  if (config.NODE_ENV === 'production') {
+    throw new Error('DOCUMENT_STORAGE_MODE=azure is required for the Bridata API in production.');
+  }
   return new MemoryDocumentBinaryStoreV1();
 }
