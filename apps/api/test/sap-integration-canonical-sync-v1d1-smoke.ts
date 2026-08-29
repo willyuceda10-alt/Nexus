@@ -48,6 +48,7 @@ async function main() {
   const prNumber = `10${Date.now().toString().slice(-8)}`;
   const poNumber = `45${Date.now().toString().slice(-8)}`;
   const material = `13${Date.now().toString().slice(-6)}`;
+  const supplier = `9${Date.now().toString().slice(-8)}`;
 
   await withTenant(tenantId, async (tx) => {
     await tx.integrationConnection.create({
@@ -65,7 +66,7 @@ async function main() {
   const openOrders = await workbook([
     'Documento compras', 'Por entregar (cantidad)', 'Solicitud de pedido', 'Pos.solicitud pedido', 'Posición',
     'Cantidad de pedido', 'Fecha de entrega', 'Proveedor/Centro suministrador', 'Material', 'Precio neto', 'Moneda', 'Centro', 'Unidad medida pedido',
-  ], [[poNumber, 4, prNumber, 10, 20, 12, '30.08.2026', '0000123456 PROVEEDOR V1D1', material, 10, 'USD', '1000', 'UND']]);
+  ], [[poNumber, 4, prNumber, 10, 20, 12, '30.08.2026', `${supplier} PROVEEDOR V1D1`, material, 10, 'USD', '1000', 'UND']]);
 
   const movements = await workbook([
     'Centro', 'Almacén', 'Cantidad', 'Clase de movimiento', 'Fe.contabilización', 'Nº reserva', 'Nº pos.reserva traslado',
