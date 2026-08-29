@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
-import multipart from '@fastify/multipart';
 import { config } from './config.js';
 import { registerRequestContext } from './auth.js';
 import {
@@ -112,13 +111,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     },
     credentials: true,
   });
-  await app.register(multipart, {
-    limits: {
-      files: 1,
-      fields: 0,
-      fileSize: config.DOCUMENT_MAX_FILE_BYTES,
-    },
-  });
+  app.addContentTypeParser(
+    'application/octet-stream',
+    { parseAs: 'buffer', bodyLimit: config.DOCUMENT_MAX_FILE_BYTES },
+    (_request, body, done) => done(null, body),
+  );
 
   app.addHook('onRequest', async (request, reply) => {
     if (request.method === 'PUT' && legacyBoardOptionsPath.test(request.raw.url ?? '')) {
