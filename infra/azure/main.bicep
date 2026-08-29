@@ -235,6 +235,14 @@ resource documentsContainer 'Microsoft.Storage/storageAccounts/blobServices/cont
   }
 }
 
+resource importsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'bridata-imports'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
   location: location
@@ -464,6 +472,7 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     entraApiClientId: entraApiClientId
     entraTenantId: entraTenantId
     corsOrigins: apiCorsOrigins
+    integrationContainerName: importsContainer.name
     deployOutboxWorker: deployOutboxWorker && deployAsyncMessaging
     deployAutomationWorker: deployAutomationWorker && deployAsyncMessaging
     deployNotificationWorker: deployNotificationWorker && deployAsyncMessaging
@@ -479,6 +488,7 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
   }
   dependsOn: [
     documentsContainer
+    importsContainer
     apiDocumentsBlobContributorRole
     automationAcrPullRole
     automationKeyVaultSecretsUserRole
@@ -497,6 +507,7 @@ output logAnalyticsName string = logAnalytics.name
 output applicationInsightsName string = appInsights.name
 output storageAccountName string = storage.name
 output documentsContainerName string = documentsContainer.name
+output integrationImportsContainerName string = importsContainer.name
 output keyVaultName string = keyVault.name
 output containerRegistryName string = registry.name
 output containerRegistryLoginServer string = registry.properties.loginServer
