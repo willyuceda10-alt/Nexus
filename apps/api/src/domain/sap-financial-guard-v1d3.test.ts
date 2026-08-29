@@ -52,6 +52,28 @@ describe('SAP financial guard V1-D3', () => {
     ]);
   });
 
+  it('uses the PO snapshot to identify and close a prior PR representation', () => {
+    const plan = buildSapFinancialGuardPlanV1d3([
+      record('c1', 'SAP_PROCUREMENT_COMMITMENTS', 'PO:4500035208:00180', {
+        wbsElement: 'CSF-25-SAG-TR-I-RASN-012',
+        companyCurrencyValue: 1250,
+        reportCurrency: 'USD',
+      }),
+      record('p1', 'SAP_PROJECT_PROCUREMENT', 'PR:1000001763:04420', {
+        requisitionNumber: '1000001763',
+        requisitionPosition: '04420',
+        purchaseOrderNumber: '4500035208',
+        purchaseOrderPosition: '00180',
+      }),
+    ], mapping);
+
+    expect(plan.poDerivedCommitments[0]).toMatchObject({
+      poKey: 'PO:4500035208:00180',
+      supersededPrKey: 'PR:1000001763:04420',
+      reason: 'PO_IS_CANONICAL_COMMITMENT_AUTHORITY',
+    });
+  });
+
   it('closes the PR representation when project procurement shows its successor PO', () => {
     const plan = buildSapFinancialGuardPlanV1d3([
       record('c1', 'SAP_PROCUREMENT_COMMITMENTS', 'PR:1000001763:04420', {
