@@ -18,7 +18,7 @@ param adminDatabaseSecretUri string
 param entraApiClientId string
 param entraTenantId string
 param corsOrigins string
-param documentStorageAccountName string
+param documentStorageAccountName string = toLower('nexus${environment}${uniqueString(resourceGroup().id)}')
 param documentContainerName string = 'bridata-documents'
 param deployApi bool = true
 param deployMigrationJob bool = true
