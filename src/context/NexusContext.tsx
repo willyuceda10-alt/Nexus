@@ -33,6 +33,8 @@ import {
 import { calculateProjectHealth } from '../domain/projectHealth';
 import { useApiBootstrap } from './ApiBootstrapContext';
 import { configureApiSession, BridataApiError } from '../api/client';
+import { collaborationV1Api } from '../api/collaborationV1Client';
+import { mapApiObjectCommentV1, mapObjectCollaborationV1 } from '../domain/collaborationV1';
 import {
   apiActorToUser,
   apiTenantToTenant,
@@ -46,6 +48,7 @@ import {
 } from '../data/objectRepository';
 
 export type ObjectDataStatus = 'mock' | 'waiting' | 'loading' | 'ready' | 'error';
+export type CollaborationDataStatus = 'mock' | 'idle' | 'loading' | 'ready' | 'error';
 
 interface NexusContextType {
   tenant: Tenant;
@@ -60,6 +63,11 @@ interface NexusContextType {
   relations: ObjectRelation[];
   activityLogs: ActivityLog[];
   comments: Comment[];
+  selectedObjectActivityLogs: ActivityLog[];
+  selectedObjectComments: Comment[];
+  collaborationStatus: CollaborationDataStatus;
+  collaborationError: string | null;
+  reloadObjectCollaboration: (objectId?: string) => Promise<void>;
   approvals: ApprovalStep[];
   objectDataStatus: ObjectDataStatus;
   objectDataError: string | null;
@@ -94,7 +102,7 @@ interface NexusContextType {
     relationType: ObjectRelation['relationType'],
     notes?: string,
   ) => void;
-  addComment: (objectId: string, content: string) => void;
+  addComment: (objectId: string, content: string) => Promise<Comment>;
   decideApproval: (
     approvalId: string,
     status: 'APPROVED' | 'REJECTED',
@@ -158,6 +166,12 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [relations, setRelations] = useState<ObjectRelation[]>(isApiMode ? [] : mockRelations);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(isApiMode ? [] : mockActivityLogs);
   const [comments, setComments] = useState<Comment[]>(isApiMode ? [] : mockComments);
+  const [apiObjectComments, setApiObjectComments] = useState<Comment[]>([]);
+  const [apiObjectActivityLogs, setApiObjectActivityLogs] = useState<ActivityLog[]>([]);
+  const [collaborationStatus, setCollaborationStatus] = useState<CollaborationDataStatus>(
+    isApiMode ? 'idle' : 'mock',
+  );
+  const [collaborationError, setCollaborationError] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<ApprovalStep[]>(isApiMode ? [] : mockApprovals);
   const [objectDataStatus, setObjectDataStatus] = useState<ObjectDataStatus>(
     isApiMode ? 'waiting' : 'mock',
@@ -217,6 +231,56 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!selectedObjectId) return null;
     return objects.find((object) => object.id === selectedObjectId) ?? null;
   }, [objects, selectedObjectId]);
+
+  const selectedObjectComments = useMemo<Comment[]>(() => {
+    if (!selectedObjectId) return [];
+    return isApiMode
+      ? apiObjectComments
+      : comments.filter((comment) => comment.objectId === selectedObjectId);
+  }, [selectedObjectId, isApiMode, apiObjectComments, comments]);
+
+  const selectedObjectActivityLogs = useMemo<ActivityLog[]>(() => {
+    if (!selectedObjectId) return [];
+    return isApiMode
+      ? apiObjectActivityLogs
+      : activityLogs.filter((log) => log.objectId === selectedObjectId);
+  }, [selectedObjectId, isApiMode, apiObjectActivityLogs, activityLogs]);
+
+  const reloadObjectCollaboration = useCallback(async (objectId?: string): Promise<void> => {
+    if (!isApiMode) {
+      setCollaborationStatus('mock');
+      setCollaborationError(null);
+      return;
+    }
+
+    const targetId = objectId ?? selectedObjectId;
+    if (!apiReady || !targetId) {
+      setApiObjectComments([]);
+      setApiObjectActivityLogs([]);
+      setCollaborationStatus('idle');
+      setCollaborationError(null);
+      return;
+    }
+
+    setCollaborationStatus('loading');
+    setCollaborationError(null);
+    try {
+      const payload = await collaborationV1Api.getObjectCollaboration(targetId, {
+        commentLimit: 100,
+        auditLimit: 100,
+        historyLimit: 100,
+      });
+      const mapped = mapObjectCollaborationV1(payload);
+      setApiObjectComments(mapped.comments);
+      setApiObjectActivityLogs(mapped.activityLogs);
+      setCollaborationStatus('ready');
+    } catch (cause) {
+      setApiObjectComments([]);
+      setApiObjectActivityLogs([]);
+      setCollaborationStatus('error');
+      setCollaborationError(dataErrorMessage(cause));
+    }
+  }, [isApiMode, apiReady, selectedObjectId]);
 
   const repositoryContext = useCallback((): ObjectRepositoryContext => {
     const workspaceId = currentWorkspaceId ?? workspaces[0]?.id;
@@ -278,6 +342,11 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [reloadObjects]);
 
   useEffect(() => {
+    if (!isDrawerOpen || !selectedObjectId) return;
+    void reloadObjectCollaboration(selectedObjectId);
+  }, [isDrawerOpen, selectedObjectId, reloadObjectCollaboration]);
+
+  useEffect(() => {
     if (!isApiMode || objectDataStatus !== 'ready') return;
     const selectedStillExists = selectedProjectId
       ? objects.some((object) => object.id === selectedProjectId && object.type === 'PROJECT')
@@ -300,6 +369,12 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const openObjectDrawer = (objectId: string) => {
+    if (isApiMode) {
+      setApiObjectComments([]);
+      setApiObjectActivityLogs([]);
+      setCollaborationStatus('loading');
+      setCollaborationError(null);
+    }
     setSelectedObjectId(objectId);
     setIsDrawerOpen(true);
   };
@@ -307,6 +382,12 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const closeObjectDrawer = () => {
     setIsDrawerOpen(false);
     setSelectedObjectId(null);
+    if (isApiMode) {
+      setApiObjectComments([]);
+      setApiObjectActivityLogs([]);
+      setCollaborationStatus('idle');
+      setCollaborationError(null);
+    }
   };
 
   const openCreateModal = (type: ObjectType = 'TASK') => {
@@ -325,17 +406,19 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const created = await repository.create(data, repositoryContext());
       setObjects((previous) => [created, ...previous]);
 
-      const log: ActivityLog = {
-        id: `act-${crypto.randomUUID()}`,
-        objectId: created.id,
-        userId: currentUser.id,
-        userName: currentUser.name,
-        userAvatar: currentUser.avatar,
-        action: `Creó el objeto (${created.type}) "${created.title}"`,
-        newValue: created.status,
-        timestamp: new Date().toISOString(),
-      };
-      setActivityLogs((previous) => [log, ...previous]);
+      if (!isApiMode) {
+        const log: ActivityLog = {
+          id: `act-${crypto.randomUUID()}`,
+          objectId: created.id,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userAvatar: currentUser.avatar,
+          action: `Creó el objeto (${created.type}) "${created.title}"`,
+          newValue: created.status,
+          timestamp: new Date().toISOString(),
+        };
+        setActivityLogs((previous) => [log, ...previous]);
+      }
 
       if (created.type === 'PROJECT') setSelectedProjectId(created.id);
       return created;
@@ -379,7 +462,7 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ),
       );
 
-      if (updates.status && updates.status !== existing.status) {
+      if (!isApiMode && updates.status && updates.status !== existing.status) {
         const log: ActivityLog = {
           id: `act-${crypto.randomUUID()}`,
           objectId: id,
@@ -445,17 +528,37 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setRelations((previous) => [...previous, newRelation]);
   };
 
-  const addComment = (objectId: string, content: string) => {
+  const addComment = async (objectId: string, content: string): Promise<Comment> => {
+    const normalized = content.trim();
+    if (!normalized) throw new Error('El comentario no puede estar vacío.');
+
+    if (isApiMode) {
+      if (!apiReady) throw new Error('La API todavía no está lista para guardar comentarios.');
+      setCollaborationError(null);
+      try {
+        const created = await collaborationV1Api.createObjectComment(objectId, { content: normalized });
+        const mapped = mapApiObjectCommentV1(created);
+        setApiObjectComments((previous) => [mapped, ...previous.filter((item) => item.id !== mapped.id)]);
+        await reloadObjectCollaboration(objectId);
+        return mapped;
+      } catch (cause) {
+        setCollaborationStatus('error');
+        setCollaborationError(dataErrorMessage(cause));
+        throw cause;
+      }
+    }
+
     const newComment: Comment = {
       id: `cmt-${crypto.randomUUID()}`,
       objectId,
       userId: currentUser.id,
       userName: currentUser.name,
       userAvatar: currentUser.avatar,
-      content,
+      content: normalized,
       createdAt: new Date().toISOString(),
     };
     setComments((previous) => [newComment, ...previous]);
+    return newComment;
   };
 
   const decideApproval = async (
@@ -534,6 +637,11 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         relations,
         activityLogs,
         comments,
+        selectedObjectActivityLogs,
+        selectedObjectComments,
+        collaborationStatus,
+        collaborationError,
+        reloadObjectCollaboration,
         approvals,
         objectDataStatus,
         objectDataError,

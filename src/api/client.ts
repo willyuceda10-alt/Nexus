@@ -113,7 +113,7 @@ export class BridataApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = accessTokenProvider ? await accessTokenProvider() : null;
   const tenantId = tenantIdProvider?.() ?? null;
   const headers = new Headers(init.headers);
