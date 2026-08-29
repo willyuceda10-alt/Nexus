@@ -311,7 +311,7 @@ resource migrations 'Microsoft.App/jobs@2024-03-01' = if (deployMigrationJob) {
 }
 
 output apiName string = deployApi ? api.name : ''
-output apiFqdn string = deployApi ? api.properties.configuration.ingress.fqdn : ''
+output apiFqdn string = deployApi ? api!.properties.configuration.ingress.fqdn : ''
 output outboxWorkerName string = deployOutboxWorker ? outboxWorker.name : ''
 output automationWorkerName string = deployAutomationWorker ? automationWorker.name : ''
 output notificationWorkerName string = deployNotificationWorker ? notificationWorker.name : ''

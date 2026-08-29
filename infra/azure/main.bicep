@@ -88,10 +88,10 @@ param apiImage string = 'not-configured'
 param migrationImage string = 'not-configured'
 
 @description('Key Vault secret URI containing the restricted PostgreSQL runtime connection string.')
-param runtimeDatabaseSecretUri string = 'https://not-configured.vault.azure.net/secrets/runtime-database-url'
+param runtimeDatabaseSecretUri string = 'https://not-configured${az.environment().suffixes.keyvaultDns}/secrets/runtime-database-url'
 
 @description('Key Vault secret URI containing the privileged migration-only PostgreSQL connection string.')
-param adminDatabaseSecretUri string = 'https://not-configured.vault.azure.net/secrets/admin-database-url'
+param adminDatabaseSecretUri string = 'https://not-configured${az.environment().suffixes.keyvaultDns}/secrets/admin-database-url'
 
 @description('Microsoft Entra application/client ID of the Bridata Project API resource application.')
 param entraApiClientId string = '00000000-0000-0000-0000-000000000000'
@@ -128,6 +128,7 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   tags: tags
   properties: {
     addressSpace: { addressPrefixes: ['10.40.0.0/16'] }
+    privateEndpointVNetPolicies: 'Disabled'
   }
 }
 
@@ -136,6 +137,7 @@ resource containerAppsSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-
   name: 'container-apps'
   properties: {
     addressPrefix: '10.40.0.0/23'
+    privateEndpointNetworkPolicies: 'Disabled'
     delegations: [
       {
         name: 'container-apps-environment'
@@ -150,6 +152,7 @@ resource postgresSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' =
   name: 'postgres'
   properties: {
     addressPrefix: '10.40.2.0/28'
+    privateEndpointNetworkPolicies: 'Disabled'
     delegations: [
       {
         name: 'postgres-flexible-server'
@@ -182,8 +185,8 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   properties: {
     retentionInDays: environment == 'prod' ? 90 : 30
     features: { enableLogAccessUsingOnlyResourcePermissions: true }
+    sku: { name: 'PerGB2018' }
   }
-  sku: { name: 'PerGB2018' }
 }
 
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
@@ -218,7 +221,7 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
   parent: storage
   name: 'default'
   properties: {
-    deleteRetentionPolicy: { enabled: true, days: environment == 'prod' ? 30 : 7 }
+    deleteRetentionPolicy: { enabled: true, days: environment == 'prod' ? 30 : 7, allowPermanentDelete: false }
     containerDeleteRetentionPolicy: { enabled: true, days: environment == 'prod' ? 30 : 7 }
   }
 }
@@ -237,7 +240,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
-resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
+resource registry 'Microsoft.ContainerRegistry/registries@2025-04-01' = {
   name: acrName
   location: location
   tags: tags
@@ -245,6 +248,18 @@ resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   properties: {
     adminUserEnabled: false
     publicNetworkAccess: 'Enabled'
+    anonymousPullEnabled: false
+    dataEndpointEnabled: false
+
+    encryption: {
+      status: 'disabled'
+    }
+
+    policies: {
+      azureADAuthenticationAsArmPolicy: {
+        status: 'enabled'
+      }
+    }
   }
 }
 
@@ -268,7 +283,7 @@ resource notificationIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@
 
 resource automationAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: registry
-  name: guid(registry.id, automationIdentity.properties.principalId, acrPullRoleId)
+  name: guid(registry.id, automationIdentity.id, acrPullRoleId)
   properties: {
     principalId: automationIdentity.properties.principalId
     principalType: 'ServicePrincipal'
@@ -278,7 +293,7 @@ resource automationAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-
 
 resource automationKeyVaultSecretsUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: keyVault
-  name: guid(keyVault.id, automationIdentity.properties.principalId, keyVaultSecretsUserRoleId)
+  name: guid(keyVault.id, automationIdentity.id, keyVaultSecretsUserRoleId)
   properties: {
     principalId: automationIdentity.properties.principalId
     principalType: 'ServicePrincipal'
@@ -288,7 +303,7 @@ resource automationKeyVaultSecretsUserRole 'Microsoft.Authorization/roleAssignme
 
 resource notificationAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: registry
-  name: guid(registry.id, notificationIdentity.properties.principalId, acrPullRoleId)
+  name: guid(registry.id, notificationIdentity.id, acrPullRoleId)
   properties: {
     principalId: notificationIdentity.properties.principalId
     principalType: 'ServicePrincipal'
@@ -298,7 +313,7 @@ resource notificationAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-0
 
 resource notificationKeyVaultSecretsUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: keyVault
-  name: guid(keyVault.id, notificationIdentity.properties.principalId, keyVaultSecretsUserRoleId)
+  name: guid(keyVault.id, notificationIdentity.id, keyVaultSecretsUserRoleId)
   properties: {
     principalId: notificationIdentity.properties.principalId
     principalType: 'ServicePrincipal'
@@ -315,10 +330,29 @@ resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
         customerId: logAnalytics.properties.customerId
-        sharedKey: listKeys(logAnalytics.id, '2022-10-01').primarySharedKey
+        sharedKey: logAnalytics.listKeys().primarySharedKey
       }
     }
     vnetConfiguration: { infrastructureSubnetId: containerAppsSubnet.id }
+
+    peerAuthentication: {
+      mtls: {
+        enabled: false
+      }
+    }
+
+    peerTrafficConfiguration: {
+      encryption: {
+        enabled: false
+      }
+    }
+
+    workloadProfiles: [
+      {
+        name: 'Consumption'
+        workloadProfileType: 'Consumption'
+      }
+    ]
   }
 }
 
