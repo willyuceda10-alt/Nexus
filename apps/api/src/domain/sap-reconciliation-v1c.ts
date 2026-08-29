@@ -183,13 +183,18 @@ export function buildSapReconciliationPlanV1c(records: SapReconciliationRecordV1
   }
 
   // Enriched commitments can be attached exactly to the operational procurement line identity.
+  // PO references prefer the explicit open-order source and use project tracking only as fallback.
   for (const commitment of commitments) {
     if (!commitment.externalKey) continue;
-    const targetRecords = commitment.externalKey.startsWith('PR:')
-      ? projectByPr.get(commitment.externalKey) ?? []
-      : commitment.externalKey.startsWith('PO:')
-        ? [...(openByPo.get(commitment.externalKey) ?? []), ...(projectByPo.get(commitment.externalKey) ?? [])]
-        : [];
+    let targetRecords: SapReconciliationRecordV1c[] = [];
+    if (commitment.externalKey.startsWith('PR:')) {
+      targetRecords = projectByPr.get(commitment.externalKey) ?? [];
+    } else if (commitment.externalKey.startsWith('PO:')) {
+      const preferredOpenOrders = openByPo.get(commitment.externalKey) ?? [];
+      targetRecords = preferredOpenOrders.length > 0
+        ? preferredOpenOrders
+        : projectByPo.get(commitment.externalKey) ?? [];
+    }
     if (targetRecords.length === 1) {
       pushUnique(candidates, seen, {
         leftRecordId: commitment.id,
