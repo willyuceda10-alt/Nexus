@@ -141,6 +141,9 @@ const profiles: Profile[] = [
       'Elemento PEP',
       'Fecha de entrada',
       'Referencia',
+      'Documento material',
+      'Ejercicio',
+      'Posición doc.material',
     ]),
   },
   {
@@ -246,6 +249,12 @@ function asPosition(value: SapCellScalar | undefined): string | null {
   return /^\d+$/.test(document) ? document.padStart(5, '0') : document;
 }
 
+function asMaterialDocumentItem(value: SapCellScalar | undefined): string | null {
+  const document = asDocument(value);
+  if (!document) return null;
+  return /^\d+$/.test(document) ? document.padStart(4, '0') : document;
+}
+
 function asIsoDate(value: SapCellScalar | undefined): string | null {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -288,6 +297,14 @@ function toHeaderMap(cells: Array<{ header: string; value: SapCellScalar }>): Ma
 
 function pick(map: Map<string, SapCellScalar>, header: string): SapCellScalar | undefined {
   return map.get(normalizeSapHeader(header));
+}
+
+function pickFirst(map: Map<string, SapCellScalar>, candidateHeaders: string[]): SapCellScalar | undefined {
+  for (const header of candidateHeaders) {
+    const value = pick(map, header);
+    if (value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '')) return value;
+  }
+  return undefined;
 }
 
 function present(value: SapCellScalar): boolean {
@@ -383,6 +400,15 @@ export function normalizeSapRow(
     if (purchaseOrderNumber && purchaseOrderPosition) externalKey = `PO:${purchaseOrderNumber}:${purchaseOrderPosition}`;
   } else if (profileId === 'material_movements_v1') {
     const movementType = asDocument(pick(map, 'Clase de movimiento'));
+    const materialDocumentNumber = asDocument(pickFirst(map, [
+      'Documento material', 'Nº documento material', 'Nº doc.material',
+    ]));
+    const materialDocumentYear = asDocument(pickFirst(map, [
+      'Ejercicio', 'Ejercicio doc.material', 'Ejercicio documento material',
+    ]));
+    const materialDocumentItem = asMaterialDocumentItem(pickFirst(map, [
+      'Posición doc.material', 'Posición documento material', 'Pos.doc.material',
+    ]));
     fields = compact({
       plant: asText(pick(map, 'Centro')),
       warehouse: asText(pick(map, 'Almacén')),
@@ -402,9 +428,16 @@ export function normalizeSapRow(
       purchaseOrderNumber: asDocument(pick(map, 'Pedido')),
       purchaseOrderPosition: asPosition(pick(map, 'Posición')),
       wbsElement: asText(pick(map, 'Elemento PEP')),
+      materialDocumentNumber,
+      materialDocumentYear,
+      materialDocumentItem,
     });
     if (!movementType || asNumber(pick(map, 'Cantidad')) === null) errors.push('MOVEMENT_CORE_FIELDS_MISSING');
-    warnings.push('MATERIAL_DOCUMENT_IDENTITY_NOT_AVAILABLE');
+    if (materialDocumentNumber && materialDocumentYear && materialDocumentItem) {
+      externalKey = `MATDOC:${materialDocumentYear}:${materialDocumentNumber}:${materialDocumentItem}`;
+    } else {
+      warnings.push('MATERIAL_DOCUMENT_IDENTITY_NOT_AVAILABLE');
+    }
   } else if (profileId === 'project_actual_costs_v1') {
     fields = compact({
       projectDefinition: asText(pick(map, 'Definición del proyecto')),

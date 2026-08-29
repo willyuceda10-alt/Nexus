@@ -226,7 +226,16 @@ async function preflightCandidate(
     'SAP_MATERIAL_DOCUMENT_ITEM',
     candidate.externalKey,
   );
-  if (existing) return { eligible: null, blocker: null, unchanged: true };
+  if (existing) {
+    if (existing.canonical_entity_type !== 'INVENTORY_MOVEMENT') {
+      return {
+        eligible: null,
+        unchanged: false,
+        blocker: { recordId: candidate.recordId, externalKey: candidate.externalKey, code: 'MATERIAL_DOCUMENT_IDENTITY_LINK_CONFLICT' },
+      };
+    }
+    return { eligible: null, blocker: null, unchanged: true };
+  }
 
   const material = await findMaterial(tx, tenantId, workspaceId, candidate.materialCode);
   if (!material) {
@@ -290,6 +299,35 @@ async function syncedReceiptQuantityForPoLine(
       AND reference_id = ${poLineId}::uuid
   `);
   return numberOf(rows[0]?.quantity);
+}
+
+async function syncedNetSapIssueQuantity(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  connectionId: string,
+  warehouseId: string,
+  materialId: string,
+): Promise<number> {
+  const rows = await tx.$queryRaw<QuantityRow[]>(Prisma.sql`
+    SELECT COALESCE(SUM(
+      CASE
+        WHEN link.metadata->>'sapMovementType' = '221' THEN movement.quantity
+        WHEN link.metadata->>'sapMovementType' = '222' THEN -movement.quantity
+        ELSE 0
+      END
+    ), 0) AS quantity
+    FROM integration_entity_links link
+    JOIN inventory_movements movement
+      ON movement.id = link.canonical_entity_id
+     AND movement.tenant_id = link.tenant_id
+    WHERE link.tenant_id = ${tenantId}::uuid
+      AND link.integration_connection_id = ${connectionId}::uuid
+      AND link.external_entity_type = 'SAP_MATERIAL_DOCUMENT_ITEM'
+      AND link.canonical_entity_type = 'INVENTORY_MOVEMENT'
+      AND movement.warehouse_id = ${warehouseId}::uuid
+      AND movement.material_id = ${materialId}::uuid
+  `);
+  return Math.max(0, numberOf(rows[0]?.quantity));
 }
 
 async function refreshPurchaseOrderReceiptState(
@@ -374,7 +412,9 @@ async function applyCandidate(
         };
       }
       const warehouseId = await ensureWarehouse(tx, tenantId, workspaceId, candidate);
-      const poLine = candidate.purchaseOrderExternalKey
+      const needsPurchaseOrderReference = candidate.canonicalMovementType === 'RECEIPT'
+        || candidate.canonicalMovementType === 'ADJUSTMENT_OUT';
+      const poLine = needsPurchaseOrderReference && candidate.purchaseOrderExternalKey
         ? await findPurchaseOrderLine(tx, tenantId, connectionId, candidate.purchaseOrderExternalKey)
         : null;
 
@@ -387,6 +427,19 @@ async function applyCandidate(
               recordId: candidate.recordId,
               externalKey: candidate.externalKey,
               code: 'RECEIPT_REVERSAL_EXCEEDS_SYNCED_RECEIPTS',
+            },
+          };
+        }
+      }
+      if (candidate.canonicalMovementType === 'ADJUSTMENT_IN' && candidate.sapMovementType === '222') {
+        const netIssued = await syncedNetSapIssueQuantity(tx, tenantId, connectionId, warehouseId, material.id);
+        if (candidate.quantity > netIssued) {
+          return {
+            kind: 'blocked' as const,
+            blocker: {
+              recordId: candidate.recordId,
+              externalKey: candidate.externalKey,
+              code: 'ISSUE_REVERSAL_EXCEEDS_SYNCED_ISSUES',
             },
           };
         }
