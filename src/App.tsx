@@ -15,6 +15,7 @@ import { ProjectCenter } from './components/views/ProjectCenter';
 import { WorkBoardsConfigOptionsV1View } from './components/views/WorkBoardsConfigOptionsV1View';
 import { WorkCalendarTimelineV1View } from './components/views/WorkCalendarTimelineV1View';
 import { PortfoliosView } from './components/views/PortfoliosView';
+import { MasterScheduleView } from './components/views/MasterScheduleView';
 import { ResourceManagementView } from './components/views/ResourceManagementView';
 import { MaterialsInventoryV2View } from './components/views/MaterialsInventoryV2View';
 import { CostControlV2View } from './components/views/CostControlV2View';
@@ -22,7 +23,6 @@ import { AutomationsV2View } from './components/views/AutomationsV2View';
 import { GovernanceRiskView } from './components/views/GovernanceRiskView';
 import { MeetingsDecisionsView } from './components/views/MeetingsDecisionsView';
 import { DocumentsApprovalsView } from './components/views/DocumentsApprovalsView';
-import { TimelineView } from './components/views/TimelineView';
 import { ExecutiveDashboard } from './components/views/ExecutiveDashboard';
 import { SettingsV2View } from './components/views/SettingsV2View';
 
@@ -44,7 +44,7 @@ const MainContentRouter: React.FC = () => {
     case 'governance': return <GovernanceRiskView />;
     case 'meetings': return <MeetingsDecisionsView />;
     case 'documents': return <DocumentsApprovalsView />;
-    case 'timeline': return <TimelineView />;
+    case 'timeline': return <MasterScheduleView />;
     case 'reports': return <ExecutiveDashboard />;
     case 'settings': return <SettingsV2View />;
     default: return <WorkspaceHome />;
