@@ -119,13 +119,17 @@ export function buildSapFinancialGuardPlanV1d3(
     mappings.map((mapping) => [normalizeSapWbsElementV1d3(mapping.wbsElement), mapping]),
   );
   const poByPr = new Map<string, Set<string>>();
+  const prByPo = new Map<string, Set<string>>();
   for (const record of procurementRecords) {
     const pr = prKey(record);
     const po = poKey(record);
     if (!pr || !po) continue;
-    const current = poByPr.get(pr) ?? new Set<string>();
-    current.add(po);
-    poByPr.set(pr, current);
+    const currentPo = poByPr.get(pr) ?? new Set<string>();
+    currentPo.add(po);
+    poByPr.set(pr, currentPo);
+    const currentPr = prByPo.get(po) ?? new Set<string>();
+    currentPr.add(pr);
+    prByPo.set(po, currentPr);
   }
 
   const prePoCommitments: SapPrePoCommitmentCandidateV1d3[] = [];
@@ -150,6 +154,15 @@ export function buildSapFinancialGuardPlanV1d3(
     }
 
     if (record.externalKey.startsWith('PO:')) {
+      const predecessorPrKeys = [...(prByPo.get(record.externalKey) ?? new Set<string>())];
+      if (predecessorPrKeys.length > 1) {
+        blockers.push({
+          recordId: record.id,
+          code: 'MULTIPLE_REQUISITIONS_FOR_PURCHASE_ORDER_LINE',
+          details: { externalKey: record.externalKey, predecessorPrKeys },
+        });
+        continue;
+      }
       poDerivedCommitments.push({
         recordId: record.id,
         poKey: record.externalKey,
@@ -158,7 +171,7 @@ export function buildSapFinancialGuardPlanV1d3(
         workspaceId: mapping.workspaceId,
         workItemId: mapping.workItemId,
         reason: 'PO_IS_CANONICAL_COMMITMENT_AUTHORITY',
-        supersededPrKey: null,
+        supersededPrKey: predecessorPrKeys[0] ?? null,
       });
       continue;
     }
