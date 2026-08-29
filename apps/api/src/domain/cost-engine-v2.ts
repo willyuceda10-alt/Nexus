@@ -25,6 +25,13 @@ function amount(value: number, field: string): number {
   return Math.round((value + Number.EPSILON) * 10_000) / 10_000;
 }
 
+function signedAmount(value: number, field: string): number {
+  if (!Number.isFinite(value)) {
+    throw new CostEngineV2ValidationError(`${field} must be finite.`);
+  }
+  return Math.round((value + Number.EPSILON) * 10_000) / 10_000;
+}
+
 function round(value: number): number {
   return Math.round((value + Number.EPSILON) * 10_000) / 10_000;
 }
@@ -33,7 +40,7 @@ export function calculateProjectCostSummaryV2(input: ProjectCostTotalsV2Input) {
   const plannedBudget = amount(input.plannedBudget, 'plannedBudget');
   const approvedBudget = amount(input.approvedBudget, 'approvedBudget');
   const contingencyAmount = amount(input.contingencyAmount, 'contingencyAmount');
-  const manualActual = amount(input.manualActual, 'manualActual');
+  const manualActual = signedAmount(input.manualActual, 'manualActual');
   const materialActual = amount(input.materialActual, 'materialActual');
   const manualOpenCommitment = amount(input.manualOpenCommitment, 'manualOpenCommitment');
   const materialOpenCommitment = amount(input.materialOpenCommitment, 'materialOpenCommitment');
@@ -89,7 +96,7 @@ export function calculateBudgetLineForecastV2(input: {
   forecastRemainingUncommitted?: number | null;
 }) {
   const approvedAmount = amount(input.approvedAmount, 'approvedAmount');
-  const actualAmount = amount(input.actualAmount, 'actualAmount');
+  const actualAmount = signedAmount(input.actualAmount, 'actualAmount');
   const commitmentAmount = amount(input.commitmentAmount, 'commitmentAmount');
   const explicitForecast = input.forecastRemainingUncommitted == null
     ? null

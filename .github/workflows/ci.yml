@@ -192,6 +192,16 @@ jobs:
           INTEGRATION_PARSE_MAX_FILE_BYTES: "26214400"
         run: npx tsx apps/api/test/sap-integration-financial-guard-v1d3-smoke.ts
 
+      - name: Verify SAP DATA PEP actual authority V1-D4
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
+          INTEGRATION_STORAGE_MODE: memory
+          INTEGRATION_PARSE_MAX_FILE_BYTES: "26214400"
+        run: npx tsx apps/api/test/sap-integration-actual-cost-sync-v1d4-smoke.ts
+
       - name: Verify persistent object approval lifecycle
         env:
           AUTH_MODE: dev
