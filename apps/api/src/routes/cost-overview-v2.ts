@@ -111,6 +111,18 @@ export async function costOverviewV2Routes(app: FastifyInstance): Promise<void> 
           ORDER BY cc.code, bl.created_at, bl.id
         `);
 
+        const actualAuthorityRows = await tx.$queryRaw<Array<{ enabled: boolean }>>(Prisma.sql`
+          SELECT EXISTS (
+            SELECT 1 FROM integration_entity_links authority
+            WHERE authority.tenant_id = ${actor.tenantId}::uuid
+              AND authority.external_entity_type = 'SAP_ACTUAL_COST_AUTHORITY'
+              AND authority.canonical_entity_type = 'PROJECT_OBJECT'
+              AND authority.canonical_entity_id = ${project.id}::uuid
+              AND authority.metadata->>'authority' = 'SAP_DATA_PEP'
+          ) AS enabled
+        `);
+        const sapDataPepAuthority = Boolean(actualAuthorityRows[0]?.enabled);
+
         const [manualActualRows, manualCommitmentRows, materialActualRows, materialCommitmentRows] = await Promise.all([
           tx.$queryRaw<FactRow[]>(Prisma.sql`
             SELECT id, work_item_object_id, cost_code_id, material_id, amount, currency
@@ -142,6 +154,7 @@ export async function costOverviewV2Routes(app: FastifyInstance): Promise<void> 
             WHERE grl.tenant_id = ${actor.tenantId}::uuid
               AND COALESCE(po.project_object_id, mr.project_object_id) = ${project.id}::uuid
               AND gr.status = 'POSTED'
+              AND ${!sapDataPepAuthority}
           `),
           tx.$queryRaw<FactRow[]>(Prisma.sql`
             SELECT pol.id,
@@ -289,6 +302,7 @@ export async function costOverviewV2Routes(app: FastifyInstance): Promise<void> 
             project: { id: project.id, title: project.title, workspaceId: project.workspaceId },
             profile: profile ? { id: profile.id, currency, contingencyAmount: numberOf(profile.contingency_amount) } : null,
             currency,
+            actualAuthority: sapDataPepAuthority ? 'SAP_DATA_PEP' : 'BRIDATA_MIXED',
             summary,
             lines: lineResults,
             unallocated: {

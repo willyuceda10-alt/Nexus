@@ -167,6 +167,9 @@ const profiles: Profile[] = [
       'Nº docum.refer.',
       'Indic.cargo/abono',
       'Val/Mon.so.CO',
+      'Sociedad',
+      'Ejercicio',
+      'Posición documento',
     ]),
   },
   {
@@ -253,6 +256,12 @@ function asMaterialDocumentItem(value: SapCellScalar | undefined): string | null
   const document = asDocument(value);
   if (!document) return null;
   return /^\d+$/.test(document) ? document.padStart(4, '0') : document;
+}
+
+function asAccountingDocumentItem(value: SapCellScalar | undefined): string | null {
+  const document = asDocument(value);
+  if (!document) return null;
+  return /^\d+$/.test(document) ? document.padStart(3, '0') : document;
 }
 
 function asIsoDate(value: SapCellScalar | undefined): string | null {
@@ -439,6 +448,12 @@ export function normalizeSapRow(
       warnings.push('MATERIAL_DOCUMENT_IDENTITY_NOT_AVAILABLE');
     }
   } else if (profileId === 'project_actual_costs_v1') {
+    const companyCode = asDocument(pick(map, 'Sociedad'));
+    const fiscalYear = asDocument(pick(map, 'Ejercicio'));
+    const accountingDocument = asDocument(pick(map, 'Número de documento'));
+    const accountingDocumentItem = asAccountingDocumentItem(pickFirst(map, [
+      'Posición documento', 'Posición doc.contable', 'Pos.documento', 'Posición de documento', 'Partida',
+    ]));
     fields = compact({
       projectDefinition: asText(pick(map, 'Definición del proyecto')),
       wbsElement: asText(pick(map, 'Elemento PEP')),
@@ -458,7 +473,10 @@ export function normalizeSapRow(
       documentDate: asIsoDate(pick(map, 'Fecha de documento')),
       postingDate: asIsoDate(pick(map, 'Fe.contabilización')),
       entryDate: asIsoDate(pick(map, 'Fecha entrada')),
-      accountingDocument: asDocument(pick(map, 'Número de documento')),
+      companyCode,
+      fiscalYear,
+      accountingDocument,
+      accountingDocumentItem,
       offsetAccount: asDocument(pick(map, 'Cta.contrapartida')),
       documentHeaderText: asText(pick(map, 'Texto de cabecera de documento')),
       materialCode: asDocument(pick(map, 'Material')),
@@ -471,10 +489,14 @@ export function normalizeSapRow(
       uom: asText(pick(map, 'Unidad de medida')),
       debitCreditIndicator: asText(pick(map, 'Indic.cargo/abono')),
     });
-    if (!asText(pick(map, 'Elemento PEP')) || !asDocument(pick(map, 'Número de documento'))) {
+    if (!asText(pick(map, 'Elemento PEP')) || !accountingDocument) {
       errors.push('ACTUAL_COST_CORE_FIELDS_MISSING');
     }
-    warnings.push('ACCOUNTING_LINE_POSITION_NOT_AVAILABLE');
+    if (companyCode && fiscalYear && accountingDocument && accountingDocumentItem) {
+      externalKey = `FI:${companyCode}:${fiscalYear}:${accountingDocument}:${accountingDocumentItem}`;
+    } else {
+      warnings.push('ACCOUNTING_LINE_POSITION_NOT_AVAILABLE');
+    }
   } else {
     const referenceDocument = asDocument(pick(map, 'Nº docum.refer.'));
     const referencePosition = asPosition(pick(map, 'Pos.referencia'));

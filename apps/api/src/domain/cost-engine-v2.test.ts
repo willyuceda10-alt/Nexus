@@ -63,4 +63,27 @@ describe('Cost Engine V2', () => {
     expect(result.varianceAtCompletion).toBe(-200);
     expect(result.forecastIsExplicit).toBe(true);
   });
+
+  it('nets signed SAP-style reversals in actual cost without allowing negative commitments', () => {
+    const project = calculateProjectCostSummaryV2({
+      plannedBudget: 1000,
+      approvedBudget: 1000,
+      contingencyAmount: 0,
+      manualActual: -20,
+      materialActual: 100,
+      manualOpenCommitment: 0,
+      materialOpenCommitment: 0,
+      forecastRemainingUncommitted: 900,
+    });
+    expect(project.actualCost).toBe(80);
+
+    const line = calculateBudgetLineForecastV2({
+      approvedAmount: 1000,
+      actualAmount: -20,
+      commitmentAmount: 0,
+    });
+    expect(line.actualAmount).toBe(-20);
+    expect(line.forecastRemainingUncommitted).toBe(1020);
+    expect(line.estimateAtCompletion).toBe(1000);
+  });
 });
