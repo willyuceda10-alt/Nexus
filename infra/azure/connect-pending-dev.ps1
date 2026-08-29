@@ -126,9 +126,9 @@ function VerifyApi([string]$Fqdn) {
         try {
             $live = (Invoke-WebRequest "$base/health/live" -SkipHttpErrorCheck -TimeoutSec 10).StatusCode
             $db = (Invoke-WebRequest "$base/health/ready" -SkipHttpErrorCheck -TimeoutSec 10).StatusCode
-            Write-Host "Health $i: live=$live ready=$db"
+            Write-Host "Health ${i}: live=$live ready=$db"
             if ($live -eq 200 -and $db -eq 200) { $ready = $true; break }
-        } catch { Write-Host "Health $i: waiting" }
+        } catch { Write-Host "Health ${i}: waiting" }
         Start-Sleep 10
     }
     if (-not $ready) { throw 'API health checks did not reach HTTP 200.' }
