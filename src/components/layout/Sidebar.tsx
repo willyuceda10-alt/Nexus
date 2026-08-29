@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   BarChart3,
   BellRing,
@@ -18,10 +18,9 @@ import {
   UsersRound,
   Workflow,
 } from 'lucide-react';
-import { bridataApi } from '../../api/client';
 import { BRAND } from '../../config/brand';
-import { useApiBootstrap } from '../../context/ApiBootstrapContext';
 import { useNexus } from '../../context/NexusContext';
+import { isOpenPersonalWork } from '../../domain/myWork';
 
 interface NavigationItem {
   id: string;
@@ -31,7 +30,6 @@ interface NavigationItem {
 }
 
 export const Sidebar: React.FC = () => {
-  const apiBootstrap = useApiBootstrap();
   const {
     activeTab,
     setActiveTab,
@@ -39,43 +37,20 @@ export const Sidebar: React.FC = () => {
     selectedProjectId,
     setSelectedProjectId,
     setProjectActiveSubTab,
-    approvals,
     currentUser,
     currentWorkspace,
   } = useNexus();
-  const [inboxUnread, setInboxUnread] = useState(0);
 
-  const projects = objects.filter((object) => object.type === 'PROJECT');
+  const scopedObjects = currentWorkspace
+    ? objects.filter((object) => object.workspaceId === currentWorkspace.id)
+    : objects;
+  const projects = scopedObjects.filter((object) => object.type === 'PROJECT');
   const activeProjects = projects.filter((project) => !['COMPLETED', 'CANCELLED'].includes(project.status));
-  const pendingApprovals = approvals.filter((approval) => approval.status === 'PENDING').length;
-  const apiReady = apiBootstrap.dataMode === 'api' && apiBootstrap.status === 'ready';
-
-  useEffect(() => {
-    if (!apiReady) {
-      setInboxUnread(0);
-      return;
-    }
-    let cancelled = false;
-    const refresh = async () => {
-      try {
-        const result = await bridataApi.inboxV1({ status: 'OPEN', limit: 1 });
-        if (!cancelled) setInboxUnread(result.summary.unread);
-      } catch {
-        // Inbox owns visible error handling.
-      }
-    };
-    const initial = window.setTimeout(() => { void refresh(); }, 500);
-    const interval = window.setInterval(() => { void refresh(); }, 60_000);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(initial);
-      window.clearInterval(interval);
-    };
-  }, [apiReady, activeTab]);
+  const personalWorkCount = scopedObjects.filter((object) => isOpenPersonalWork(object, currentUser.id)).length;
 
   const overviewItems: NavigationItem[] = [
     { id: 'home', label: 'Centro de mando', icon: Gauge },
-    { id: 'inbox', label: 'Mi trabajo', icon: CheckSquare2, badge: apiReady ? inboxUnread : pendingApprovals },
+    { id: 'inbox', label: 'Mi trabajo', icon: CheckSquare2, badge: personalWorkCount },
   ];
 
   const planningItems: NavigationItem[] = [

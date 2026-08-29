@@ -9,6 +9,7 @@ import { CreateObjectModal } from './components/layout/CreateObjectModal';
 import { CommandPalette } from './components/layout/CommandPalette';
 
 import { WorkspaceHome } from './components/views/WorkspaceHome';
+import { MyWorkView } from './components/views/MyWorkView';
 import { ProjectsOverviewView } from './components/views/ProjectsOverviewView';
 import { ProjectCenter } from './components/views/ProjectCenter';
 import { WorkBoardsConfigOptionsV1View } from './components/views/WorkBoardsConfigOptionsV1View';
@@ -18,7 +19,6 @@ import { ResourceManagementView } from './components/views/ResourceManagementVie
 import { MaterialsInventoryV2View } from './components/views/MaterialsInventoryV2View';
 import { CostControlV2View } from './components/views/CostControlV2View';
 import { AutomationsV2View } from './components/views/AutomationsV2View';
-import { InboxV1View } from './components/views/InboxV1View';
 import { GovernanceRiskView } from './components/views/GovernanceRiskView';
 import { MeetingsDecisionsView } from './components/views/MeetingsDecisionsView';
 import { DocumentsApprovalsView } from './components/views/DocumentsApprovalsView';
@@ -31,6 +31,7 @@ const MainContentRouter: React.FC = () => {
 
   switch (activeTab) {
     case 'home': return <WorkspaceHome />;
+    case 'inbox': return <MyWorkView />;
     case 'projects': return <ProjectsOverviewView />;
     case 'project': return <ProjectCenter />;
     case 'boards': return <WorkBoardsConfigOptionsV1View />;
@@ -46,7 +47,6 @@ const MainContentRouter: React.FC = () => {
     case 'timeline': return <TimelineView />;
     case 'reports': return <ExecutiveDashboard />;
     case 'settings': return <SettingsV2View />;
-    case 'inbox': return <InboxV1View />;
     default: return <WorkspaceHome />;
   }
 };

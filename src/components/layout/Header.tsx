@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import {
-  Bell,
   Building2,
   Check,
+  CheckSquare2,
   ChevronDown,
   ChevronRight,
   Command,
@@ -22,7 +22,6 @@ export const Header: React.FC = () => {
     currentUser,
     setIsCommandPaletteOpen,
     openCreateModal,
-    approvals,
     activeTab,
     setActiveTab,
     selectedProjectId,
@@ -30,7 +29,6 @@ export const Header: React.FC = () => {
   } = useNexus();
 
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const pendingApprovals = approvals.filter((approval) => approval.status === 'PENDING');
   const selectedProject = objects.find((object) => object.id === selectedProjectId && object.type === 'PROJECT');
 
   const pageTitle = (() => {
@@ -120,10 +118,7 @@ export const Header: React.FC = () => {
           aria-label="Abrir Mi trabajo"
           title="Mi trabajo"
         >
-          <Bell className="h-4 w-4" />
-          {pendingApprovals.length > 0 && (
-            <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-amber-500 px-1 text-[8px] font-black text-white ring-2 ring-white">{pendingApprovals.length}</span>
-          )}
+          <CheckSquare2 className="h-4 w-4" />
         </button>
 
         <button
