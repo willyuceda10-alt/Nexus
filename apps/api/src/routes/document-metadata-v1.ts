@@ -41,7 +41,6 @@ function serializeAttachment(
     id: string;
     objectId: string;
     fileName: string;
-    storageKey: string;
     fileSize: bigint;
     mimeType: string;
     checksumSha256: string | null;
@@ -56,7 +55,6 @@ function serializeAttachment(
     id: attachment.id,
     objectId: attachment.objectId,
     fileName: attachment.fileName,
-    storageKey: attachment.storageKey,
     fileSize: attachment.fileSize.toString(),
     mimeType: attachment.mimeType,
     checksumSha256: attachment.checksumSha256,
