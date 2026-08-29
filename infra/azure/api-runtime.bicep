@@ -18,6 +18,8 @@ param adminDatabaseSecretUri string
 param entraApiClientId string
 param entraTenantId string
 param corsOrigins string
+param documentStorageAccountName string
+param documentContainerName string = 'bridata-documents'
 param deployApi bool = true
 param deployMigrationJob bool = true
 param deployOutboxWorker bool = false
@@ -100,6 +102,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
             { name: 'M365_TEAMS_TOPIC_WEB_URL', value: m365TeamsTopicWebUrl }
             { name: 'M365_TEAMS_TOPIC_VALUE', value: m365TeamsTopicValue }
             { name: 'AZURE_CLIENT_ID', value: apiIdentityClientId }
+            { name: 'DOCUMENT_STORAGE_MODE', value: 'azure' }
+            { name: 'AZURE_STORAGE_ACCOUNT_NAME', value: documentStorageAccountName }
+            { name: 'AZURE_DOCUMENT_CONTAINER', value: documentContainerName }
+            { name: 'DOCUMENT_MAX_FILE_BYTES', value: '26214400' }
           ]
           probes: [
             {
