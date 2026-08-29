@@ -353,6 +353,22 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
         }
 
         if (
+          updates.status !== undefined &&
+          updates.status !== current.status &&
+          current.status === 'PENDING_APPROVAL'
+        ) {
+          const pendingApproval = await tx.objectApprovalRequestV1.findFirst({
+            where: {
+              tenantId: actor.tenantId,
+              objectId: current.id,
+              status: 'PENDING',
+            },
+            select: { id: true },
+          });
+          if (pendingApproval) return { kind: 'approval_pending' as const };
+        }
+
+        if (
           updates.assigneeId &&
           !(await isActiveTenantUser(tx, actor.tenantId, updates.assigneeId))
         ) {
@@ -454,6 +470,12 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
       }
       if (result.kind === 'invalid_assignee') {
         return reply.code(400).send({ error: 'invalid_assignee' });
+      }
+      if (result.kind === 'approval_pending') {
+        return reply.code(409).send({
+          error: 'approval_pending',
+          message: 'The object status is governed by a pending approval request.',
+        });
       }
       if (result.kind === 'version_conflict') {
         return reply.code(409).send({

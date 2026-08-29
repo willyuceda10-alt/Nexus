@@ -502,6 +502,27 @@ model ProjectBaselineItem {
   @@map("project_baseline_items")
 }
 
+model ObjectApprovalRequestV1 {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  objectId             String    @map("object_id") @db.Uuid
+  requestedByUserId    String    @map("requested_by_user_id") @db.Uuid
+  approverUserId       String    @map("approver_user_id") @db.Uuid
+  title                String    @db.VarChar(500)
+  description          String?   @db.Text
+  previousObjectStatus String    @map("previous_object_status") @db.VarChar(100)
+  status               String    @default("PENDING") @db.VarChar(32)
+  decisionByUserId     String?   @map("decision_by_user_id") @db.Uuid
+  decisionComment      String?   @map("decision_comment") @db.Text
+  decidedAt            DateTime? @map("decided_at") @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, objectId, createdAt])
+  @@index([tenantId, approverUserId, status, createdAt])
+  @@map("object_approval_requests_v1")
+}
+
 // -----------------------------------------------------------------------------
 // 5. WORKFLOW ENGINE
 // -----------------------------------------------------------------------------
