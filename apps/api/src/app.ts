@@ -2,8 +2,13 @@ import { randomUUID } from 'node:crypto';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import multipart from '@fastify/multipart';
 import { config } from './config.js';
 import { registerRequestContext } from './auth.js';
+import {
+  createConfiguredDocumentBinaryStoreV1,
+  type DocumentBinaryStoreV1,
+} from './document-binary-store-v1.js';
 import { ProjectScheduleV2ValidationError } from './domain/project-schedule-v2.js';
 import { registerHierarchyWriteGuards } from './hierarchy-guard.js';
 import { authorizationV2Routes } from './routes/authorization-v2.js';
@@ -12,6 +17,7 @@ import { automationV1Routes } from './routes/automation-v1.js';
 import { baselineRoutes } from './routes/baselines.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
 import { collaborationV1Routes } from './routes/collaboration-v1.js';
+import { documentBinaryV1Routes } from './routes/document-binary-v1.js';
 import { documentMetadataV1Routes } from './routes/document-metadata-v1.js';
 import { costOperationsV2Routes } from './routes/cost-operations-v2.js';
 import { costOverviewV2Routes } from './routes/cost-overview-v2.js';
@@ -65,10 +71,15 @@ type MeetingSchedulingV2PolicyBody = {
   validateAvailability?: unknown;
 };
 
+export type BuildAppOptions = {
+  documentBinaryStore?: DocumentBinaryStoreV1;
+};
+
 const legacyBoardOptionsPath = /^\/api\/v1\/work-os\/boards-v1\/[^/]+\/columns\/[^/]+\/options(?:\?|$)/;
 const meetingSchedulingV2Path = /^\/api\/v1\/meetings-v2\/schedule(?:\?|$)/;
 
-export async function buildApp(): Promise<FastifyInstance> {
+export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
+  const documentBinaryStore = options.documentBinaryStore ?? createConfiguredDocumentBinaryStoreV1();
   const app = Fastify({
     logger: {
       level: config.LOG_LEVEL,
@@ -100,6 +111,13 @@ export async function buildApp(): Promise<FastifyInstance> {
       callback(new Error('Origin not allowed by Bridata Project CORS policy'), false);
     },
     credentials: true,
+  });
+  await app.register(multipart, {
+    limits: {
+      files: 1,
+      fields: 0,
+      fileSize: config.DOCUMENT_MAX_FILE_BYTES,
+    },
   });
 
   app.addHook('onRequest', async (request, reply) => {
@@ -166,6 +184,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(objectRoutes);
   await app.register(collaborationV1Routes);
   await app.register(documentMetadataV1Routes);
+  await documentBinaryV1Routes(app, documentBinaryStore);
   await app.register(objectRelationsV1Routes);
   await app.register(objectApprovalsV1Routes);
   await app.register(meetingsV1Routes);
