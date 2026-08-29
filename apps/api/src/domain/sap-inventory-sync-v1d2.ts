@@ -135,6 +135,12 @@ export function buildSapInventorySyncPlanV1d2(records: SapInventorySourceRecordV
     });
   }
 
+  candidates.sort((left, right) => {
+    const leftKey = `${left.postingDate ?? '9999-12-31'}:${left.fiscalYear}:${left.materialDocumentNumber}:${left.materialDocumentItem}`;
+    const rightKey = `${right.postingDate ?? '9999-12-31'}:${right.fiscalYear}:${right.materialDocumentNumber}:${right.materialDocumentItem}`;
+    return leftKey.localeCompare(rightKey);
+  });
+
   return {
     candidates,
     blockers,
