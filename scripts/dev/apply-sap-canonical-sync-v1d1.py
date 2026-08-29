@@ -20,6 +20,8 @@ app_path.write_text(app)
 
 smoke_path = root / 'apps/api/test/sap-integration-canonical-sync-v1d1-smoke.ts'
 smoke = smoke_path.read_text()
+smoke = smoke.replace("import { sapIntegrationCanonicalSyncV1d1Routes } from '../src/routes/sap-integration-canonical-sync-v1d1.js';\n", '')
+smoke = smoke.replace('  await sapIntegrationCanonicalSyncV1d1Routes(app);\n', '')
 smoke = smoke.replace('FROM project_commitments_v2 ', 'FROM project_commitments ')
 smoke = smoke.replace('FROM project_actual_costs_v2 ', 'FROM project_actual_costs ')
 smoke_path.write_text(smoke)
