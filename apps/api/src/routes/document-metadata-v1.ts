@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { authenticate, resolveActor } from '../auth.js';
 import { canAccessWorkspace } from '../authorization.js';
@@ -16,7 +17,7 @@ type UserSummary = {
 };
 
 async function resolveUploaders(
-  tx: Parameters<Parameters<typeof withTenant>[1]>[0],
+  tx: Prisma.TransactionClient,
   tenantId: string,
   userIds: Array<string | null>,
 ): Promise<Map<string, UserSummary>> {
