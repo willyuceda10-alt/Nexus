@@ -55,6 +55,7 @@ import { resourceCapacityRoutes } from './routes/resource-capacity.js';
 import { scheduleAnalysisRoutes } from './routes/schedule-analysis.js';
 import { scheduleAnalysisV2Routes } from './routes/schedule-analysis-v2.js';
 import { sapIntegrationFoundationV1aRoutes } from './routes/sap-integration-foundation-v1a.js';
+import { sapIntegrationParserV1bRoutes } from './routes/sap-integration-parser-v1b.js';
 import { sessionRoutes } from './routes/session.js';
 import { wbsV2Routes } from './routes/wbs-v2.js';
 import { workCalendarV2Routes } from './routes/work-calendars-v2.js';
@@ -190,6 +191,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(documentMetadataV1Routes);
   await documentBinaryV1Routes(app, documentBinaryStore);
   await sapIntegrationFoundationV1aRoutes(app, integrationBinaryStore);
+  await sapIntegrationParserV1bRoutes(app, integrationBinaryStore);
   await app.register(objectRelationsV1Routes);
   await app.register(objectApprovalsV1Routes);
   await app.register(meetingsV1Routes);

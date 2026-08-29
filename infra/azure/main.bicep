@@ -488,7 +488,6 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
   }
   dependsOn: [
     documentsContainer
-    importsContainer
     apiDocumentsBlobContributorRole
     automationAcrPullRole
     automationKeyVaultSecretsUserRole
