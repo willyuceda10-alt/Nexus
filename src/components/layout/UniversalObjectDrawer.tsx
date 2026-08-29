@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
   Calendar,
@@ -23,7 +23,23 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
-import { ObjectStatus, Priority, ObjectType } from '../../types/nexus';
+import { useApiBootstrap } from '../../context/ApiBootstrapContext';
+import { BridataApiError } from '../../api/client';
+import { objectApprovalsV1Api } from '../../api/objectApprovalsV1Client';
+import {
+  mapApiObjectApprovalV1,
+  mapEligibleApproverV1,
+  type ApprovalCandidateV1,
+} from '../../domain/objectApprovalsV1';
+import { ObjectStatus, Priority, ObjectType, type ApprovalStep } from '../../types/nexus';
+
+function approvalErrorMessage(cause: unknown): string {
+  if (cause instanceof BridataApiError) {
+    return cause.correlationId ? `${cause.message} · Ref: ${cause.correlationId}` : cause.message;
+  }
+  if (cause instanceof Error) return cause.message;
+  return 'No se pudo completar la operación de aprobación.';
+}
 
 export const UniversalObjectDrawer: React.FC = () => {
   const {
@@ -48,7 +64,10 @@ export const UniversalObjectDrawer: React.FC = () => {
     currentUser,
     decideApproval,
     approvals,
+    reloadObjects,
   } = useNexus();
+  const apiBootstrap = useApiBootstrap();
+  const isApiMode = apiBootstrap.dataMode === 'api';
 
   const [activeDrawerTab, setActiveDrawerTab] = useState<'overview' | 'relations' | 'comments' | 'history'>('overview');
   const [newCommentText, setNewCommentText] = useState('');
@@ -57,13 +76,65 @@ export const UniversalObjectDrawer: React.FC = () => {
   const [isRelationSubmitting, setIsRelationSubmitting] = useState(false);
   const [targetLinkObjectId, setTargetLinkObjectId] = useState('');
   const [linkRelationType, setLinkRelationType] = useState<'BLOCKS' | 'DEPENDS_ON' | 'DERIVED_FROM' | 'RELATES_TO' | 'MITIGATES' | 'REQUIRES_APPROVAL'>('RELATES_TO');
+  const [apiApprovals, setApiApprovals] = useState<ApprovalStep[]>([]);
+  const [approvalCandidates, setApprovalCandidates] = useState<ApprovalCandidateV1[]>([]);
+  const [approvalLoadStatus, setApprovalLoadStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [isApprovalRequestOpen, setIsApprovalRequestOpen] = useState(false);
+  const [selectedApproverId, setSelectedApproverId] = useState('');
+  const [approvalRequestDescription, setApprovalRequestDescription] = useState('');
+  const [approvalDecisionComment, setApprovalDecisionComment] = useState('');
+  const [isApprovalMutationPending, setIsApprovalMutationPending] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const objectId = selectedObject?.id;
+    if (!isApiMode || !isDrawerOpen || !objectId) {
+      setApiApprovals([]);
+      setApprovalCandidates([]);
+      setApprovalLoadStatus('idle');
+      setApprovalError(null);
+      setIsApprovalRequestOpen(false);
+      setSelectedApproverId('');
+      setApprovalRequestDescription('');
+      setApprovalDecisionComment('');
+      return () => { active = false; };
+    }
+
+    setApprovalLoadStatus('loading');
+    setApprovalError(null);
+    void objectApprovalsV1Api.list(objectId)
+      .then((response) => {
+        if (!active) return;
+        setApiApprovals(response.items.map(mapApiObjectApprovalV1));
+        setApprovalLoadStatus('ready');
+      })
+      .catch((cause) => {
+        if (!active) return;
+        setApiApprovals([]);
+        setApprovalLoadStatus('error');
+        setApprovalError(approvalErrorMessage(cause));
+      });
+
+    return () => { active = false; };
+  }, [isApiMode, isDrawerOpen, selectedObject?.id]);
 
   if (!isDrawerOpen || !selectedObject) return null;
 
   const objComments = selectedObjectComments;
   const objLogs = selectedObjectActivityLogs;
   const linked = getLinkedObjects(selectedObject.id);
-  const pendingApproval = approvals.find((a) => a.objectId === selectedObject.id && a.status === 'PENDING');
+  const objectApprovals = isApiMode
+    ? apiApprovals
+    : approvals.filter((approval) => approval.objectId === selectedObject.id);
+  const pendingApproval = objectApprovals.find((approval) => approval.status === 'PENDING');
+  const isApprovalAdmin = currentUser.roleKey === 'OWNER' || currentUser.roleKey === 'ADMIN';
+  const canDecidePendingApproval = Boolean(
+    pendingApproval && (pendingApproval.approverId === currentUser.id || isApprovalAdmin),
+  );
+  const canCancelPendingApproval = Boolean(
+    pendingApproval && (pendingApproval.requestedById === currentUser.id || isApprovalAdmin),
+  );
 
   const getTypeBadgeColor = (type: ObjectType) => {
     switch (type) {
@@ -109,6 +180,115 @@ export const UniversalObjectDrawer: React.FC = () => {
       // NexusContext exposes a user-safe relation error.
     } finally {
       setIsRelationSubmitting(false);
+    }
+  };
+
+  const loadEligibleApprovers = async () => {
+    if (!isApiMode) return;
+    setApprovalLoadStatus('loading');
+    setApprovalError(null);
+    try {
+      const response = await objectApprovalsV1Api.eligibleApprovers(selectedObject.id);
+      const allowSelf = currentUser.roleKey === 'OWNER' || currentUser.roleKey === 'ADMIN';
+      const candidates = response.items
+        .map(mapEligibleApproverV1)
+        .filter((candidate) => allowSelf || candidate.id !== currentUser.id);
+      setApprovalCandidates(candidates);
+      setSelectedApproverId((current) =>
+        current && candidates.some((candidate) => candidate.id === current)
+          ? current
+          : candidates[0]?.id ?? '',
+      );
+      setApprovalLoadStatus('ready');
+      if (candidates.length === 0) {
+        setApprovalError('No hay un aprobador elegible con acceso a este workspace.');
+      }
+    } catch (cause) {
+      setApprovalCandidates([]);
+      setApprovalLoadStatus('error');
+      setApprovalError(approvalErrorMessage(cause));
+    }
+  };
+
+  const handleOpenApprovalRequest = async () => {
+    setIsApprovalRequestOpen(true);
+    await loadEligibleApprovers();
+  };
+
+  const handleRequestApproval = async () => {
+    if (!isApiMode || !selectedApproverId || isApprovalMutationPending) return;
+    setIsApprovalMutationPending(true);
+    setApprovalError(null);
+    try {
+      const response = await objectApprovalsV1Api.create({
+        objectId: selectedObject.id,
+        approverUserId: selectedApproverId,
+        ...(approvalRequestDescription.trim()
+          ? { description: approvalRequestDescription.trim() }
+          : {}),
+      });
+      const mapped = mapApiObjectApprovalV1(response.approval);
+      setApiApprovals((previous) => [mapped, ...previous.filter((item) => item.id !== mapped.id)]);
+      setIsApprovalRequestOpen(false);
+      setApprovalRequestDescription('');
+      setSelectedApproverId('');
+      await reloadObjects();
+      await reloadObjectCollaboration(selectedObject.id);
+    } catch (cause) {
+      setApprovalError(approvalErrorMessage(cause));
+    } finally {
+      setIsApprovalMutationPending(false);
+    }
+  };
+
+  const handleApprovalDecision = async (decision: 'APPROVED' | 'REJECTED') => {
+    if (!pendingApproval || isApprovalMutationPending) return;
+    if (!isApiMode) {
+      await decideApproval(pendingApproval.id, decision, approvalDecisionComment || undefined);
+      setApprovalDecisionComment('');
+      return;
+    }
+
+    setIsApprovalMutationPending(true);
+    setApprovalError(null);
+    try {
+      const response = await objectApprovalsV1Api.decide(pendingApproval.id, {
+        decision,
+        ...(approvalDecisionComment.trim() ? { comment: approvalDecisionComment.trim() } : {}),
+      });
+      const mapped = mapApiObjectApprovalV1(response.approval);
+      setApiApprovals((previous) =>
+        previous.map((item) => (item.id === mapped.id ? mapped : item)),
+      );
+      setApprovalDecisionComment('');
+      await reloadObjects();
+      await reloadObjectCollaboration(selectedObject.id);
+    } catch (cause) {
+      setApprovalError(approvalErrorMessage(cause));
+    } finally {
+      setIsApprovalMutationPending(false);
+    }
+  };
+
+  const handleCancelApproval = async () => {
+    if (!isApiMode || !pendingApproval || isApprovalMutationPending) return;
+    setIsApprovalMutationPending(true);
+    setApprovalError(null);
+    try {
+      const response = await objectApprovalsV1Api.cancel(pendingApproval.id, {
+        ...(approvalDecisionComment.trim() ? { comment: approvalDecisionComment.trim() } : {}),
+      });
+      const mapped = mapApiObjectApprovalV1(response.approval);
+      setApiApprovals((previous) =>
+        previous.map((item) => (item.id === mapped.id ? mapped : item)),
+      );
+      setApprovalDecisionComment('');
+      await reloadObjects();
+      await reloadObjectCollaboration(selectedObject.id);
+    } catch (cause) {
+      setApprovalError(approvalErrorMessage(cause));
+    } finally {
+      setIsApprovalMutationPending(false);
     }
   };
 
@@ -164,8 +344,13 @@ export const UniversalObjectDrawer: React.FC = () => {
               <span className="text-slate-400 font-medium">Estado:</span>
               <select
                 value={selectedObject.status}
-                onChange={(e) => updateNexusObject(selectedObject.id, { status: e.target.value as ObjectStatus })}
-                className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-semibold text-slate-800 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                disabled={Boolean(isApiMode && pendingApproval)}
+                onChange={(e) => {
+                  const nextStatus = e.target.value as ObjectStatus;
+                  if (isApiMode && ['PENDING_APPROVAL', 'APPROVED', 'REJECTED'].includes(nextStatus)) return;
+                  void updateNexusObject(selectedObject.id, { status: nextStatus });
+                }}
+                className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-semibold text-slate-800 outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
               >
                 <option value="DRAFT">Borrador</option>
                 <option value="PLANNING">Planificación</option>
@@ -175,9 +360,9 @@ export const UniversalObjectDrawer: React.FC = () => {
                 <option value="COMPLETED">Completado</option>
                 <option value="IDENTIFIED">Identificado (Riesgo)</option>
                 <option value="CRITICAL">Crítico</option>
-                <option value="PENDING_APPROVAL">Pendiente Aprobación</option>
-                <option value="APPROVED">Aprobado</option>
-                <option value="REJECTED">Rechazado</option>
+                <option value="PENDING_APPROVAL" disabled={isApiMode}>Pendiente Aprobación</option>
+                <option value="APPROVED" disabled={isApiMode}>Aprobado</option>
+                <option value="REJECTED" disabled={isApiMode}>Rechazado</option>
               </select>
             </div>
 
@@ -207,29 +392,132 @@ export const UniversalObjectDrawer: React.FC = () => {
           </div>
         </div>
 
-        {/* Approval Banner if pending */}
-        {pendingApproval && (
-          <div className="bg-amber-50 border-b border-amber-200 p-3 flex items-center justify-between dark:bg-amber-950/40 dark:border-amber-900/60">
-            <div className="flex items-center space-x-2 text-xs text-amber-900 dark:text-amber-200">
-              <ShieldAlert className="h-4 w-4 text-amber-600" />
-              <span><strong>Aprobación requerida:</strong> {pendingApproval.comment || 'Firma ejecutiva pendiente'}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => decideApproval(pendingApproval.id, 'APPROVED', 'Aprobado desde Peek View')}
-                className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700"
-              >
-                Aprobar
-              </button>
-              <button
-                onClick={() => decideApproval(pendingApproval.id, 'REJECTED', 'Rechazado desde Peek View')}
-                className="rounded bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white shadow-xs hover:bg-rose-700"
-              >
-                Rechazar
-              </button>
-            </div>
+        {/* Persistent approval workflow */}
+        {approvalError && (
+          <div role="alert" className="border-b border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300">
+            {approvalError}
           </div>
         )}
+
+        {pendingApproval ? (
+          <div className="border-b border-amber-200 bg-amber-50 p-3 dark:border-amber-900/60 dark:bg-amber-950/40">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-2 text-xs text-amber-900 dark:text-amber-200">
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <div className="min-w-0">
+                  <div className="font-bold">{pendingApproval.title || 'Aprobación requerida'}</div>
+                  <div className="mt-0.5 text-[11px] text-amber-800/80 dark:text-amber-300/80">
+                    Aprobador: {pendingApproval.approverName}
+                    {pendingApproval.requestedByName ? ` · Solicitó: ${pendingApproval.requestedByName}` : ''}
+                  </div>
+                  {(pendingApproval.description || pendingApproval.comment) && (
+                    <div className="mt-1 text-[11px]">{pendingApproval.description || pendingApproval.comment}</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                {canDecidePendingApproval && (
+                  <>
+                    <button
+                      disabled={isApprovalMutationPending}
+                      onClick={() => void handleApprovalDecision('APPROVED')}
+                      className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      Aprobar
+                    </button>
+                    <button
+                      disabled={isApprovalMutationPending}
+                      onClick={() => void handleApprovalDecision('REJECTED')}
+                      className="rounded bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 disabled:opacity-50"
+                    >
+                      Rechazar
+                    </button>
+                  </>
+                )}
+                {isApiMode && canCancelPendingApproval && (
+                  <button
+                    disabled={isApprovalMutationPending}
+                    onClick={() => void handleCancelApproval()}
+                    className="rounded border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200"
+                  >
+                    Cancelar solicitud
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {isApiMode && (canDecidePendingApproval || canCancelPendingApproval) && (
+              <input
+                value={approvalDecisionComment}
+                onChange={(event) => setApprovalDecisionComment(event.target.value)}
+                maxLength={4000}
+                placeholder="Comentario de decisión o cancelación (opcional)"
+                className="mt-2 w-full rounded-md border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:border-amber-500 dark:border-amber-900 dark:bg-slate-900 dark:text-slate-200"
+              />
+            )}
+          </div>
+        ) : isApiMode ? (
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/60">
+            {!isApprovalRequestOpen ? (
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                  <FileCheck2 className="h-4 w-4 text-emerald-600" />
+                  <span>Este objeto no tiene una aprobación pendiente.</span>
+                </div>
+                <button
+                  disabled={approvalLoadStatus === 'loading'}
+                  onClick={() => void handleOpenApprovalRequest()}
+                  className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  Solicitar aprobación
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-700 dark:text-slate-200">Nueva solicitud de aprobación</div>
+                  <button
+                    onClick={() => setIsApprovalRequestOpen(false)}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+                <select
+                  value={selectedApproverId}
+                  onChange={(event) => setSelectedApproverId(event.target.value)}
+                  disabled={approvalLoadStatus === 'loading' || isApprovalMutationPending}
+                  className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:border-emerald-500 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  {approvalCandidates.length === 0 && <option value="">Sin aprobadores disponibles</option>}
+                  {approvalCandidates.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.name} · {candidate.workspaceRole || candidate.tenantRole}
+                    </option>
+                  ))}
+                </select>
+                <textarea
+                  rows={2}
+                  maxLength={10000}
+                  value={approvalRequestDescription}
+                  onChange={(event) => setApprovalRequestDescription(event.target.value)}
+                  placeholder="Motivo o contexto para el aprobador (opcional)"
+                  className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                />
+                <div className="flex justify-end">
+                  <button
+                    disabled={!selectedApproverId || isApprovalMutationPending || approvalLoadStatus === 'loading'}
+                    onClick={() => void handleRequestApproval()}
+                    className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {isApprovalMutationPending ? 'Enviando…' : 'Enviar solicitud'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {/* Navigation Tabs */}
         <div className="flex border-b border-slate-200 px-4 dark:border-slate-800">

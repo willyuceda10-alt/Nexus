@@ -355,6 +355,14 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
         if (
           updates.status !== undefined &&
           updates.status !== current.status &&
+          ['PENDING_APPROVAL', 'APPROVED', 'REJECTED'].includes(updates.status)
+        ) {
+          return { kind: 'approval_managed_status' as const };
+        }
+
+        if (
+          updates.status !== undefined &&
+          updates.status !== current.status &&
           current.status === 'PENDING_APPROVAL'
         ) {
           const pendingApproval = await tx.objectApprovalRequestV1.findFirst({
@@ -470,6 +478,12 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
       }
       if (result.kind === 'invalid_assignee') {
         return reply.code(400).send({ error: 'invalid_assignee' });
+      }
+      if (result.kind === 'approval_managed_status') {
+        return reply.code(409).send({
+          error: 'approval_status_managed_by_workflow',
+          message: 'PENDING_APPROVAL, APPROVED and REJECTED are managed by Object Approval Core.',
+        });
       }
       if (result.kind === 'approval_pending') {
         return reply.code(409).send({

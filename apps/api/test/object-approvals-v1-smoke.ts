@@ -51,6 +51,40 @@ async function main() {
     objectId = created.id;
     assert(created.status === 'DRAFT', 'Approval smoke object must start as DRAFT.');
 
+    const forgedApprovalStatus = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/objects/${created.id}`,
+      headers: { 'x-correlation-id': 'ci-object-approval-forged-status' },
+      payload: { version: created.version, status: 'APPROVED' },
+    });
+    assert(
+      forgedApprovalStatus.statusCode === 409,
+      `Direct APPROVED status must be governed by Approval Core, got ${forgedApprovalStatus.statusCode}: ${forgedApprovalStatus.body}`,
+    );
+    assert(
+      (forgedApprovalStatus.json() as { error?: string }).error === 'approval_status_managed_by_workflow',
+      'Direct APPROVED status must return approval_status_managed_by_workflow.',
+    );
+
+    const eligibleApprovers = await app.inject({
+      method: 'GET',
+      url: `/api/v1/object-approvals-v1/eligible-approvers?objectId=${created.id}`,
+      headers: { 'x-correlation-id': 'ci-object-approval-eligible-approvers' },
+    });
+    assert(
+      eligibleApprovers.statusCode === 200,
+      `Eligible approvers returned ${eligibleApprovers.statusCode}: ${eligibleApprovers.body}`,
+    );
+    const eligiblePayload = eligibleApprovers.json() as {
+      objectId: string;
+      items: Array<{ id: string; fullName: string; tenantRole: string; workspaceRole: string | null }>;
+    };
+    assert(eligiblePayload.objectId === created.id, 'Eligible approver objectId mismatch.');
+    assert(
+      eligiblePayload.items.some((item) => item.id === DEV_USER_ID),
+      'DEV owner must be discoverable as an eligible approver.',
+    );
+
     const requestApproval = await app.inject({
       method: 'POST',
       url: '/api/v1/object-approvals-v1',
@@ -201,6 +235,8 @@ async function main() {
       persistentRequest: true,
       duplicateProtection: true,
       statusBypassProtection: true,
+      directApprovalStatusGuard: true,
+      eligibleApproverDiscovery: true,
       immutableDecision: true,
       cancellationRestoresStatus: true,
       historyAndAudit: true,
