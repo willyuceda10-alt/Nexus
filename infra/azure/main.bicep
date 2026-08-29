@@ -121,6 +121,7 @@ var adminDatabaseConnectionString = 'postgresql://${postgresAdministratorLogin}:
 var runtimeDatabaseConnectionString = 'postgresql://${postgresRuntimeRole}:${postgresRuntimePassword}@${postgresFqdnValue}:5432/${postgresDatabaseName}?sslmode=require'
 var acrPullRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 var keyVaultSecretsUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+var storageBlobDataContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
 
 resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   name: '${baseName}-vnet'
@@ -226,6 +227,14 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
   }
 }
 
+resource documentsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'bridata-documents'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
   location: location
@@ -267,6 +276,16 @@ resource apiIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-3
   name: '${baseName}-api-mi'
   location: location
   tags: tags
+}
+
+resource apiDocumentsBlobContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: storage
+  name: guid(storage.id, apiIdentity.id, storageBlobDataContributorRoleId)
+  properties: {
+    principalId: apiIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: storageBlobDataContributorRoleId
+  }
 }
 
 resource automationIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
@@ -459,6 +478,8 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     m365TeamsTopicValue: m365TeamsTopicValue
   }
   dependsOn: [
+    documentsContainer
+    apiDocumentsBlobContributorRole
     automationAcrPullRole
     automationKeyVaultSecretsUserRole
     notificationAcrPullRole
@@ -475,6 +496,7 @@ output postgresPrivateDnsZoneName string = postgresPrivateDnsZone.name
 output logAnalyticsName string = logAnalytics.name
 output applicationInsightsName string = appInsights.name
 output storageAccountName string = storage.name
+output documentsContainerName string = documentsContainer.name
 output keyVaultName string = keyVault.name
 output containerRegistryName string = registry.name
 output containerRegistryLoginServer string = registry.properties.loginServer

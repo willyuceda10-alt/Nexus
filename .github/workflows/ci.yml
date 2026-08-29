@@ -117,6 +117,14 @@ jobs:
           DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/object-history-relations-v1-smoke.ts
 
+      - name: Verify persistent document version metadata
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
+        run: npx tsx apps/api/test/document-metadata-v1-smoke.ts
+
       - name: Verify persistent object approval lifecycle
         env:
           AUTH_MODE: dev
