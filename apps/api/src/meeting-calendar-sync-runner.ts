@@ -88,7 +88,7 @@ export async function processMeetingCalendarSyncEventV1(
       ) bookings ON bookings.meeting_resource_id=r.id
       WHERE r.tenant_id=${event.tenantId}::uuid
       ORDER BY r.resource_type, r.name
-    `;
+    `);
 
     await tx.$executeRaw(Prisma.sql`
       UPDATE meeting_collaboration_v1
@@ -106,17 +106,23 @@ export async function processMeetingCalendarSyncEventV1(
     for (const attendee of prepared.attendees) attendeeMap.set(attendee.email.trim().toLowerCase(), { email:attendee.email, displayName:attendee.display_name, type:attendee.attendee_type==='OPTIONAL'?'optional':'required' });
     for (const resource of prepared.resources) attendeeMap.set(resource.email.trim().toLowerCase(), { email:resource.email, displayName:resource.name, type:'resource' });
 
-    let recurrence: Record<string, unknown> | undefined;
+    let recurrence: Record<string, unknown> | null = null;
     if (prepared.recurrence) {
       const rule: MeetingRecurrenceRuleV1 = {
         patternType: prepared.recurrence.pattern_type,
         interval: prepared.recurrence.interval,
-        daysOfWeek: prepared.recurrence.days_of_week as MeetingRecurrenceRuleV1['daysOfWeek'],
-        dayOfMonth: prepared.recurrence.day_of_month ?? undefined,
+        daysOfWeek: prepared.recurrence.days_of_week as NonNullable<MeetingRecurrenceRuleV1['daysOfWeek']>,
         rangeType: prepared.recurrence.range_type,
-        numberOfOccurrences: prepared.recurrence.number_of_occurrences ?? undefined,
-        endDate: prepared.recurrence.range_end_date ? dateOnly(prepared.recurrence.range_end_date) : undefined,
         timezone: 'America/Lima',
+        ...(prepared.recurrence.day_of_month !== null
+          ? { dayOfMonth: prepared.recurrence.day_of_month }
+          : {}),
+        ...(prepared.recurrence.number_of_occurrences !== null
+          ? { numberOfOccurrences: prepared.recurrence.number_of_occurrences }
+          : {}),
+        ...(prepared.recurrence.range_end_date
+          ? { endDate: dateOnly(prepared.recurrence.range_end_date) }
+          : {}),
       };
       recurrence = toGraphRecurrenceV1(rule, dateOnly(prepared.recurrence.range_start_date));
     }

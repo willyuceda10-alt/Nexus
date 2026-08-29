@@ -242,7 +242,13 @@ export async function workCalendarV2Routes(app: FastifyInstance): Promise<void> 
 
         const calendar = await tx.workCalendar.update({
           where: { id: current.id },
-          data: body.data,
+          data: {
+            ...(body.data.name !== undefined ? { name: body.data.name } : {}),
+            ...(body.data.timezone !== undefined ? { timezone: body.data.timezone } : {}),
+            ...(body.data.isDefault !== undefined ? { isDefault: body.data.isDefault } : {}),
+            ...(body.data.workingWeekdays !== undefined ? { workingWeekdays: body.data.workingWeekdays } : {}),
+            ...(body.data.minutesPerDay !== undefined ? { minutesPerDay: body.data.minutesPerDay } : {}),
+          },
           include: { exceptions: { orderBy: { exceptionDate: 'asc' } } },
         });
         await tx.auditLog.create({

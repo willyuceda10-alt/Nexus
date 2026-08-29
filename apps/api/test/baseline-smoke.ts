@@ -57,7 +57,8 @@ async function main() {
       updatedCount: number;
       scheduledCount: number;
       skippedUnscheduledCount: number;
-      overwritten: boolean;
+      previousBaselinePreserved: boolean;
+      immutableHistory: boolean;
     };
 
     assert(summary.projectId === PROJECT_ID, 'Baseline summary project id mismatch.');
@@ -66,7 +67,8 @@ async function main() {
     assert(summary.updatedCount === 4, `Expected 4 snapshot objects, got ${summary.updatedCount}.`);
     assert(summary.scheduledCount === 4, `Expected 4 scheduled snapshot objects, got ${summary.scheduledCount}.`);
     assert(summary.skippedUnscheduledCount === 0, 'Seeded project should not have unscheduled baseline objects.');
-    assert(summary.overwritten, 'Expected overwrite marker to be true.');
+    assert(summary.previousBaselinePreserved, 'Expected previous baseline to be preserved.');
+    assert(summary.immutableHistory, 'Expected immutable baseline history marker to be true.');
     assert(!Number.isNaN(Date.parse(summary.capturedAt)), 'Baseline capturedAt is not a valid timestamp.');
 
     const listResponse = await app.inject({

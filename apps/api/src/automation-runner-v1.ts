@@ -457,7 +457,7 @@ async function executeCreateTask(
           workspaceId: project.workspaceId,
           projectId,
           automationRunId: run.id,
-          _automation: nextAutomationTraceV1(automationTraceFromEventV1(event), definition.id),
+          _automation: nextAutomationTraceV1(automationTraceFromEventV1(event), definition.id) as unknown as Prisma.InputJsonValue,
         },
       },
     }),

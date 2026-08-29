@@ -131,7 +131,10 @@ export async function authorizationV2Routes(app: FastifyInstance): Promise<void>
       const actor = request.actor!;
       const result = await withTenant(actor.tenantId, async (tx) => {
         const decisions = await Promise.all(PERMISSIONS_V2.map(async (permission) => {
-          const decision = await authorizePermission(tx, actor, permission, query.data);
+          const decision = await authorizePermission(tx, actor, permission, {
+            workspaceId: query.data.workspaceId ?? null,
+            projectId: query.data.projectId ?? null,
+          });
           return {
             permission,
             allowed: decision.allowed,

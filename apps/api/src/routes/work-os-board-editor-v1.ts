@@ -387,7 +387,7 @@ export async function workOsBoardEditorV1Routes(app: FastifyInstance): Promise<v
         if (object.version !== body.data.version) return reply.code(409).send({ error: 'version_conflict' });
 
         if (column.source === 'CORE') {
-          const data: Prisma.NexusObjectUpdateManyMutationInput = { version: { increment: 1 } };
+          const data: Prisma.NexusObjectUncheckedUpdateManyInput = { version: { increment: 1 } };
           switch (column.field_key) {
             case 'title': data.title = stringValue(body.data.value, { max: 500 })!; break;
             case 'description': data.description = stringValue(body.data.value, { nullable: true, max: 20000 }); break;

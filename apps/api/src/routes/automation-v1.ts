@@ -31,7 +31,7 @@ const valueSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('LITERAL'), value: z.union([z.string(), z.number(), z.boolean(), z.null()]) }),
   z.object({ kind: z.literal('EVENT_PATH'), path: z.string().trim().min(1).max(500) }),
 ]);
-const conditionSchema: z.ZodType<AutomationConditionV1> = z.lazy(() => z.union([
+const conditionSchema = z.lazy(() => z.union([
   z.object({
     kind: z.literal('GROUP'),
     operator: z.enum(['AND', 'OR']),
@@ -43,8 +43,8 @@ const conditionSchema: z.ZodType<AutomationConditionV1> = z.lazy(() => z.union([
     operator: z.enum(['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE', 'IN', 'NOT_IN', 'CONTAINS', 'EXISTS']),
     right: valueSchema.optional(),
   }),
-]));
-const actionSchema: z.ZodType<AutomationActionV1> = z.discriminatedUnion('type', [
+])) as unknown as z.ZodType<AutomationConditionV1>;
+const actionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('EMIT_EVENT'),
     eventType: z.string().trim().min(1).max(150),
@@ -67,7 +67,7 @@ const actionSchema: z.ZodType<AutomationActionV1> = z.discriminatedUnion('type',
     description: valueSchema.optional(),
     approverUserId: valueSchema.optional(),
   }),
-]);
+]) as unknown as z.ZodType<AutomationActionV1>;
 const versionSchema = z.object({
   triggerEventType: z.string().trim().min(1).max(150),
   condition: conditionSchema.nullable().optional(),
@@ -290,7 +290,9 @@ export async function automationV1Routes(app: FastifyInstance): Promise<void> {
     try {
       validateAutomationVersionV1({
         triggerEventType: body.data.triggerEventType,
-        condition: body.data.condition,
+        ...(body.data.condition !== undefined
+          ? { condition: body.data.condition }
+          : {}),
         actions: body.data.actions,
       });
     } catch (error) {

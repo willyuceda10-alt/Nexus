@@ -20,7 +20,13 @@ const temporalConfigSchema = z.object({
   titleFieldKey: z.string().trim().min(1).max(100).optional(),
   colorFieldKey: z.string().trim().min(1).max(100).nullable().optional(),
   allDay: z.boolean().optional(),
-});
+}).transform((config): BoardTemporalConfigV1 => ({
+  startFieldKey: config.startFieldKey,
+  ...(config.endFieldKey !== undefined ? { endFieldKey: config.endFieldKey } : {}),
+  ...(config.titleFieldKey !== undefined ? { titleFieldKey: config.titleFieldKey } : {}),
+  ...(config.colorFieldKey !== undefined ? { colorFieldKey: config.colorFieldKey } : {}),
+  ...(config.allDay !== undefined ? { allDay: config.allDay } : {}),
+}));
 const createTemporalViewSchema = z.object({
   name: z.string().trim().min(1).max(255),
   viewType: z.enum(['CALENDAR', 'TIMELINE']),
@@ -145,7 +151,7 @@ export async function workOsBoardTemporalV1Routes(app: FastifyInstance): Promise
       await tx.auditLog.create({ data: {
         tenantId: actor.tenantId, userId: actor.userId, action: 'BOARD_TEMPORAL_VIEW_CREATED', resource: 'WORK_VIEW_V1',
         resourceId: rows[0]!.id, correlationId: request.id, ipAddress: request.ip,
-        details: { boardId: board.id, viewType: body.data.viewType, temporal },
+        details: { boardId: board.id, viewType: body.data.viewType, temporal } as unknown as Prisma.InputJsonValue,
       } });
       return reply.code(201).send(rows[0]);
     });

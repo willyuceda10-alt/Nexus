@@ -127,7 +127,7 @@ async function wouldCreateWbsCycle(
     if (visited.has(cursor)) return true;
     visited.add(cursor);
 
-    const row = await tx.workItemSchedule.findFirst({
+    const row: { parentWorkItemId: string | null } | null = await tx.workItemSchedule.findFirst({
       where: { tenantId, objectId: cursor },
       select: { parentWorkItemId: true },
     });
@@ -270,7 +270,16 @@ export async function projectScheduleV2Routes(app: FastifyInstance): Promise<voi
             .map((dependency) => [dependency.legacyRelationId!, dependency]),
         );
         const legacyEdgeKeys = new Set<string>();
-        const dependencies = legacyRelations.map((relation) => {
+        const dependencies: Array<{
+          id: string;
+          legacyRelationId: string | null;
+          predecessorObjectId: string;
+          successorObjectId: string;
+          dependencyType: 'FS' | 'SS' | 'FF' | 'SF';
+          lagMinutes: number;
+          notes: string | null;
+          source: 'V1_FALLBACK' | 'V2_SYNCED' | 'V2';
+        }> = legacyRelations.map((relation) => {
           const metadata = jsonRecord(relation.metadata);
           const parsedType = dependencyTypeSchema.safeParse(metadata.dependencyType);
           const lagDays = typeof metadata.lagDays === 'number' && Number.isFinite(metadata.lagDays)
@@ -393,6 +402,17 @@ export async function projectScheduleV2Routes(app: FastifyInstance): Promise<voi
           where: { projectObjectId: project.id },
         });
         const projectMetadata = jsonRecord(project.metadata);
+
+        const requestedStatusDate = body.data.statusDate !== undefined
+          ? dateOnlyUtc(body.data.statusDate)
+          : undefined;
+        const requestedPlannedStart = body.data.plannedStart !== undefined
+          ? dateOnlyUtc(body.data.plannedStart)
+          : undefined;
+        const requestedTargetFinish = body.data.targetFinish !== undefined
+          ? dateOnlyUtc(body.data.targetFinish)
+          : undefined;
+
         const candidate = validateProjectScheduleProfileV2({
           projectObjectId: project.id,
           ...(body.data.calendarId !== undefined
@@ -400,46 +420,93 @@ export async function projectScheduleV2Routes(app: FastifyInstance): Promise<voi
             : existing?.calendarId ? { calendarId: existing.calendarId } : {}),
           schedulingMode: body.data.schedulingMode ?? existing?.schedulingMode ?? 'AUTO',
           progressMethod: body.data.progressMethod ?? existing?.progressMethod ?? 'DURATION',
-          timezone: body.data.timezone ?? existing?.timezone ?? stringFromJson(projectMetadata.scheduleTimezone) ?? 'UTC',
-          minutesPerDay: body.data.minutesPerDay ?? existing?.minutesPerDay ?? numberFromJson(projectMetadata.scheduleMinutesPerDay, 480),
-          minutesPerWeek: body.data.minutesPerWeek ?? existing?.minutesPerWeek ?? numberFromJson(projectMetadata.scheduleMinutesPerWeek, 2400),
+          timezone: body.data.timezone
+            ?? existing?.timezone
+            ?? stringFromJson(projectMetadata.scheduleTimezone)
+            ?? 'UTC',
+          minutesPerDay: body.data.minutesPerDay
+            ?? existing?.minutesPerDay
+            ?? numberFromJson(projectMetadata.scheduleMinutesPerDay, 480),
+          minutesPerWeek: body.data.minutesPerWeek
+            ?? existing?.minutesPerWeek
+            ?? numberFromJson(projectMetadata.scheduleMinutesPerWeek, 2400),
           ...(body.data.statusDate !== undefined
-            ? dateOnlyUtc(body.data.statusDate) ? { statusDate: dateOnlyUtc(body.data.statusDate) } : {}
+            ? requestedStatusDate ? { statusDate: requestedStatusDate } : {}
             : existing?.statusDate ? { statusDate: existing.statusDate } : {}),
           ...(body.data.plannedStart !== undefined
-            ? dateOnlyUtc(body.data.plannedStart) ? { plannedStart: dateOnlyUtc(body.data.plannedStart) } : {}
-            : existing?.plannedStart ? { plannedStart: existing.plannedStart } : project.startDate ? { plannedStart: project.startDate } : {}),
+            ? requestedPlannedStart ? { plannedStart: requestedPlannedStart } : {}
+            : existing?.plannedStart
+              ? { plannedStart: existing.plannedStart }
+              : project.startDate
+                ? { plannedStart: project.startDate }
+                : {}),
           ...(body.data.targetFinish !== undefined
-            ? dateOnlyUtc(body.data.targetFinish) ? { targetFinish: dateOnlyUtc(body.data.targetFinish) } : {}
-            : existing?.targetFinish ? { targetFinish: existing.targetFinish } : project.dueDate ? { targetFinish: project.dueDate } : {}),
+            ? requestedTargetFinish ? { targetFinish: requestedTargetFinish } : {}
+            : existing?.targetFinish
+              ? { targetFinish: existing.targetFinish }
+              : project.dueDate
+                ? { targetFinish: project.dueDate }
+                : {}),
         });
+
+        const profileUpdate: Prisma.ProjectScheduleProfileUncheckedUpdateInput = {
+          ...(body.data.calendarId !== undefined
+            ? { calendarId: body.data.calendarId }
+            : existing
+              ? { calendarId: existing.calendarId }
+              : {}),
+          schedulingMode: candidate.schedulingMode,
+          progressMethod: candidate.progressMethod,
+          timezone: candidate.timezone,
+          minutesPerDay: candidate.minutesPerDay,
+          minutesPerWeek: candidate.minutesPerWeek,
+          ...(body.data.statusDate !== undefined
+            ? { statusDate: requestedStatusDate ?? null }
+            : existing?.statusDate
+              ? { statusDate: existing.statusDate }
+              : {}),
+          ...(body.data.plannedStart !== undefined
+            ? { plannedStart: requestedPlannedStart ?? null }
+            : candidate.plannedStart
+              ? { plannedStart: candidate.plannedStart }
+              : {}),
+          ...(body.data.targetFinish !== undefined
+            ? { targetFinish: requestedTargetFinish ?? null }
+            : candidate.targetFinish
+              ? { targetFinish: candidate.targetFinish }
+              : {}),
+        };
+
+        const profileCreate: Prisma.ProjectScheduleProfileUncheckedCreateInput = {
+          tenantId: actor.tenantId,
+          projectObjectId: project.id,
+          calendarId: body.data.calendarId ?? null,
+          schedulingMode: candidate.schedulingMode,
+          progressMethod: candidate.progressMethod,
+          timezone: candidate.timezone,
+          minutesPerDay: candidate.minutesPerDay,
+          minutesPerWeek: candidate.minutesPerWeek,
+          ...(body.data.statusDate !== undefined
+            ? { statusDate: requestedStatusDate ?? null }
+            : candidate.statusDate
+              ? { statusDate: candidate.statusDate }
+              : {}),
+          ...(body.data.plannedStart !== undefined
+            ? { plannedStart: requestedPlannedStart ?? null }
+            : candidate.plannedStart
+              ? { plannedStart: candidate.plannedStart }
+              : {}),
+          ...(body.data.targetFinish !== undefined
+            ? { targetFinish: requestedTargetFinish ?? null }
+            : candidate.targetFinish
+              ? { targetFinish: candidate.targetFinish }
+              : {}),
+        };
 
         const saved = await tx.projectScheduleProfile.upsert({
           where: { projectObjectId: project.id },
-          update: {
-            calendarId: body.data.calendarId !== undefined ? body.data.calendarId : existing?.calendarId,
-            schedulingMode: candidate.schedulingMode,
-            progressMethod: candidate.progressMethod,
-            timezone: candidate.timezone,
-            minutesPerDay: candidate.minutesPerDay,
-            minutesPerWeek: candidate.minutesPerWeek,
-            statusDate: body.data.statusDate !== undefined ? dateOnlyUtc(body.data.statusDate) ?? null : existing?.statusDate,
-            plannedStart: body.data.plannedStart !== undefined ? dateOnlyUtc(body.data.plannedStart) ?? null : candidate.plannedStart,
-            targetFinish: body.data.targetFinish !== undefined ? dateOnlyUtc(body.data.targetFinish) ?? null : candidate.targetFinish,
-          },
-          create: {
-            tenantId: actor.tenantId,
-            projectObjectId: project.id,
-            calendarId: body.data.calendarId ?? null,
-            schedulingMode: candidate.schedulingMode,
-            progressMethod: candidate.progressMethod,
-            timezone: candidate.timezone,
-            minutesPerDay: candidate.minutesPerDay,
-            minutesPerWeek: candidate.minutesPerWeek,
-            statusDate: body.data.statusDate !== undefined ? dateOnlyUtc(body.data.statusDate) ?? null : candidate.statusDate,
-            plannedStart: body.data.plannedStart !== undefined ? dateOnlyUtc(body.data.plannedStart) ?? null : candidate.plannedStart,
-            targetFinish: body.data.targetFinish !== undefined ? dateOnlyUtc(body.data.targetFinish) ?? null : candidate.targetFinish,
-          },
+          update: profileUpdate,
+          create: profileCreate,
         });
 
         await Promise.all([
@@ -580,6 +647,16 @@ export async function projectScheduleV2Routes(app: FastifyInstance): Promise<voi
           }
         }
 
+        const requestedConstraintDate = body.data.constraintDate !== undefined
+          ? dateOnlyUtc(body.data.constraintDate)
+          : undefined;
+        const requestedActualStart = body.data.actualStart !== undefined
+          ? dateOnlyUtc(body.data.actualStart)
+          : undefined;
+        const requestedActualFinish = body.data.actualFinish !== undefined
+          ? dateOnlyUtc(body.data.actualFinish)
+          : undefined;
+
         const candidate = validateWorkItemScheduleV2({
           objectId: workItem.id,
           projectObjectId: project.id,
@@ -592,58 +669,105 @@ export async function projectScheduleV2Routes(app: FastifyInstance): Promise<voi
           schedulingMode: body.data.schedulingMode ?? existing?.schedulingMode ?? 'AUTO',
           durationMinutes,
           remainingDurationMinutes,
-          constraintType: body.data.constraintType ?? existing?.constraintType ?? 'AS_SOON_AS_POSSIBLE',
+          constraintType: body.data.constraintType
+            ?? existing?.constraintType
+            ?? 'AS_SOON_AS_POSSIBLE',
           ...(body.data.constraintDate !== undefined
-            ? dateOnlyUtc(body.data.constraintDate) ? { constraintDate: dateOnlyUtc(body.data.constraintDate) } : {}
+            ? requestedConstraintDate ? { constraintDate: requestedConstraintDate } : {}
             : existing?.constraintDate ? { constraintDate: existing.constraintDate } : {}),
           ...(body.data.actualStart !== undefined
-            ? dateOnlyUtc(body.data.actualStart) ? { actualStart: dateOnlyUtc(body.data.actualStart) } : {}
+            ? requestedActualStart ? { actualStart: requestedActualStart } : {}
             : existing?.actualStart ? { actualStart: existing.actualStart } : {}),
           ...(body.data.actualFinish !== undefined
-            ? dateOnlyUtc(body.data.actualFinish) ? { actualFinish: dateOnlyUtc(body.data.actualFinish) } : {}
+            ? requestedActualFinish ? { actualFinish: requestedActualFinish } : {}
             : existing?.actualFinish ? { actualFinish: existing.actualFinish } : {}),
           ...(body.data.physicalPercentComplete !== undefined
-            ? body.data.physicalPercentComplete !== null ? { physicalPercentComplete: body.data.physicalPercentComplete } : {}
-            : existing?.physicalPercentComplete !== null && existing?.physicalPercentComplete !== undefined
-              ? { physicalPercentComplete: Number(existing.physicalPercentComplete) }
-              : {}),
+            ? body.data.physicalPercentComplete !== null
+              ? { physicalPercentComplete: body.data.physicalPercentComplete }
+              : {}
+            : existing?.physicalPercentComplete !== null
+              && existing?.physicalPercentComplete !== undefined
+                ? { physicalPercentComplete: Number(existing.physicalPercentComplete) }
+                : {}),
         });
+
+        const scheduleUpdate: Prisma.WorkItemScheduleUncheckedUpdateInput = {
+          ...(body.data.parentWorkItemId !== undefined
+            ? { parentWorkItemId: body.data.parentWorkItemId }
+            : existing
+              ? { parentWorkItemId: existing.parentWorkItemId }
+              : {}),
+          ...(body.data.wbsCode !== undefined
+            ? { wbsCode: body.data.wbsCode }
+            : existing
+              ? { wbsCode: existing.wbsCode }
+              : {}),
+          outlineLevel: candidate.outlineLevel,
+          sortOrder: candidate.sortOrder,
+          schedulingMode: candidate.schedulingMode,
+          durationMinutes: candidate.durationMinutes,
+          remainingDurationMinutes: candidate.remainingDurationMinutes,
+          constraintType: candidate.constraintType,
+          ...(body.data.constraintDate !== undefined
+            ? { constraintDate: requestedConstraintDate ?? null }
+            : existing
+              ? { constraintDate: existing.constraintDate }
+              : {}),
+          ...(body.data.actualStart !== undefined
+            ? { actualStart: requestedActualStart ?? null }
+            : existing
+              ? { actualStart: existing.actualStart }
+              : {}),
+          ...(body.data.actualFinish !== undefined
+            ? { actualFinish: requestedActualFinish ?? null }
+            : existing
+              ? { actualFinish: existing.actualFinish }
+              : {}),
+          ...(body.data.physicalPercentComplete !== undefined
+            ? { physicalPercentComplete: body.data.physicalPercentComplete }
+            : existing
+              ? { physicalPercentComplete: existing.physicalPercentComplete }
+              : {}),
+        };
+
+        const scheduleCreate: Prisma.WorkItemScheduleUncheckedCreateInput = {
+          tenantId: actor.tenantId,
+          projectObjectId: project.id,
+          objectId: workItem.id,
+          parentWorkItemId: body.data.parentWorkItemId ?? null,
+          wbsCode: body.data.wbsCode ?? null,
+          outlineLevel: candidate.outlineLevel,
+          sortOrder: candidate.sortOrder,
+          schedulingMode: candidate.schedulingMode,
+          durationMinutes: candidate.durationMinutes,
+          remainingDurationMinutes: candidate.remainingDurationMinutes,
+          constraintType: candidate.constraintType,
+          ...(body.data.constraintDate !== undefined
+            ? { constraintDate: requestedConstraintDate ?? null }
+            : candidate.constraintDate
+              ? { constraintDate: candidate.constraintDate }
+              : {}),
+          ...(body.data.actualStart !== undefined
+            ? { actualStart: requestedActualStart ?? null }
+            : candidate.actualStart
+              ? { actualStart: candidate.actualStart }
+              : {}),
+          ...(body.data.actualFinish !== undefined
+            ? { actualFinish: requestedActualFinish ?? null }
+            : candidate.actualFinish
+              ? { actualFinish: candidate.actualFinish }
+              : {}),
+          ...(body.data.physicalPercentComplete !== undefined
+            ? { physicalPercentComplete: body.data.physicalPercentComplete }
+            : candidate.physicalPercentComplete !== undefined
+              ? { physicalPercentComplete: candidate.physicalPercentComplete }
+              : {}),
+        };
 
         const saved = await tx.workItemSchedule.upsert({
           where: { objectId: workItem.id },
-          update: {
-            parentWorkItemId: body.data.parentWorkItemId !== undefined ? body.data.parentWorkItemId : existing?.parentWorkItemId,
-            wbsCode: body.data.wbsCode !== undefined ? body.data.wbsCode : existing?.wbsCode,
-            outlineLevel: candidate.outlineLevel,
-            sortOrder: candidate.sortOrder,
-            schedulingMode: candidate.schedulingMode,
-            durationMinutes: candidate.durationMinutes,
-            remainingDurationMinutes: candidate.remainingDurationMinutes,
-            constraintType: candidate.constraintType,
-            constraintDate: body.data.constraintDate !== undefined ? dateOnlyUtc(body.data.constraintDate) ?? null : existing?.constraintDate,
-            actualStart: body.data.actualStart !== undefined ? dateOnlyUtc(body.data.actualStart) ?? null : existing?.actualStart,
-            actualFinish: body.data.actualFinish !== undefined ? dateOnlyUtc(body.data.actualFinish) ?? null : existing?.actualFinish,
-            physicalPercentComplete: body.data.physicalPercentComplete !== undefined
-              ? body.data.physicalPercentComplete
-              : existing?.physicalPercentComplete,
-          },
-          create: {
-            tenantId: actor.tenantId,
-            projectObjectId: project.id,
-            objectId: workItem.id,
-            parentWorkItemId: body.data.parentWorkItemId ?? null,
-            wbsCode: body.data.wbsCode ?? null,
-            outlineLevel: candidate.outlineLevel,
-            sortOrder: candidate.sortOrder,
-            schedulingMode: candidate.schedulingMode,
-            durationMinutes: candidate.durationMinutes,
-            remainingDurationMinutes: candidate.remainingDurationMinutes,
-            constraintType: candidate.constraintType,
-            constraintDate: body.data.constraintDate !== undefined ? dateOnlyUtc(body.data.constraintDate) ?? null : candidate.constraintDate,
-            actualStart: body.data.actualStart !== undefined ? dateOnlyUtc(body.data.actualStart) ?? null : candidate.actualStart,
-            actualFinish: body.data.actualFinish !== undefined ? dateOnlyUtc(body.data.actualFinish) ?? null : candidate.actualFinish,
-            physicalPercentComplete: body.data.physicalPercentComplete ?? candidate.physicalPercentComplete,
-          },
+          update: scheduleUpdate,
+          create: scheduleCreate,
         });
 
         await Promise.all([

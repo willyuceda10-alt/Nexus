@@ -251,7 +251,12 @@ export async function wbsV2Routes(app: FastifyInstance): Promise<void> {
 
         let canonical;
         try {
-          canonical = canonicalizeWbsV2(body.data.items);
+          canonical = canonicalizeWbsV2(body.data.items.map((item) => ({
+            objectId: item.objectId,
+            ...(item.parentWorkItemId !== undefined
+              ? { parentWorkItemId: item.parentWorkItemId }
+              : {}),
+          })));
         } catch (error) {
           if (error instanceof WbsV2ValidationError) {
             return { kind: 'invalid' as const, message: error.message };

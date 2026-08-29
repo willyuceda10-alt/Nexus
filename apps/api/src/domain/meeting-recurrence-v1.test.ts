@@ -52,7 +52,7 @@ describe('expandMeetingRecurrenceV1', () => {
 describe('toGraphRecurrenceV1', () => {
   it('maps the V1 weekly rule to Microsoft Graph patternedRecurrence fields', () => {
     const graph = toGraphRecurrenceV1(rule({
-      patternType: 'WEEKLY', interval: 2, daysOfWeek: ['MONDAY', 'WEDNESDAY'], rangeType: 'END_DATE', endDate: '2026-10-31', numberOfOccurrences: undefined,
+      patternType: 'WEEKLY', interval: 2, daysOfWeek: ['MONDAY', 'WEDNESDAY'], rangeType: 'END_DATE', endDate: '2026-10-31',
     }), '2026-08-31');
     expect(graph).toEqual({
       pattern: { type: 'weekly', interval: 2, daysOfWeek: ['monday', 'wednesday'], firstDayOfWeek: 'monday' },
