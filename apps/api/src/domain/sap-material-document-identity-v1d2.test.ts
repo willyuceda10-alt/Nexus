@@ -28,10 +28,10 @@ describe('SAP material document identity V1-D2', () => {
       { header: 'Posición doc.material', value: 1 },
     ]);
 
-    expect(normalized.externalKey).toBe('MATDOC:2026:5001234567:00001');
+    expect(normalized.externalKey).toBe('MATDOC:2026:5001234567:0001');
     expect(normalized.fields.materialDocumentNumber).toBe('5001234567');
     expect(normalized.fields.materialDocumentYear).toBe('2026');
-    expect(normalized.fields.materialDocumentItem).toBe('00001');
+    expect(normalized.fields.materialDocumentItem).toBe('0001');
     expect(normalized.warnings).not.toContain('MATERIAL_DOCUMENT_IDENTITY_NOT_AVAILABLE');
   });
 
