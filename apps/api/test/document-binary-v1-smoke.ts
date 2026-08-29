@@ -108,13 +108,22 @@ async function main() {
 
     const download = await app.inject({
       method: 'GET',
-      url: `/api/v1/document-binary-v1/${version2.id}/download`,
-      headers: { 'x-correlation-id': 'ci-document-binary-download' },
+      url: `/api/v1/document-binary-v1/${version2.id}/download-link`,
+      headers: { 'x-correlation-id': 'ci-document-binary-download-link' },
     });
-    assert(download.statusCode === 200, `Download failed: ${download.body}`);
-    assert(download.rawPayload.equals(v2Content), 'Downloaded binary must equal uploaded V2 bytes.');
-    assert(download.headers['content-type']?.startsWith('application/pdf'), 'Download must preserve MIME type.');
-    assert(download.headers['content-disposition']?.includes('specification.pdf'), 'Download must preserve safe file name.');
+    assert(download.statusCode === 200, `Download link failed: ${download.body}`);
+    const access = download.json() as {
+      fileName: string;
+      mimeType: string;
+      url: string;
+      expiresAt: string;
+    };
+    assert(access.fileName === 'specification.pdf', 'Download link must preserve safe file name.');
+    assert(access.mimeType === 'application/pdf', 'Download link must preserve MIME type.');
+    assert(access.url.startsWith('data:application/pdf;base64,'), 'Memory test store must return a non-network data URL.');
+    const encoded = access.url.slice(access.url.indexOf(',') + 1);
+    assert(Buffer.from(encoded, 'base64').equals(v2Content), 'Download access must resolve to uploaded V2 bytes.');
+    assert(Date.parse(access.expiresAt) > Date.now(), 'Download access must have a future expiry.');
 
     const blocked = await app.inject({
       method: 'POST',
@@ -136,8 +145,8 @@ async function main() {
       'Upload audit event is missing.',
     );
     assert(
-      auditPayload.audit.some((entry) => entry.action === 'DOCUMENT_VERSION_DOWNLOADED'),
-      'Download audit event is missing.',
+      auditPayload.audit.some((entry) => entry.action === 'DOCUMENT_VERSION_DOWNLOAD_LINK_ISSUED'),
+      'Download-link audit event is missing.',
     );
 
     console.info(JSON.stringify({
@@ -147,6 +156,7 @@ async function main() {
       persistentVersionLineage: true,
       storageKeyHidden: true,
       executableBlock: true,
+      shortLivedDownloadAccess: true,
       downloadAudit: true,
       memoryOnlyTestStore: true,
     }));
