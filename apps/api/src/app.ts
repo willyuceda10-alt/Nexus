@@ -62,6 +62,7 @@ import { sapIntegrationInventorySyncV1d2Routes } from './routes/sap-integration-
 import { sapIntegrationFinancialGuardV1d3Routes } from './routes/sap-integration-financial-guard-v1d3.js';
 import { sapIntegrationActualCostSyncV1d4Routes } from './routes/sap-integration-actual-cost-sync-v1d4.js';
 import { sapIntegrationHealthV1eRoutes } from './routes/sap-integration-health-v1e.js';
+import { sapIntegrationServiceImportV1f1Routes } from './routes/sap-integration-service-import-v1f1.js';
 import { sessionRoutes } from './routes/session.js';
 import { wbsV2Routes } from './routes/wbs-v2.js';
 import { workCalendarV2Routes } from './routes/work-calendars-v2.js';
@@ -204,6 +205,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(sapIntegrationFinancialGuardV1d3Routes);
   await app.register(sapIntegrationActualCostSyncV1d4Routes);
   await app.register(sapIntegrationHealthV1eRoutes);
+  await sapIntegrationServiceImportV1f1Routes(app, integrationBinaryStore);
   await app.register(objectRelationsV1Routes);
   await app.register(objectApprovalsV1Routes);
   await app.register(meetingsV1Routes);

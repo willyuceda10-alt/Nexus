@@ -660,7 +660,7 @@ export async function sapIntegrationFoundationV1aRoutes(
     checksumAlgorithm: 'SHA-256',
     idempotency: 'tenant+source+sha256',
     servicePrincipalFoundation: true,
-      servicePrincipalAuthenticationEnabled: false,
+      servicePrincipalAuthenticationEnabled: true,
     }),
   );
 }
