@@ -64,6 +64,9 @@ const envSchema = z
     AZURE_STORAGE_ACCOUNT_NAME: optionalNonEmptyString,
     AZURE_DOCUMENT_CONTAINER: z.string().trim().min(3).max(63).default('bridata-documents'),
     DOCUMENT_MAX_FILE_BYTES: z.coerce.number().int().min(1_048_576).max(104_857_600).default(26_214_400),
+    INTEGRATION_STORAGE_MODE: z.enum(['memory', 'azure']).default('memory'),
+    AZURE_INTEGRATION_CONTAINER: z.string().trim().min(3).max(63).default('bridata-imports'),
+    INTEGRATION_MAX_FILE_BYTES: z.coerce.number().int().min(1_048_576).max(209_715_200).default(52_428_800),
   })
   .superRefine((env, ctx) => {
     if (env.AUTH_MODE === 'entra') {
@@ -114,6 +117,23 @@ const envSchema = z
         path: ['SERVICE_BUS_NAMESPACE'],
         message: 'SERVICE_BUS_NAMESPACE is required when an async worker is enabled.',
       });
+    }
+
+    if (env.INTEGRATION_STORAGE_MODE === 'azure') {
+      if (!env.AZURE_STORAGE_ACCOUNT_NAME) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['AZURE_STORAGE_ACCOUNT_NAME'],
+          message: 'AZURE_STORAGE_ACCOUNT_NAME is required when INTEGRATION_STORAGE_MODE=azure.',
+        });
+      }
+      if (!env.AZURE_CLIENT_ID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['AZURE_CLIENT_ID'],
+          message: 'AZURE_CLIENT_ID is required for the user-assigned managed identity integration store.',
+        });
+      }
     }
 
     if (env.DOCUMENT_STORAGE_MODE === 'azure') {

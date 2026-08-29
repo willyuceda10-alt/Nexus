@@ -297,7 +297,8 @@ export async function sapIntegrationFoundationV1aRoutes(
       if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
         return reply.code(400).send({ error: 'integration_import_binary_required' });
       }
-      if (request.body.length > config.INTEGRATION_MAX_FILE_BYTES) {
+      const binaryContent = request.body;
+      if (binaryContent.length > config.INTEGRATION_MAX_FILE_BYTES) {
         return reply.code(413).send({ error: 'integration_import_too_large', maxBytes: config.INTEGRATION_MAX_FILE_BYTES });
       }
 
@@ -313,7 +314,7 @@ export async function sapIntegrationFoundationV1aRoutes(
       const contentType = originalContentType || 'application/octet-stream';
       if (contentType.length > 150) return reply.code(400).send({ error: 'integration_content_type_invalid' });
 
-      const checksumSha256 = createHash('sha256').update(request.body).digest('hex');
+      const checksumSha256 = createHash('sha256').update(binaryContent).digest('hex');
       const sourceResult = await withTenant(actor.tenantId, async (tx) => {
         const source = await sourceById(tx, actor.tenantId, params.data.sourceId);
         if (!source || !source.is_active) return { kind: 'not_found' as const };
@@ -343,7 +344,7 @@ export async function sapIntegrationFoundationV1aRoutes(
       await binaryStore.put({
         storageKey,
         fileName,
-        content: request.body,
+        content: binaryContent,
         contentType,
         checksumSha256,
         sourceKey: sourceResult.source.source_key,
@@ -358,7 +359,7 @@ export async function sapIntegrationFoundationV1aRoutes(
                parser_version, updated_at)
             VALUES
               (${actor.tenantId}::uuid, ${sourceResult.source.id}::uuid, ${fileName}, ${contentType},
-               ${BigInt(request.body.length)}, ${checksumSha256}, ${storageKey}, ${sourceGeneratedAt},
+               ${BigInt(binaryContent.length)}, ${checksumSha256}, ${storageKey}, ${sourceGeneratedAt},
                'RECEIVED', ${sourceResult.source.schema_version}, ${sourceResult.source.parser_version},
                CURRENT_TIMESTAMP)
             ON CONFLICT (tenant_id, integration_source_id, checksum_sha256) DO NOTHING
@@ -398,7 +399,7 @@ export async function sapIntegrationFoundationV1aRoutes(
                   provider: 'SAP',
                   sourceKey: sourceResult.source.source_key,
                   checksumSha256,
-                  fileSize: request.body.length,
+                  fileSize: binaryContent.length,
                   originalFilename: fileName,
                 },
               },
@@ -591,18 +592,18 @@ export async function sapIntegrationFoundationV1aRoutes(
           WHERE tenant_id = ${actor.tenantId}::uuid
             AND integration_connection_id = ${connection.id}::uuid
             AND is_active = true
-            AND source_key = ANY(${body.data.allowedSourceKeys}::text[])
         `);
         const known = new Set(knownSources.map((row) => row.source_key));
         const unknown = body.data.allowedSourceKeys.filter((key) => !known.has(key));
         if (unknown.length > 0) return { kind: 'unknown_sources' as const, unknown };
+        const allowedSourceKeysSql = Prisma.sql`ARRAY[${Prisma.join(body.data.allowedSourceKeys)}]::text[]`;
         const rows = await tx.$queryRaw<ServicePrincipalRow[]>(Prisma.sql`
           INSERT INTO integration_service_principals
             (tenant_id, integration_connection_id, client_id, display_name,
              allowed_source_keys, status, updated_at)
           VALUES
             (${actor.tenantId}::uuid, ${connection.id}::uuid, ${body.data.clientId}::uuid,
-             ${body.data.displayName}, ${body.data.allowedSourceKeys}::text[], 'ACTIVE', CURRENT_TIMESTAMP)
+             ${body.data.displayName}, ${allowedSourceKeysSql}, 'ACTIVE', CURRENT_TIMESTAMP)
           ON CONFLICT (tenant_id, client_id)
           DO UPDATE SET
             integration_connection_id = EXCLUDED.integration_connection_id,
@@ -647,7 +648,10 @@ export async function sapIntegrationFoundationV1aRoutes(
 
   // Reserved for V1-B: non-interactive Entra client-credentials authentication will
   // resolve integration_service_principals and authorize only its allowed source keys.
-  app.get('/api/v1/integrations/sap/foundation-capabilities', async (_request, _reply) => ({
+  app.get(
+    '/api/v1/integrations/sap/foundation-capabilities',
+    { preHandler: [authenticate, resolveActor] },
+    async (_request, _reply) => ({
     version: 'v1a',
     provider: 'SAP',
     sourceAgnostic: true,
@@ -656,6 +660,7 @@ export async function sapIntegrationFoundationV1aRoutes(
     checksumAlgorithm: 'SHA-256',
     idempotency: 'tenant+source+sha256',
     servicePrincipalFoundation: true,
-    servicePrincipalAuthenticationEnabled: false,
-  }));
+      servicePrincipalAuthenticationEnabled: false,
+    }),
+  );
 }

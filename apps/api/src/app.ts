@@ -9,6 +9,10 @@ import {
   type DocumentBinaryStoreV1,
 } from './document-binary-store-v1.js';
 import { ProjectScheduleV2ValidationError } from './domain/project-schedule-v2.js';
+import {
+  createConfiguredIntegrationBinaryStoreV1,
+  type IntegrationBinaryStoreV1,
+} from './integration-binary-store-v1.js';
 import { registerHierarchyWriteGuards } from './hierarchy-guard.js';
 import { authorizationV2Routes } from './routes/authorization-v2.js';
 import { automationActionsV2Routes } from './routes/automation-actions-v2.js';
@@ -50,6 +54,7 @@ import { projectScheduleV2Routes } from './routes/project-schedule-v2.js';
 import { resourceCapacityRoutes } from './routes/resource-capacity.js';
 import { scheduleAnalysisRoutes } from './routes/schedule-analysis.js';
 import { scheduleAnalysisV2Routes } from './routes/schedule-analysis-v2.js';
+import { sapIntegrationFoundationV1aRoutes } from './routes/sap-integration-foundation-v1a.js';
 import { sessionRoutes } from './routes/session.js';
 import { wbsV2Routes } from './routes/wbs-v2.js';
 import { workCalendarV2Routes } from './routes/work-calendars-v2.js';
@@ -72,6 +77,7 @@ type MeetingSchedulingV2PolicyBody = {
 
 export type BuildAppOptions = {
   documentBinaryStore?: DocumentBinaryStoreV1;
+  integrationBinaryStore?: IntegrationBinaryStoreV1;
 };
 
 const legacyBoardOptionsPath = /^\/api\/v1\/work-os\/boards-v1\/[^/]+\/columns\/[^/]+\/options(?:\?|$)/;
@@ -79,6 +85,7 @@ const meetingSchedulingV2Path = /^\/api\/v1\/meetings-v2\/schedule(?:\?|$)/;
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const documentBinaryStore = options.documentBinaryStore ?? createConfiguredDocumentBinaryStoreV1();
+  const integrationBinaryStore = options.integrationBinaryStore ?? createConfiguredIntegrationBinaryStoreV1();
   const app = Fastify({
     logger: {
       level: config.LOG_LEVEL,
@@ -113,7 +120,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
   app.addContentTypeParser(
     'application/octet-stream',
-    { parseAs: 'buffer', bodyLimit: config.DOCUMENT_MAX_FILE_BYTES },
+    { parseAs: 'buffer', bodyLimit: Math.max(config.DOCUMENT_MAX_FILE_BYTES, config.INTEGRATION_MAX_FILE_BYTES) },
     (_request, body, done) => done(null, body),
   );
 
@@ -182,6 +189,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(collaborationV1Routes);
   await app.register(documentMetadataV1Routes);
   await documentBinaryV1Routes(app, documentBinaryStore);
+  await sapIntegrationFoundationV1aRoutes(app, integrationBinaryStore);
   await app.register(objectRelationsV1Routes);
   await app.register(objectApprovalsV1Routes);
   await app.register(meetingsV1Routes);

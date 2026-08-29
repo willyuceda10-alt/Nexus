@@ -20,6 +20,7 @@ param entraTenantId string
 param corsOrigins string
 param documentStorageAccountName string = toLower('nexus${environment}${uniqueString(resourceGroup().id)}')
 param documentContainerName string = 'bridata-documents'
+param integrationContainerName string = 'bridata-imports'
 param deployApi bool = true
 param deployMigrationJob bool = true
 param deployOutboxWorker bool = false
@@ -106,6 +107,9 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
             { name: 'AZURE_STORAGE_ACCOUNT_NAME', value: documentStorageAccountName }
             { name: 'AZURE_DOCUMENT_CONTAINER', value: documentContainerName }
             { name: 'DOCUMENT_MAX_FILE_BYTES', value: '26214400' }
+            { name: 'INTEGRATION_STORAGE_MODE', value: 'azure' }
+            { name: 'AZURE_INTEGRATION_CONTAINER', value: integrationContainerName }
+            { name: 'INTEGRATION_MAX_FILE_BYTES', value: '52428800' }
           ]
           probes: [
             {

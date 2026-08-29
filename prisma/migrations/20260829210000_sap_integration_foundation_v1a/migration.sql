@@ -230,7 +230,7 @@ ALTER TABLE "integration_entity_links"
   ADD CONSTRAINT "integration_entity_links_connection_tenant_fkey"
   FOREIGN KEY ("integration_connection_id","tenant_id") REFERENCES "integration_connections"("id","tenant_id") ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT "integration_entity_links_source_record_tenant_fkey"
-  FOREIGN KEY ("source_record_id","tenant_id") REFERENCES "integration_import_records"("id","tenant_id") ON DELETE SET NULL ON UPDATE CASCADE;
+  FOREIGN KEY ("source_record_id","tenant_id") REFERENCES "integration_import_records"("id","tenant_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE "integration_reconciliation_links"
   ADD CONSTRAINT "integration_reconciliation_links_tenant_id_fkey"

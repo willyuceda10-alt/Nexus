@@ -133,6 +133,15 @@ jobs:
           DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
         run: npx tsx apps/api/test/document-binary-v1-smoke.ts
 
+      - name: Verify SAP integration import foundation
+        env:
+          AUTH_MODE: dev
+          DEV_AUTH_ENABLED: "true"
+          DEV_USER_ID: 00000000-0000-4000-8000-000000000001
+          DEV_TENANT_ID: 00000000-0000-4000-8000-000000000002
+          INTEGRATION_STORAGE_MODE: memory
+        run: npx tsx apps/api/test/sap-integration-foundation-v1a-smoke.ts
+
       - name: Verify persistent object approval lifecycle
         env:
           AUTH_MODE: dev
