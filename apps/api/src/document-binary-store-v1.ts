@@ -65,9 +65,11 @@ class AzureBlobDocumentBinaryStoreV1 implements DocumentBinaryStoreV1 {
   constructor() {
     this.accountName = config.AZURE_STORAGE_ACCOUNT_NAME!;
     this.containerName = config.AZURE_DOCUMENT_CONTAINER;
-    const credential = new DefaultAzureCredential({
-      managedIdentityClientId: config.AZURE_CLIENT_ID,
-    });
+    const managedIdentityClientId = config.AZURE_CLIENT_ID;
+    if (!managedIdentityClientId) {
+      throw new Error('AZURE_CLIENT_ID is required for the Azure document binary store.');
+    }
+    const credential = new DefaultAzureCredential({ managedIdentityClientId });
     this.blobService = new BlobServiceClient(
       `https://${this.accountName}.blob.core.windows.net`,
       credential,
