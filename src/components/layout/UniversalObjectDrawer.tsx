@@ -33,6 +33,10 @@ export const UniversalObjectDrawer: React.FC = () => {
     updateNexusObject,
     deleteNexusObject,
     addRelation,
+    removeRelation,
+    relationDataStatus,
+    relationDataError,
+    reloadRelations,
     addComment,
     selectedObjectComments,
     selectedObjectActivityLogs,
@@ -50,6 +54,7 @@ export const UniversalObjectDrawer: React.FC = () => {
   const [newCommentText, setNewCommentText] = useState('');
   const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
   const [isLinkingOpen, setIsLinkingOpen] = useState(false);
+  const [isRelationSubmitting, setIsRelationSubmitting] = useState(false);
   const [targetLinkObjectId, setTargetLinkObjectId] = useState('');
   const [linkRelationType, setLinkRelationType] = useState<'BLOCKS' | 'DEPENDS_ON' | 'DERIVED_FROM' | 'RELATES_TO' | 'MITIGATES' | 'REQUIRES_APPROVAL'>('RELATES_TO');
 
@@ -93,11 +98,18 @@ export const UniversalObjectDrawer: React.FC = () => {
     }
   };
 
-  const handleAddLink = () => {
-    if (!targetLinkObjectId) return;
-    addRelation(selectedObject.id, targetLinkObjectId, linkRelationType);
-    setIsLinkingOpen(false);
-    setTargetLinkObjectId('');
+  const handleAddLink = async () => {
+    if (!targetLinkObjectId || isRelationSubmitting) return;
+    setIsRelationSubmitting(true);
+    try {
+      await addRelation(selectedObject.id, targetLinkObjectId, linkRelationType);
+      setIsLinkingOpen(false);
+      setTargetLinkObjectId('');
+    } catch {
+      // NexusContext exposes a user-safe relation error.
+    } finally {
+      setIsRelationSubmitting(false);
+    }
   };
 
   return (
@@ -236,6 +248,9 @@ export const UniversalObjectDrawer: React.FC = () => {
                   setActiveDrawerTab(tab.id as any);
                   if (tab.id === 'comments' || tab.id === 'history') {
                     void reloadObjectCollaboration(selectedObject.id);
+                  }
+                  if (tab.id === 'relations') {
+                    void reloadRelations();
                   }
                 }}
                 className={`flex items-center space-x-1.5 border-b-2 px-3 py-2.5 text-xs font-semibold transition ${
@@ -397,6 +412,11 @@ export const UniversalObjectDrawer: React.FC = () => {
           {/* TAB 2: RELATIONS GRAPH */}
           {activeDrawerTab === 'relations' && (
             <div className="space-y-4">
+              {relationDataError && (
+                <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300">
+                  {relationDataError}
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
                   Grafo de Objetos Vinculados
@@ -451,25 +471,30 @@ export const UniversalObjectDrawer: React.FC = () => {
                         Cancelar
                       </button>
                       <button
-                        onClick={handleAddLink}
-                        className="rounded bg-indigo-600 px-3 py-1 font-semibold text-white hover:bg-indigo-700"
+                        onClick={() => void handleAddLink()}
+                        disabled={isRelationSubmitting}
+                        className="rounded bg-indigo-600 px-3 py-1 font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Guardar Relación
+                        {isRelationSubmitting ? 'Guardando...' : 'Guardar Relación'}
                       </button>
                     </div>
                   </div>
                 </div>
               )}
 
-              {linked.length === 0 ? (
+              {relationDataStatus === 'loading' ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  Cargando relaciones persistentes...
+                </div>
+              ) : linked.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400">
                   No hay relaciones configuradas aún para este objeto.
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {linked.map((item, idx) => (
+                  {linked.map((item) => (
                     <div
-                      key={idx}
+                      key={item.relationId}
                       className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-800/60"
                     >
                       <div className="flex items-center space-x-3">
@@ -485,7 +510,18 @@ export const UniversalObjectDrawer: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      <ArrowRight className="h-4 w-4 text-slate-400" />
+                      <div className="flex items-center gap-1">
+                        <ArrowRight className="h-4 w-4 text-slate-400" />
+                        <button
+                          type="button"
+                          onClick={() => void removeRelation(item.relationId)}
+                          className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+                          aria-label="Eliminar relación"
+                          title="Eliminar relación"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -567,6 +603,13 @@ export const UniversalObjectDrawer: React.FC = () => {
                         <span>•</span>
                         <span>{new Date(log.timestamp).toLocaleString()}</span>
                       </div>
+                      {(log.oldValue !== undefined || log.newValue !== undefined) && (
+                        <div className="mt-1 flex items-start gap-1.5 rounded bg-slate-50 px-2 py-1 text-[10px] text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+                          <span className="max-w-[45%] break-all">{log.oldValue ?? '—'}</span>
+                          <ArrowRight className="mt-0.5 h-3 w-3 shrink-0" />
+                          <span className="max-w-[45%] break-all font-semibold text-slate-700 dark:text-slate-300">{log.newValue ?? '—'}</span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

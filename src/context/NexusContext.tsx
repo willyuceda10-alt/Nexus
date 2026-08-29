@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -32,8 +33,9 @@ import {
 } from '../data/mockData';
 import { calculateProjectHealth } from '../domain/projectHealth';
 import { useApiBootstrap } from './ApiBootstrapContext';
-import { configureApiSession, BridataApiError } from '../api/client';
+import { configureApiSession, BridataApiError, bridataApi } from '../api/client';
 import { collaborationV1Api } from '../api/collaborationV1Client';
+import { objectRelationsV1Api } from '../api/objectRelationsV1Client';
 import { mapApiObjectCommentV1, mapObjectCollaborationV1 } from '../domain/collaborationV1';
 import {
   apiActorToUser,
@@ -49,6 +51,7 @@ import {
 
 export type ObjectDataStatus = 'mock' | 'waiting' | 'loading' | 'ready' | 'error';
 export type CollaborationDataStatus = 'mock' | 'idle' | 'loading' | 'ready' | 'error';
+export type RelationDataStatus = 'mock' | 'waiting' | 'loading' | 'ready' | 'error';
 
 interface NexusContextType {
   tenant: Tenant;
@@ -61,6 +64,9 @@ interface NexusContextType {
   portfolios: Portfolio[];
   objects: NexusObject[];
   relations: ObjectRelation[];
+  relationDataStatus: RelationDataStatus;
+  relationDataError: string | null;
+  reloadRelations: () => Promise<void>;
   activityLogs: ActivityLog[];
   comments: Comment[];
   selectedObjectActivityLogs: ActivityLog[];
@@ -101,7 +107,8 @@ interface NexusContextType {
     targetId: string,
     relationType: ObjectRelation['relationType'],
     notes?: string,
-  ) => void;
+  ) => Promise<ObjectRelation>;
+  removeRelation: (relationId: string) => Promise<void>;
   addComment: (objectId: string, content: string) => Promise<Comment>;
   decideApproval: (
     approvalId: string,
@@ -112,7 +119,7 @@ interface NexusContextType {
   getProjectHealth: (projectId: string) => ProjectHealthMetrics;
   getLinkedObjects: (
     objectId: string,
-  ) => { object: NexusObject; relationType: string; notes?: string }[];
+  ) => { relationId: string; object: NexusObject; relationType: string; notes?: string }[];
 }
 
 const NexusContext = createContext<NexusContextType | undefined>(undefined);
@@ -164,6 +171,8 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   );
   const [objects, setObjects] = useState<NexusObject[]>(isApiMode ? [] : mockObjects);
   const [relations, setRelations] = useState<ObjectRelation[]>(isApiMode ? [] : mockRelations);
+  const [relationDataStatus, setRelationDataStatus] = useState<RelationDataStatus>(isApiMode ? 'waiting' : 'mock');
+  const [relationDataError, setRelationDataError] = useState<string | null>(null);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(isApiMode ? [] : mockActivityLogs);
   const [comments, setComments] = useState<Comment[]>(isApiMode ? [] : mockComments);
   const [apiObjectComments, setApiObjectComments] = useState<Comment[]>([]);
@@ -172,6 +181,8 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     isApiMode ? 'idle' : 'mock',
   );
   const [collaborationError, setCollaborationError] = useState<string | null>(null);
+  const collaborationRequestVersionRef = useRef(0);
+  const collaborationObjectIdRef = useRef<string | null>(null);
   const [approvals, setApprovals] = useState<ApprovalStep[]>(isApiMode ? [] : mockApprovals);
   const [objectDataStatus, setObjectDataStatus] = useState<ObjectDataStatus>(
     isApiMode ? 'waiting' : 'mock',
@@ -247,6 +258,7 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [selectedObjectId, isApiMode, apiObjectActivityLogs, activityLogs]);
 
   const reloadObjectCollaboration = useCallback(async (objectId?: string): Promise<void> => {
+    const requestVersion = ++collaborationRequestVersionRef.current;
     if (!isApiMode) {
       setCollaborationStatus('mock');
       setCollaborationError(null);
@@ -270,11 +282,13 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         auditLimit: 100,
         historyLimit: 100,
       });
+      if (requestVersion !== collaborationRequestVersionRef.current || collaborationObjectIdRef.current !== targetId) return;
       const mapped = mapObjectCollaborationV1(payload);
       setApiObjectComments(mapped.comments);
       setApiObjectActivityLogs(mapped.activityLogs);
       setCollaborationStatus('ready');
     } catch (cause) {
+      if (requestVersion !== collaborationRequestVersionRef.current || collaborationObjectIdRef.current !== targetId) return;
       setApiObjectComments([]);
       setApiObjectActivityLogs([]);
       setCollaborationStatus('error');
@@ -337,9 +351,45 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     apiBootstrap.error,
   ]);
 
+  const reloadRelations = useCallback(async (): Promise<void> => {
+    if (!isApiMode) {
+      setRelationDataStatus('mock');
+      setRelationDataError(null);
+      return;
+    }
+    if (!apiReady || !currentWorkspaceId) {
+      setRelations([]);
+      setRelationDataStatus('waiting');
+      setRelationDataError(null);
+      return;
+    }
+
+    setRelationDataStatus('loading');
+    setRelationDataError(null);
+    try {
+      const response = await objectRelationsV1Api.list(currentWorkspaceId);
+      setRelations(response.items.map((item) => ({
+        id: item.id,
+        sourceObjectId: item.sourceObjectId,
+        targetObjectId: item.targetObjectId,
+        relationType: item.relationType,
+        ...(item.notes ? { notes: item.notes } : {}),
+      })));
+      setRelationDataStatus('ready');
+    } catch (cause) {
+      setRelations([]);
+      setRelationDataStatus('error');
+      setRelationDataError(dataErrorMessage(cause));
+    }
+  }, [isApiMode, apiReady, currentWorkspaceId]);
+
   useEffect(() => {
     void reloadObjects();
   }, [reloadObjects]);
+
+  useEffect(() => {
+    void reloadRelations();
+  }, [reloadRelations]);
 
   useEffect(() => {
     if (!isDrawerOpen || !selectedObjectId) return;
@@ -369,6 +419,8 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const openObjectDrawer = (objectId: string) => {
+    collaborationRequestVersionRef.current += 1;
+    collaborationObjectIdRef.current = objectId;
     if (isApiMode) {
       setApiObjectComments([]);
       setApiObjectActivityLogs([]);
@@ -380,6 +432,8 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const closeObjectDrawer = () => {
+    collaborationRequestVersionRef.current += 1;
+    collaborationObjectIdRef.current = null;
     setIsDrawerOpen(false);
     setSelectedObjectId(null);
     if (isApiMode) {
@@ -512,20 +566,99 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const addRelation = (
+  const addRelation = async (
     sourceObjectId: string,
     targetObjectId: string,
     relationType: ObjectRelation['relationType'],
     notes?: string,
-  ) => {
-    const newRelation: ObjectRelation = {
-      id: `rel-${crypto.randomUUID()}`,
-      sourceObjectId,
-      targetObjectId,
-      relationType,
-      ...(notes ? { notes } : {}),
-    };
-    setRelations((previous) => [...previous, newRelation]);
+  ): Promise<ObjectRelation> => {
+    if (!isApiMode) {
+      const newRelation: ObjectRelation = {
+        id: `rel-${crypto.randomUUID()}`,
+        sourceObjectId,
+        targetObjectId,
+        relationType,
+        ...(notes ? { notes } : {}),
+      };
+      setRelations((previous) => [...previous, newRelation]);
+      return newRelation;
+    }
+
+    if (!apiReady) throw new Error('La API todavía no está lista para guardar relaciones.');
+    setRelationDataError(null);
+    try {
+      let newRelation: ObjectRelation;
+      if (relationType === 'DEPENDS_ON') {
+        const dependency = await bridataApi.createDependency({
+          predecessorId: targetObjectId,
+          successorId: sourceObjectId,
+          dependencyType: 'FS',
+          lagDays: 0,
+          ...(notes ? { notes } : {}),
+        });
+        newRelation = {
+          id: dependency.id,
+          sourceObjectId: dependency.successorId,
+          targetObjectId: dependency.predecessorId,
+          relationType: 'DEPENDS_ON',
+          ...(dependency.notes ? { notes: dependency.notes } : {}),
+          dependencyType: dependency.dependencyType,
+          lagDays: dependency.lagDays,
+        };
+      } else {
+        const relation = await objectRelationsV1Api.create({
+          sourceObjectId,
+          targetObjectId,
+          relationType,
+          ...(notes ? { notes } : {}),
+        });
+        newRelation = {
+          id: relation.id,
+          sourceObjectId: relation.sourceObjectId,
+          targetObjectId: relation.targetObjectId,
+          relationType: relation.relationType,
+          ...(relation.notes ? { notes: relation.notes } : {}),
+        };
+      }
+      setRelations((previous) => [...previous.filter((item) => item.id !== newRelation.id), newRelation]);
+      setRelationDataStatus('ready');
+      if (selectedObjectId === sourceObjectId || selectedObjectId === targetObjectId) {
+        void reloadObjectCollaboration(selectedObjectId);
+      }
+      return newRelation;
+    } catch (cause) {
+      setRelationDataStatus('error');
+      setRelationDataError(dataErrorMessage(cause));
+      throw cause;
+    }
+  };
+
+  const removeRelation = async (relationId: string): Promise<void> => {
+    const relation = relations.find((item) => item.id === relationId);
+    if (!relation) return;
+
+    if (!isApiMode) {
+      setRelations((previous) => previous.filter((item) => item.id !== relationId));
+      return;
+    }
+
+    setRelationDataError(null);
+    try {
+      if (relation.relationType === 'DEPENDS_ON') {
+        await bridataApi.deleteDependency(relationId);
+      } else {
+        await objectRelationsV1Api.delete(relationId);
+      }
+      setRelations((previous) => previous.filter((item) => item.id !== relationId));
+      setRelationDataStatus('ready');
+      if (selectedObjectId === relation.sourceObjectId || selectedObjectId === relation.targetObjectId) {
+        void reloadObjectCollaboration(selectedObjectId);
+      }
+    } catch (cause) {
+      setRelationDataStatus('error');
+      setRelationDataError(dataErrorMessage(cause));
+      throw cause;
+    }
   };
 
   const addComment = async (objectId: string, content: string): Promise<Comment> => {
@@ -538,12 +671,16 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         const created = await collaborationV1Api.createObjectComment(objectId, { content: normalized });
         const mapped = mapApiObjectCommentV1(created);
-        setApiObjectComments((previous) => [mapped, ...previous.filter((item) => item.id !== mapped.id)]);
-        await reloadObjectCollaboration(objectId);
+        if (collaborationObjectIdRef.current === objectId) {
+          setApiObjectComments((previous) => [mapped, ...previous.filter((item) => item.id !== mapped.id)]);
+          await reloadObjectCollaboration(objectId);
+        }
         return mapped;
       } catch (cause) {
-        setCollaborationStatus('error');
-        setCollaborationError(dataErrorMessage(cause));
+        if (collaborationObjectIdRef.current === objectId) {
+          setCollaborationStatus('error');
+          setCollaborationError(dataErrorMessage(cause));
+        }
         throw cause;
       }
     }
@@ -589,13 +726,14 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const getLinkedObjects = (objectId: string) => {
-    const linked: { object: NexusObject; relationType: string; notes?: string }[] = [];
+    const linked: { relationId: string; object: NexusObject; relationType: string; notes?: string }[] = [];
 
     relations.forEach((relation) => {
       if (relation.sourceObjectId === objectId) {
         const target = objects.find((object) => object.id === relation.targetObjectId);
         if (target) {
           linked.push({
+            relationId: relation.id,
             object: target,
             relationType: relation.relationType,
             ...(relation.notes ? { notes: relation.notes } : {}),
@@ -605,6 +743,7 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const source = objects.find((object) => object.id === relation.sourceObjectId);
         if (source) {
           linked.push({
+            relationId: relation.id,
             object: source,
             relationType: `INVERSE_${relation.relationType}`,
             ...(relation.notes ? { notes: relation.notes } : {}),
@@ -635,6 +774,9 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         portfolios,
         objects,
         relations,
+        relationDataStatus,
+        relationDataError,
+        reloadRelations,
         activityLogs,
         comments,
         selectedObjectActivityLogs,
@@ -667,6 +809,7 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateNexusObject,
         deleteNexusObject,
         addRelation,
+        removeRelation,
         addComment,
         decideApproval,
         getProjectHealth,

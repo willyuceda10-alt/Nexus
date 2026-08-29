@@ -43,6 +43,10 @@ function auditAction(entry: ApiObjectAuditEntryV1): string {
     }
     case 'OBJECT_COMMENT_CREATED':
       return 'Agregó un comentario';
+    case 'OBJECT_RELATION_CREATED':
+      return 'Vinculó un objeto';
+    case 'OBJECT_RELATION_DELETED':
+      return 'Eliminó una relación de objeto';
     case 'OBJECT_SOFT_DELETED':
       return 'Eliminó el objeto';
     default:

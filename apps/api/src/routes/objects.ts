@@ -56,6 +56,19 @@ function asJson(value: Record<string, unknown> | null) {
   return value as Prisma.InputJsonValue;
 }
 
+function historyComparableValue(value: unknown): unknown {
+  if (value instanceof Date) return value.toISOString();
+  return value ?? null;
+}
+
+function historyValuesEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(historyComparableValue(left)) === JSON.stringify(historyComparableValue(right));
+}
+
+function historyJson(value: unknown): string {
+  return JSON.stringify(historyComparableValue(value)) ?? 'null';
+}
+
 function isTenantAdmin(actor: ActorContext): boolean {
   return actor.role === 'OWNER' || actor.role === 'TENANT_ADMIN';
 }
@@ -319,7 +332,19 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
             tenantId: actor.tenantId,
             deletedAt: null,
           },
-          select: { id: true, workspaceId: true },
+          select: {
+            id: true,
+            workspaceId: true,
+            title: true,
+            description: true,
+            status: true,
+            priority: true,
+            progress: true,
+            assigneeId: true,
+            startDate: true,
+            dueDate: true,
+            metadata: true,
+          },
         });
 
         if (!current) return { kind: 'not_found' as const };
@@ -363,7 +388,29 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
           where: { id: params.data.id },
         });
 
+        const historyChanges = [
+          ...(updates.title !== undefined ? [{ fieldKey: 'title', oldValue: current.title, newValue: object.title }] : []),
+          ...(updates.description !== undefined ? [{ fieldKey: 'description', oldValue: current.description, newValue: object.description }] : []),
+          ...(updates.status !== undefined ? [{ fieldKey: 'status', oldValue: current.status, newValue: object.status }] : []),
+          ...(updates.priority !== undefined ? [{ fieldKey: 'priority', oldValue: current.priority, newValue: object.priority }] : []),
+          ...(updates.progress !== undefined ? [{ fieldKey: 'progress', oldValue: current.progress, newValue: object.progress }] : []),
+          ...(updates.assigneeId !== undefined ? [{ fieldKey: 'assigneeId', oldValue: current.assigneeId, newValue: object.assigneeId }] : []),
+          ...(updates.startDate !== undefined ? [{ fieldKey: 'startDate', oldValue: current.startDate, newValue: object.startDate }] : []),
+          ...(updates.dueDate !== undefined ? [{ fieldKey: 'dueDate', oldValue: current.dueDate, newValue: object.dueDate }] : []),
+          ...(updates.metadata !== undefined ? [{ fieldKey: 'metadata', oldValue: current.metadata, newValue: object.metadata }] : []),
+        ].filter((entry) => !historyValuesEqual(entry.oldValue, entry.newValue));
+        const changedFields = historyChanges.map((entry) => entry.fieldKey);
+        const userAgentHeader = request.headers['user-agent'];
+        const userAgent = typeof userAgentHeader === 'string' ? userAgentHeader : null;
+
         await Promise.all([
+          ...historyChanges.map((entry) => tx.$executeRaw(Prisma.sql`
+            INSERT INTO object_history
+              (tenant_id, object_id, user_id, field_key, old_value, new_value, ip_address, user_agent)
+            VALUES
+              (${actor.tenantId}::uuid, ${object.id}::uuid, ${actor.userId}::uuid, ${entry.fieldKey},
+               ${historyJson(entry.oldValue)}::jsonb, ${historyJson(entry.newValue)}::jsonb, ${request.ip}, ${userAgent})
+          `)),
           tx.domainEvent.create({
             data: {
               tenantId: actor.tenantId,
@@ -374,7 +421,7 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
                 actorId: actor.userId,
                 previousVersion: version,
                 version: object.version,
-                changedFields: Object.keys(updates),
+                changedFields,
               },
             },
           }),
@@ -389,7 +436,8 @@ export async function objectRoutes(app: FastifyInstance): Promise<void> {
               ipAddress: request.ip,
               details: {
                 version: object.version,
-                changedFields: Object.keys(updates),
+                changedFields,
+                historyEntries: historyChanges.length,
               },
             },
           }),

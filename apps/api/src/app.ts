@@ -35,6 +35,7 @@ import { recurringMeetingLifecycleV1Routes } from './routes/recurring-meeting-li
 import { recurringMeetingsV1Routes } from './routes/recurring-meetings-v1.js';
 import { notificationCapabilitiesV1Routes } from './routes/notification-capabilities-v1.js';
 import { notificationPreferencesV1Routes } from './routes/notification-preferences-v1.js';
+import { objectRelationsV1Routes } from './routes/object-relations-v1.js';
 import { objectRoutes } from './routes/objects.js';
 import { outboxAdminV2Routes } from './routes/outbox-admin-v2.js';
 import { projectEngineV2BackfillRoutes } from './routes/project-engine-v2-backfill.js';
@@ -162,6 +163,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
   await app.register(collaborationV1Routes);
+  await app.register(objectRelationsV1Routes);
   await app.register(meetingsV1Routes);
   await app.register(meetingPeopleV1Routes);
   await app.register(meetingAvailabilityV1Routes);
