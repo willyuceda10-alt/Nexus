@@ -64,6 +64,33 @@ patch(
 )
 
 patch(
+    'apps/api/src/sap-workbook-parser-v1.ts',
+    "import ExcelJS, { type CellValue } from 'exceljs';",
+    "import ExcelJS from 'exceljs';",
+)
+patch(
+    'apps/api/src/sap-workbook-parser-v1.ts',
+    'function scalarFromCell(value: CellValue): SapCellScalar {',
+    'function scalarFromCell(value: ExcelJS.CellValue): SapCellScalar {',
+)
+patch(
+    'apps/api/src/sap-workbook-parser-v1.ts',
+    'return scalarFromCell(value.result as CellValue);',
+    'return scalarFromCell(value.result as ExcelJS.CellValue);',
+)
+patch(
+    'apps/api/src/sap-workbook-parser-v1.ts',
+    'function headerText(value: CellValue): string {',
+    'function headerText(value: ExcelJS.CellValue): string {',
+)
+
+patch(
+    'apps/api/src/routes/sap-integration-parser-v1b.ts',
+    '      let parsed;\n      try {\n        parsed = await parseSapWorkbookV1(binaryContent);',
+    '      let parsed: Awaited<ReturnType<typeof parseSapWorkbookV1>>;\n      try {\n        parsed = await parseSapWorkbookV1(binaryContent);',
+)
+
+patch(
     '.github/workflows/ci.yml',
     '        run: npx tsx apps/api/test/sap-integration-foundation-v1a-smoke.ts\n\n'
     '      - name: Verify persistent object approval lifecycle\n',
