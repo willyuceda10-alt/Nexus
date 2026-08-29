@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import ExcelJS from 'exceljs';
+import { Prisma } from '@prisma/client';
 import { buildApp } from '../src/app.js';
 import { MemoryIntegrationBinaryStoreV1 } from '../src/integration-binary-store-v1.js';
 import { withTenant } from '../src/tenant-transaction.js';
@@ -33,13 +34,30 @@ async function openPurchaseOrdersWorkbook(): Promise<Buffer> {
 }
 
 async function canonicalCounts() {
-  return withTenant(TENANT_ID, async (tx) => ({
-    purchaseRequisitions: await tx.purchaseRequisitionV2.count({ where: { tenantId: TENANT_ID } }),
-    purchaseOrders: await tx.purchaseOrderV2.count({ where: { tenantId: TENANT_ID } }),
-    inventoryMovements: await tx.inventoryMovementV2.count({ where: { tenantId: TENANT_ID } }),
-    projectCommitments: await tx.projectCommitmentV2.count({ where: { tenantId: TENANT_ID } }),
-    projectActualCosts: await tx.projectActualCostV2.count({ where: { tenantId: TENANT_ID } }),
-  }));
+  return withTenant(TENANT_ID, async (tx) => {
+    const rows = await tx.$queryRaw<Array<{
+      purchase_requisitions: bigint;
+      purchase_orders: bigint;
+      inventory_movements: bigint;
+      project_commitments: bigint;
+      project_actual_costs: bigint;
+    }>>(Prisma.sql`
+      SELECT
+        (SELECT COUNT(*) FROM purchase_requisitions WHERE tenant_id = ${TENANT_ID}::uuid) AS purchase_requisitions,
+        (SELECT COUNT(*) FROM purchase_orders WHERE tenant_id = ${TENANT_ID}::uuid) AS purchase_orders,
+        (SELECT COUNT(*) FROM inventory_movements WHERE tenant_id = ${TENANT_ID}::uuid) AS inventory_movements,
+        (SELECT COUNT(*) FROM project_commitments WHERE tenant_id = ${TENANT_ID}::uuid) AS project_commitments,
+        (SELECT COUNT(*) FROM project_actual_costs WHERE tenant_id = ${TENANT_ID}::uuid) AS project_actual_costs
+    `);
+    const row = rows[0]!;
+    return {
+      purchaseRequisitions: Number(row.purchase_requisitions),
+      purchaseOrders: Number(row.purchase_orders),
+      inventoryMovements: Number(row.inventory_movements),
+      projectCommitments: Number(row.project_commitments),
+      projectActualCosts: Number(row.project_actual_costs),
+    };
+  });
 }
 
 async function main() {
