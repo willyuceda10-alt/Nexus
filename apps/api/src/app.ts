@@ -11,6 +11,7 @@ import { automationActionsV2Routes } from './routes/automation-actions-v2.js';
 import { automationV1Routes } from './routes/automation-v1.js';
 import { baselineRoutes } from './routes/baselines.js';
 import { bootstrapRoutes } from './routes/bootstrap.js';
+import { collaborationV1Routes } from './routes/collaboration-v1.js';
 import { costOperationsV2Routes } from './routes/cost-operations-v2.js';
 import { costOverviewV2Routes } from './routes/cost-overview-v2.js';
 import { dependencyRoutes } from './routes/dependencies.js';
@@ -160,6 +161,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(notificationCapabilitiesV1Routes);
   await app.register(bootstrapRoutes);
   await app.register(objectRoutes);
+  await app.register(collaborationV1Routes);
   await app.register(meetingsV1Routes);
   await app.register(meetingPeopleV1Routes);
   await app.register(meetingAvailabilityV1Routes);
