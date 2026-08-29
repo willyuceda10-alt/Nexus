@@ -15,7 +15,7 @@ import { projectCostCurrency, validProject, validWorkItem } from './cost-engine-
 
 const connectionParams = z.object({ connectionId: z.string().uuid() });
 const mappingBody = z.object({
-  wbsElement: z.string().trim().min(1).max(255),
+  wbsElement: z.string().trim().min(1).max(240),
   projectId: z.string().uuid(),
   workItemId: z.string().uuid().nullable().optional(),
 });
@@ -72,6 +72,10 @@ function dateTimeOrNull(value: string | null): Date | null {
   if (!value) return null;
   const parsed = new Date(value.length === 10 ? `${value}T00:00:00.000Z` : value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function toInputJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
 function workItemFromMetadata(value: Prisma.JsonValue | null): string | null {
@@ -438,6 +442,16 @@ export async function sapIntegrationFinancialGuardV1d3Routes(app: FastifyInstanc
             blockers.push({ recordId: candidate.recordId, code: 'WBS_PROJECT_MAPPING_STALE' });
             continue;
           }
+          if (!(await validWorkItem(
+            tx,
+            actor.tenantId,
+            candidate.workspaceId,
+            candidate.projectId,
+            candidate.workItemId,
+          ))) {
+            blockers.push({ recordId: candidate.recordId, code: 'WBS_WORK_ITEM_MAPPING_STALE' });
+            continue;
+          }
           const projectCurrency = await projectCostCurrency(tx, actor.tenantId, candidate.projectId);
           if (candidate.currency && candidate.currency !== projectCurrency) {
             blockers.push({
@@ -592,12 +606,12 @@ export async function sapIntegrationFinancialGuardV1d3Routes(app: FastifyInstanc
             resourceId: connection.id,
             correlationId: request.id,
             ipAddress: request.ip,
-            details: {
+            details: toInputJson({
               counters,
               blockers: blockers.slice(0, 100),
               commitmentAuthority: 'PR_UNTIL_PO_THEN_PURCHASE_ORDER_LEDGER',
               actualCostCanonicalWriteEnabled: false,
-            },
+            }),
           },
         });
         await tx.domainEvent.create({
