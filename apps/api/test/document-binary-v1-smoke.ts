@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { buildApp } from '../src/app.js';
 import { MemoryDocumentBinaryStoreV1 } from '../src/document-binary-store-v1.js';
 import { prisma } from '../src/db.js';
@@ -9,15 +9,12 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function multipartFile(fileName: string, mimeType: string, content: Buffer) {
-  const boundary = `----bridata-${randomUUID()}`;
-  const prefix = Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${mimeType}\r\n\r\n`,
-  );
-  const suffix = Buffer.from(`\r\n--${boundary}--\r\n`);
+function uploadHeaders(fileName: string, mimeType: string, correlationId: string) {
   return {
-    boundary,
-    payload: Buffer.concat([prefix, content, suffix]),
+    'content-type': 'application/octet-stream',
+    'x-bridata-file-name': encodeURIComponent(fileName),
+    'x-bridata-file-mime-type': mimeType,
+    'x-correlation-id': correlationId,
   };
 }
 
@@ -58,15 +55,11 @@ async function main() {
     objectId = (createResponse.json() as { id: string }).id;
 
     const v1Content = Buffer.from('%PDF-1.7\nBridata document binary V1');
-    const v1Form = multipartFile('specification.pdf', 'application/pdf', v1Content);
     const uploadV1 = await app.inject({
       method: 'POST',
       url: `/api/v1/document-binary-v1/${objectId}/versions`,
-      headers: {
-        'content-type': `multipart/form-data; boundary=${v1Form.boundary}`,
-        'x-correlation-id': 'ci-document-binary-upload-v1',
-      },
-      payload: v1Form.payload,
+      headers: uploadHeaders('specification.pdf', 'application/pdf', 'ci-document-binary-upload-v1'),
+      payload: v1Content,
     });
     assert(uploadV1.statusCode === 201, `Upload V1 failed: ${uploadV1.body}`);
     const version1 = uploadV1.json() as {
@@ -83,15 +76,11 @@ async function main() {
     );
 
     const v2Content = Buffer.from('%PDF-1.7\nBridata document binary V2 with revision');
-    const v2Form = multipartFile('specification.pdf', 'application/pdf', v2Content);
     const uploadV2 = await app.inject({
       method: 'POST',
       url: `/api/v1/document-binary-v1/${objectId}/versions`,
-      headers: {
-        'content-type': `multipart/form-data; boundary=${v2Form.boundary}`,
-        'x-correlation-id': 'ci-document-binary-upload-v2',
-      },
-      payload: v2Form.payload,
+      headers: uploadHeaders('specification.pdf', 'application/pdf', 'ci-document-binary-upload-v2'),
+      payload: v2Content,
     });
     assert(uploadV2.statusCode === 201, `Upload V2 failed: ${uploadV2.body}`);
     const version2 = uploadV2.json() as {
@@ -111,10 +100,11 @@ async function main() {
     });
     assert(versionsResponse.statusCode === 200, `Version list failed: ${versionsResponse.body}`);
     const versions = versionsResponse.json() as {
-      items: Array<{ id: string; versionNumber: number; previousAttachmentId: string | null }>;
+      items: Array<Record<string, unknown> & { id: string; versionNumber: number; previousAttachmentId: string | null }>;
     };
     assert(versions.items.length === 2, 'Document must expose exactly two persistent binary versions.');
     assert(versions.items[0]?.id === version2.id && versions.items[0]?.versionNumber === 2, 'Latest version must be V2.');
+    assert(!('storageKey' in versions.items[0]!), 'Internal Blob storageKey must not be exposed to the web client.');
 
     const download = await app.inject({
       method: 'GET',
@@ -126,15 +116,11 @@ async function main() {
     assert(download.headers['content-type']?.startsWith('application/pdf'), 'Download must preserve MIME type.');
     assert(download.headers['content-disposition']?.includes('specification.pdf'), 'Download must preserve safe file name.');
 
-    const blockedForm = multipartFile('malware.exe', 'application/octet-stream', Buffer.from('MZ'));
     const blocked = await app.inject({
       method: 'POST',
       url: `/api/v1/document-binary-v1/${objectId}/versions`,
-      headers: {
-        'content-type': `multipart/form-data; boundary=${blockedForm.boundary}`,
-        'x-correlation-id': 'ci-document-binary-blocked-type',
-      },
-      payload: blockedForm.payload,
+      headers: uploadHeaders('malware.exe', 'application/octet-stream', 'ci-document-binary-blocked-type'),
+      payload: Buffer.from('MZ'),
     });
     assert(blocked.statusCode === 415, `Executable upload must be rejected, got ${blocked.statusCode}.`);
 
@@ -159,6 +145,7 @@ async function main() {
       realBinaryRoundTrip: true,
       sha256FromBytes: true,
       persistentVersionLineage: true,
+      storageKeyHidden: true,
       executableBlock: true,
       downloadAudit: true,
       memoryOnlyTestStore: true,
