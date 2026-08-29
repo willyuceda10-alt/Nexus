@@ -9,7 +9,6 @@ export interface ApiDocumentVersionV1 {
   id: string;
   objectId: string;
   fileName: string;
-  storageKey: string;
   fileSize: string;
   mimeType: string;
   checksumSha256: string | null;
