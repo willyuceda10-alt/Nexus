@@ -594,8 +594,11 @@ model ObjectAttachment {
   storageKey     String   @map("storage_key") @db.Text
   fileSize       BigInt   @map("file_size")
   mimeType       String   @map("mime_type") @db.VarChar(150)
-  checksumSha256 String?  @map("checksum_sha256") @db.VarChar(64)
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  checksumSha256      String?  @map("checksum_sha256") @db.VarChar(64)
+  versionNumber       Int      @default(1) @map("version_number")
+  uploadedByUserId    String?  @map("uploaded_by_user_id") @db.Uuid
+  previousAttachmentId String? @map("previous_attachment_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   object NexusObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
