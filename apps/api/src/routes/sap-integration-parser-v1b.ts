@@ -169,7 +169,7 @@ export async function sapIntegrationParserV1bRoutes(
       const contentType = originalContentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
       if (contentType.length > 150) return reply.code(400).send({ error: 'integration_content_type_invalid' });
 
-      let parsed;
+      let parsed: Awaited<ReturnType<typeof parseSapWorkbookV1>>;
       try {
         parsed = await parseSapWorkbookV1(binaryContent);
       } catch (error) {
@@ -392,6 +392,10 @@ export async function sapIntegrationParserV1bRoutes(
       maxSheets: 20,
       maxColumns: 256,
       maxRows: 200000,
+      stagingPersistence: 'postgresql',
+      operationalDataSource: 'bridata_postgresql_canonical',
+      excelRole: 'transport_and_audit_evidence_only',
+      runtimeReadsImportedWorkbook: false,
       canonicalWriteEnabled: false,
       servicePrincipalAuthenticationEnabled: false,
       supportedSources: [

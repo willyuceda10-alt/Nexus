@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import ExcelJS, { type CellValue } from 'exceljs';
+import ExcelJS from 'exceljs';
 import {
   detectSapSource,
   normalizeSapRow,
@@ -54,12 +54,12 @@ export class SapWorkbookParseError extends Error {
   }
 }
 
-function scalarFromCell(value: CellValue): SapCellScalar {
+function scalarFromCell(value: ExcelJS.CellValue): SapCellScalar {
   if (value === null || value === undefined) return null;
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
   if (typeof value === 'object') {
-    if ('result' in value) return scalarFromCell(value.result as CellValue);
+    if ('result' in value) return scalarFromCell(value.result as ExcelJS.CellValue);
     if ('richText' in value && Array.isArray(value.richText)) {
       return value.richText.map((part) => part.text).join('');
     }
@@ -69,7 +69,7 @@ function scalarFromCell(value: CellValue): SapCellScalar {
   return String(value);
 }
 
-function headerText(value: CellValue): string {
+function headerText(value: ExcelJS.CellValue): string {
   const scalar = scalarFromCell(value);
   return scalar === null ? '' : String(scalar).trim();
 }

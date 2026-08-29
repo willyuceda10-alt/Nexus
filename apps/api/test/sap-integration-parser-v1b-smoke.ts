@@ -41,6 +41,33 @@ async function makeUnknownWorkbook(): Promise<Buffer> {
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
+async function canonicalCounts() {
+  return withTenant(TENANT_ID, async (tx) => {
+    const rows = await tx.$queryRaw<Array<{
+      purchase_requisitions: bigint;
+      purchase_orders: bigint;
+      inventory_movements: bigint;
+      project_commitments: bigint;
+      project_actual_costs: bigint;
+    }>>`
+      SELECT
+        (SELECT COUNT(*) FROM purchase_requisitions WHERE tenant_id = ${TENANT_ID}::uuid) AS purchase_requisitions,
+        (SELECT COUNT(*) FROM purchase_orders WHERE tenant_id = ${TENANT_ID}::uuid) AS purchase_orders,
+        (SELECT COUNT(*) FROM inventory_movements WHERE tenant_id = ${TENANT_ID}::uuid) AS inventory_movements,
+        (SELECT COUNT(*) FROM project_commitments WHERE tenant_id = ${TENANT_ID}::uuid) AS project_commitments,
+        (SELECT COUNT(*) FROM project_actual_costs WHERE tenant_id = ${TENANT_ID}::uuid) AS project_actual_costs
+    `;
+    const row = rows[0]!;
+    return {
+      purchaseRequisitions: Number(row.purchase_requisitions),
+      purchaseOrders: Number(row.purchase_orders),
+      inventoryMovements: Number(row.inventory_movements),
+      projectCommitments: Number(row.project_commitments),
+      projectActualCosts: Number(row.project_actual_costs),
+    };
+  });
+}
+
 async function main() {
   const connection = await withTenant(TENANT_ID, (tx) => tx.integrationConnection.create({
     data: {
@@ -55,6 +82,7 @@ async function main() {
 
   const app = await buildApp({ integrationBinaryStore: new MemoryIntegrationBinaryStoreV1() });
   const workbookBytes = await makeProjectProcurementWorkbook();
+  const canonicalBefore = await canonicalCounts();
 
   try {
     const upload = await app.inject({
@@ -126,6 +154,11 @@ async function main() {
     assert(persisted.issues.length === 0, `Unexpected row issues in valid project procurement workbook: ${JSON.stringify(persisted.issues)}`);
     assert(persisted.entityLinks === 0, 'V1-B wrote canonical entity links before reconciliation/application phase.');
     assert(persisted.audits === 1 && persisted.events === 1, 'Automatic parsing audit/domain event missing or duplicated.');
+    const canonicalAfter = await canonicalCounts();
+    assert(
+      JSON.stringify(canonicalAfter) === JSON.stringify(canonicalBefore),
+      `V1-B mutated canonical Bridata tables: before=${JSON.stringify(canonicalBefore)} after=${JSON.stringify(canonicalAfter)}`,
+    );
 
     const duplicate = await app.inject({
       method: 'POST',
@@ -157,10 +190,18 @@ async function main() {
     assert(capabilities.statusCode === 200, `Parser capabilities failed: ${capabilities.statusCode}`);
     const capabilityBody = capabilities.json<{
       filenameUsedForDetection: boolean;
+      stagingPersistence: string;
+      operationalDataSource: string;
+      excelRole: string;
+      runtimeReadsImportedWorkbook: boolean;
       canonicalWriteEnabled: boolean;
       servicePrincipalAuthenticationEnabled: boolean;
     }>();
     assert(capabilityBody.filenameUsedForDetection === false, 'Capabilities incorrectly claim filename-based detection.');
+    assert(capabilityBody.stagingPersistence === 'postgresql', 'Parsed staging data is not declared PostgreSQL-backed.');
+    assert(capabilityBody.operationalDataSource === 'bridata_postgresql_canonical', 'Operational data source is not Bridata canonical PostgreSQL.');
+    assert(capabilityBody.excelRole === 'transport_and_audit_evidence_only', 'Excel is not restricted to transport/audit evidence.');
+    assert(capabilityBody.runtimeReadsImportedWorkbook === false, 'Runtime incorrectly depends on imported workbook reads.');
     assert(capabilityBody.canonicalWriteEnabled === false, 'Parser phase unexpectedly enables canonical writes.');
     assert(capabilityBody.servicePrincipalAuthenticationEnabled === false, 'Service-principal auth was enabled before its security phase.');
 
@@ -179,6 +220,10 @@ async function main() {
       goodsReceiptFlagNotReceiptStatus: true,
       sha256IdempotencyPreserved: true,
       unsupportedStructureRejected: true,
+      stagingPersistedInPostgreSql: true,
+      excelIsTransportOnly: true,
+      operationalRuntimeDoesNotReadExcel: true,
+      canonicalTablesUnchanged: true,
       canonicalWritesDisabled: true,
       rlsFailClosed: true,
     }));
