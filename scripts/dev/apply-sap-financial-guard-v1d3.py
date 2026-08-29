@@ -15,22 +15,25 @@ if new_wbs not in route:
         raise SystemExit('WBS max-length anchor missing')
     route = route.replace(old_wbs, new_wbs, 1)
 
-old_lock = """  await tx.$executeRaw(Prisma.sql`
-    SELECT pg_advisory_xact_lock(
-      hashtextextended(${`${tenantId}:${connectionId}:SAP_FINANCIAL:${externalKey}`}, 0)
-    )
-  `);
-"""
-new_lock = """  await tx.$queryRaw<Array<{ lock_result: unknown }>>(Prisma.sql`
+# Keep PostgreSQL advisory lock on $executeRaw. pg_advisory_xact_lock returns
+# PostgreSQL void, which Prisma $queryRaw cannot deserialize. $executeRaw executes
+# the SELECT while intentionally ignoring the result column.
+unsafe_query_lock = """  await tx.$queryRaw<Array<{ lock_result: unknown }>>(Prisma.sql`
     SELECT pg_advisory_xact_lock(
       hashtextextended(${`${tenantId}:${connectionId}:SAP_FINANCIAL:${externalKey}`}, 0)
     ) AS lock_result
   `);
 """
-if new_lock not in route:
-    if old_lock not in route:
-        raise SystemExit('financial advisory lock anchor missing')
-    route = route.replace(old_lock, new_lock, 1)
+safe_execute_lock = """  await tx.$executeRaw(Prisma.sql`
+    SELECT pg_advisory_xact_lock(
+      hashtextextended(${`${tenantId}:${connectionId}:SAP_FINANCIAL:${externalKey}`}, 0)
+    )
+  `);
+"""
+if unsafe_query_lock in route:
+    route = route.replace(unsafe_query_lock, safe_execute_lock, 1)
+elif safe_execute_lock not in route:
+    raise SystemExit('financial advisory lock anchor missing')
 
 old_mapping_check = """          if (!project || project.workspaceId !== candidate.workspaceId) {
             blockers.push({ recordId: candidate.recordId, code: 'WBS_PROJECT_MAPPING_STALE' });
