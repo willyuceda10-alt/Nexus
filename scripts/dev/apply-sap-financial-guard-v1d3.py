@@ -3,10 +3,18 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 
 # -----------------------------------------------------------------------------
-# 1. Use queryRaw for PostgreSQL advisory lock SELECT.
+# 1. Harden route before wiring it into the runtime.
 # -----------------------------------------------------------------------------
 route_path = root / 'apps/api/src/routes/sap-integration-financial-guard-v1d3.ts'
 route = route_path.read_text()
+
+old_wbs = "wbsElement: z.string().trim().min(1).max(255),"
+new_wbs = "wbsElement: z.string().trim().min(1).max(240),"
+if new_wbs not in route:
+    if old_wbs not in route:
+        raise SystemExit('WBS max-length anchor missing')
+    route = route.replace(old_wbs, new_wbs, 1)
+
 old_lock = """  await tx.$executeRaw(Prisma.sql`
     SELECT pg_advisory_xact_lock(
       hashtextextended(${`${tenantId}:${connectionId}:SAP_FINANCIAL:${externalKey}`}, 0)
@@ -23,6 +31,34 @@ if new_lock not in route:
     if old_lock not in route:
         raise SystemExit('financial advisory lock anchor missing')
     route = route.replace(old_lock, new_lock, 1)
+
+old_mapping_check = """          if (!project || project.workspaceId !== candidate.workspaceId) {
+            blockers.push({ recordId: candidate.recordId, code: 'WBS_PROJECT_MAPPING_STALE' });
+            continue;
+          }
+          const projectCurrency = await projectCostCurrency(tx, actor.tenantId, candidate.projectId);
+"""
+new_mapping_check = """          if (!project || project.workspaceId !== candidate.workspaceId) {
+            blockers.push({ recordId: candidate.recordId, code: 'WBS_PROJECT_MAPPING_STALE' });
+            continue;
+          }
+          if (!(await validWorkItem(
+            tx,
+            actor.tenantId,
+            candidate.workspaceId,
+            candidate.projectId,
+            candidate.workItemId,
+          ))) {
+            blockers.push({ recordId: candidate.recordId, code: 'WBS_WORK_ITEM_MAPPING_STALE' });
+            continue;
+          }
+          const projectCurrency = await projectCostCurrency(tx, actor.tenantId, candidate.projectId);
+"""
+if new_mapping_check not in route:
+    if old_mapping_check not in route:
+        raise SystemExit('WBS stale mapping anchor missing')
+    route = route.replace(old_mapping_check, new_mapping_check, 1)
+
 route_path.write_text(route)
 
 # -----------------------------------------------------------------------------
