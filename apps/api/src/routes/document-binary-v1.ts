@@ -43,11 +43,6 @@ function safeMimeType(value: string | undefined): string {
   return value;
 }
 
-function contentDispositionFileName(fileName: string): string {
-  const asciiFallback = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
-  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
-}
-
 export async function documentBinaryV1Routes(
   app: FastifyInstance,
   store: DocumentBinaryStoreV1,
@@ -120,6 +115,7 @@ export async function documentBinaryV1Routes(
 
       await store.put({
         storageKey,
+        fileName,
         content,
         contentType: mimeType,
         checksumSha256,
@@ -219,7 +215,7 @@ export async function documentBinaryV1Routes(
   );
 
   app.get(
-    '/api/v1/document-binary-v1/:attachmentId/download',
+    '/api/v1/document-binary-v1/:attachmentId/download-link',
     { preHandler: [authenticate, resolveActor] },
     async (request, reply) => {
       const params = attachmentParamsSchema.safeParse(request.params);
@@ -253,8 +249,8 @@ export async function documentBinaryV1Routes(
       if (access.kind === 'not_found') return reply.code(404).send({ error: 'document_binary_not_found' });
       if (access.kind === 'forbidden') return reply.code(403).send({ error: 'workspace_access_denied' });
 
-      const binary = await store.get(access.attachment.storageKey);
-      if (!binary) {
+      const downloadAccess = await store.createReadUrl(access.attachment.storageKey);
+      if (!downloadAccess) {
         return reply.code(404).send({
           error: 'document_binary_missing',
           message: 'Document metadata exists, but the binary object was not found in storage.',
@@ -266,7 +262,7 @@ export async function documentBinaryV1Routes(
           data: {
             tenantId: actor.tenantId,
             userId: actor.userId,
-            action: 'DOCUMENT_VERSION_DOWNLOADED',
+            action: 'DOCUMENT_VERSION_DOWNLOAD_LINK_ISSUED',
             resource: 'NEXUS_OBJECT',
             resourceId: access.document.id,
             correlationId: request.id,
@@ -274,19 +270,20 @@ export async function documentBinaryV1Routes(
             details: {
               attachmentId: access.attachment.id,
               versionNumber: access.attachment.versionNumber,
+              expiresAt: downloadAccess.expiresAt.toISOString(),
             },
           },
         }),
       );
 
-      reply.header('content-type', access.attachment.mimeType || binary.contentType);
-      reply.header('content-length', String(binary.contentLength));
-      reply.header('content-disposition', contentDispositionFileName(access.attachment.fileName));
-      reply.header('cache-control', 'private, no-store');
-      reply.header('x-content-type-options', 'nosniff');
-      reply.header('x-bridata-sha256', access.attachment.checksumSha256 ?? '');
-      if (binary.etag) reply.header('etag', binary.etag);
-      return reply.send(binary.content);
+      return {
+        attachmentId: access.attachment.id,
+        fileName: access.attachment.fileName,
+        mimeType: access.attachment.mimeType,
+        checksumSha256: access.attachment.checksumSha256,
+        url: downloadAccess.url,
+        expiresAt: downloadAccess.expiresAt.toISOString(),
+      };
     },
   );
 }
