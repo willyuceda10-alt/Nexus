@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { basename, extname } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { authenticate, requireTenantRoles, resolveActor } from '../auth.js';
 import { canAccessWorkspace } from '../authorization.js';
@@ -17,12 +17,30 @@ const allowedExtensions = new Set([
   '.txt', '.csv', '.png', '.jpg', '.jpeg', '.dwg', '.dxf',
 ]);
 
+function firstHeader(request: FastifyRequest, name: string): string | undefined {
+  const value = request.headers[name];
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function safeFileName(input: string): string | null {
-  const normalized = basename(input).replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(input);
+  } catch {
+    return null;
+  }
+  const normalized = basename(decoded).replace(/[\u0000-\u001f\u007f]/g, '').trim();
   if (!normalized || normalized.length > 180) return null;
   const extension = extname(normalized).toLowerCase();
   if (!allowedExtensions.has(extension)) return null;
   return normalized;
+}
+
+function safeMimeType(value: string | undefined): string {
+  if (!value || value.length > 150 || !/^[\w.+-]+\/[\w.+-]+$/.test(value)) {
+    return 'application/octet-stream';
+  }
+  return value;
 }
 
 function contentDispositionFileName(fileName: string): string {
@@ -49,6 +67,32 @@ export async function documentBinaryV1Routes(
         return reply.code(400).send({ error: 'validation_error', details: params.error.flatten() });
       }
 
+      const rawFileName = firstHeader(request, 'x-bridata-file-name');
+      const fileName = rawFileName ? safeFileName(rawFileName) : null;
+      if (!fileName) {
+        return reply.code(415).send({
+          error: 'unsupported_document_type',
+          message: 'Allowed document types are PDF, Office, TXT/CSV, PNG/JPEG, DWG and DXF.',
+        });
+      }
+
+      if (!Buffer.isBuffer(request.body)) {
+        return reply.code(415).send({
+          error: 'binary_body_required',
+          message: 'Document uploads must use application/octet-stream.',
+        });
+      }
+      const content = request.body;
+      if (content.byteLength === 0) {
+        return reply.code(400).send({ error: 'empty_document', message: 'The uploaded document is empty.' });
+      }
+      if (content.byteLength > config.DOCUMENT_MAX_FILE_BYTES) {
+        return reply.code(413).send({
+          error: 'document_too_large',
+          message: `Document exceeds the ${config.DOCUMENT_MAX_FILE_BYTES} byte upload limit.`,
+        });
+      }
+
       const actor = request.actor!;
       const access = await withTenant(actor.tenantId, async (tx) => {
         const document = await tx.nexusObject.findFirst({
@@ -70,40 +114,9 @@ export async function documentBinaryV1Routes(
       if (access.kind === 'not_found') return reply.code(404).send({ error: 'document_not_found' });
       if (access.kind === 'forbidden') return reply.code(403).send({ error: 'workspace_access_denied' });
 
-      const part = await request.file({
-        limits: {
-          files: 1,
-          fields: 0,
-          fileSize: config.DOCUMENT_MAX_FILE_BYTES,
-        },
-      });
-      if (!part) {
-        return reply.code(400).send({ error: 'file_required', message: 'A document file is required.' });
-      }
-
-      const fileName = safeFileName(part.filename);
-      if (!fileName) {
-        part.file.resume();
-        return reply.code(415).send({
-          error: 'unsupported_document_type',
-          message: 'Allowed document types are PDF, Office, TXT/CSV, PNG/JPEG, DWG and DXF.',
-        });
-      }
-
-      const content = await part.toBuffer();
-      if (part.file.truncated || content.byteLength > config.DOCUMENT_MAX_FILE_BYTES) {
-        return reply.code(413).send({
-          error: 'document_too_large',
-          message: `Document exceeds the ${config.DOCUMENT_MAX_FILE_BYTES} byte upload limit.`,
-        });
-      }
-      if (content.byteLength === 0) {
-        return reply.code(400).send({ error: 'empty_document', message: 'The uploaded document is empty.' });
-      }
-
       const checksumSha256 = createHash('sha256').update(content).digest('hex');
       const storageKey = `${actor.tenantId}/${access.document.id}/${randomUUID()}`;
-      const mimeType = part.mimetype || 'application/octet-stream';
+      const mimeType = safeMimeType(firstHeader(request, 'x-bridata-file-mime-type'));
 
       await store.put({
         storageKey,
