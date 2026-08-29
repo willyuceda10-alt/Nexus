@@ -28,11 +28,13 @@ foundation.write_text(text)
 
 ci = Path('.github/workflows/ci.yml')
 text = ci.read_text()
-anchor = "      - name: Verify SAP integration health and freshness V1-E\n"
-if anchor not in text:
-    # Compatibility with the exact label currently merged from V1-E.
-    anchor = "      - name: Verify SAP integration health V1-E\n"
-if anchor not in text:
+anchors = [
+    "      - name: Verify SAP integration freshness and health V1-E\n",
+    "      - name: Verify SAP integration health and freshness V1-E\n",
+    "      - name: Verify SAP integration health V1-E\n",
+]
+anchor = next((candidate for candidate in anchors if candidate in text), None)
+if anchor is None:
     raise SystemExit('CI V1-E anchor missing')
 step = '''      - name: Verify governed SAP service-principal ingest V1-F1
         env:
@@ -46,7 +48,6 @@ step = '''      - name: Verify governed SAP service-principal ingest V1-F1
 
 '''
 if step not in text:
-    # Insert before V1-E so service auth and ingest are exercised adjacent to SAP integration tests.
     text = text.replace(anchor, step + anchor, 1)
 ci.write_text(text)
 
