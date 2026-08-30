@@ -99,6 +99,14 @@ export type BuildAppOptions = {
 const legacyBoardOptionsPath = /^\/api\/v1\/work-os\/boards-v1\/[^/]+\/columns\/[^/]+\/options(?:\?|$)/;
 const meetingSchedulingV2Path = /^\/api\/v1\/meetings-v2\/schedule(?:\?|$)/;
 const RATE_WINDOW_MS = 60_000;
+const UUID_SEGMENT = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
+
+function normalizedRatePath(rawUrl: string): string {
+  const path = rawUrl.split('?')[0] || '/';
+  return path
+    .replace(UUID_SEGMENT, ':uuid')
+    .replace(/\/\d+(?=\/|$)/g, '/:number');
+}
 
 function requestRateLimit(method: string, rawUrl: string): number {
   if (rawUrl.startsWith('/health/')) return Number.POSITIVE_INFINITY;
@@ -134,7 +142,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       return typeof incoming === 'string' && incoming.length <= 128 ? incoming : randomUUID();
     },
     bodyLimit: 1_048_576,
-    trustProxy: true,
+    // Azure Container Apps contributes the closest ingress proxy. Do not trust an
+    // arbitrary forwarded chain supplied by the public client.
+    trustProxy: 1,
   });
 
   registerRequestContext(app);
@@ -181,8 +191,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
         }
       }
 
-      const tenantHint = request.headers['x-bridata-tenant-id'];
-      const bucketKey = `${request.ip}:${typeof tenantHint === 'string' ? tenantHint : '-'}:${request.method}:${rawUrl.split('?')[0]}`;
+      const bucketKey = `${request.ip}:${request.method}:${normalizedRatePath(rawUrl)}`;
       const existing = rateBuckets.get(bucketKey);
       const bucket = !existing || existing.resetAt <= now
         ? { count: 1, resetAt: now + RATE_WINDOW_MS }
@@ -191,6 +200,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
       reply.header('x-ratelimit-limit', String(limit));
       reply.header('x-ratelimit-remaining', String(Math.max(0, limit - bucket.count)));
+      reply.header('x-ratelimit-reset', String(Math.ceil(bucket.resetAt / 1000)));
       if (bucket.count > limit) {
         const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
         reply.header('retry-after', String(retryAfter));
