@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { CircleDollarSign, FolderKanban } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
 import { ProjectCostsV2View } from './ProjectCostsV2View';
+import { SapFinancialTraceV1G5 } from './SapFinancialTraceV1G5';
 
 export const CostControlV2View: React.FC = () => {
   const { objects, selectedProjectId, setSelectedProjectId } = useNexus();
@@ -37,6 +38,7 @@ export const CostControlV2View: React.FC = () => {
           </select>
         </label>
       </header>
+      <SapFinancialTraceV1G5 projectId={projectId} />
       <ProjectCostsV2View projectId={projectId} />
     </div>
   );
