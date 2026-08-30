@@ -4,7 +4,6 @@ import {
   Check,
   CheckSquare2,
   ChevronDown,
-  ChevronRight,
   Command,
   Plus,
   Search,
@@ -33,14 +32,19 @@ export const Header: React.FC = () => {
 
   const pageTitle = (() => {
     switch (activeTab) {
-      case 'home': return 'Centro de mando';
+      case 'home': return 'Inicio';
       case 'project': return selectedProject?.title || 'Proyecto';
       case 'projects': return 'Proyectos';
       case 'boards': return 'Tableros';
+      case 'calendar': return 'Calendario y Timeline';
       case 'portfolios': return 'Portafolios';
       case 'resources': return 'Recursos';
       case 'materials': return 'Materiales';
+      case 'sap': return 'Centro SAP';
+      case 'procurement': return 'Compras / Por llegar';
+      case 'inventory': return 'Inventario';
       case 'costs': return 'Costos';
+      case 'integrations': return 'Integraciones';
       case 'automations': return 'Automatizaciones';
       case 'governance': return 'Riesgos y cambios';
       case 'meetings': return 'Reuniones';
@@ -62,59 +66,63 @@ export const Header: React.FC = () => {
     .toUpperCase();
 
   return (
-    <header className="relative z-30 flex h-[68px] flex-none items-center justify-between border-b border-slate-200 bg-white px-5 lg:px-6">
-      <div className="flex min-w-0 items-center gap-4">
-        <div className="hidden min-w-0 items-center gap-1.5 text-[10px] font-semibold text-slate-400 md:flex">
-          <span className="max-w-[130px] truncate">{tenant.name}</span>
-          <ChevronRight className="h-3 w-3 flex-none" />
-          <div className="relative">
-            <button onClick={() => setWorkspaceOpen((open) => !open)} className="flex max-w-[190px] items-center gap-1.5 rounded-lg px-2 py-1.5 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900">
-              <Building2 className="h-3.5 w-3.5 flex-none text-green-700" />
-              <span className="truncate">{currentWorkspace?.name || 'Workspace'}</span>
-              <ChevronDown className="h-3 w-3 flex-none text-slate-400" />
-            </button>
+    <header className="relative z-30 flex h-[58px] flex-none items-center justify-between border-b border-slate-200 bg-white px-4 lg:px-5">
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="relative hidden md:block">
+          <button
+            onClick={() => setWorkspaceOpen((open) => !open)}
+            className="flex h-9 max-w-[250px] items-center gap-2 rounded-lg px-2.5 text-slate-700 transition hover:bg-slate-100"
+          >
+            <Building2 className="h-4 w-4 flex-none text-[#07883F]" />
+            <span className="truncate text-[11px] font-semibold">{currentWorkspace?.name || 'Workspace'}</span>
+            <ChevronDown className="h-3.5 w-3.5 flex-none text-slate-400" />
+          </button>
 
-            {workspaceOpen && (
-              <div className="absolute left-0 top-10 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_20px_60px_rgba(15,23,42,0.14)]">
-                <div className="px-3 pb-2 pt-1"><p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Cambiar workspace</p></div>
-                {workspaces.map((workspace) => (
-                  <button
-                    key={workspace.id}
-                    onClick={() => {
-                      setCurrentWorkspaceId(workspace.id);
-                      setWorkspaceOpen(false);
-                    }}
-                    className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition ${currentWorkspace?.id === workspace.id ? 'bg-green-50' : 'hover:bg-slate-50'}`}
-                  >
-                    <span className="min-w-0"><span className="block truncate text-[11px] font-bold text-slate-900">{workspace.name}</span><span className="mt-0.5 block truncate text-[9px] text-slate-400">{workspace.organizationName}</span></span>
-                    {currentWorkspace?.id === workspace.id && <Check className="h-4 w-4 text-green-700" />}
-                  </button>
-                ))}
+          {workspaceOpen && (
+            <div className="absolute left-0 top-11 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-[0_18px_48px_rgba(15,23,42,0.14)]">
+              <div className="px-2.5 pb-2 pt-1">
+                <p className="text-[10px] font-semibold text-slate-500">Cambiar espacio de trabajo</p>
+                <p className="mt-0.5 truncate text-[9px] text-slate-400">{tenant.name}</p>
               </div>
-            )}
-          </div>
-          <ChevronRight className="h-3 w-3 flex-none" />
-          <span className="max-w-[220px] truncate font-bold text-slate-800">{pageTitle}</span>
+              {workspaces.map((workspace) => (
+                <button
+                  key={workspace.id}
+                  onClick={() => {
+                    setCurrentWorkspaceId(workspace.id);
+                    setWorkspaceOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2.5 text-left transition ${currentWorkspace?.id === workspace.id ? 'bg-green-50' : 'hover:bg-slate-50'}`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-[11px] font-semibold text-slate-900">{workspace.name}</span>
+                    <span className="mt-0.5 block truncate text-[9px] text-slate-400">{workspace.organizationName}</span>
+                  </span>
+                  {currentWorkspace?.id === workspace.id && <Check className="h-4 w-4 text-[#07883F]" />}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div className="md:hidden"><p className="truncate text-[13px] font-bold text-slate-900">{pageTitle}</p></div>
+        <div className="hidden h-5 w-px bg-slate-200 md:block" />
+        <p className="max-w-[260px] truncate px-1 text-[12px] font-semibold text-slate-900">{pageTitle}</p>
       </div>
 
       <div className="flex items-center gap-2">
         <button
           onClick={() => setIsCommandPaletteOpen(true)}
-          className="hidden min-w-[280px] items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-left text-[10px] text-slate-400 transition hover:border-slate-300 hover:bg-white lg:flex"
+          className="hidden h-9 min-w-[300px] items-center gap-2 rounded-lg border border-slate-200 bg-[#F7F8FA] px-3 text-left text-[10px] text-slate-400 transition hover:border-slate-300 hover:bg-white lg:flex"
         >
           <Search className="h-3.5 w-3.5" />
-          <span className="flex-1">Buscar en Bridata...</span>
-          <span className="flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[8px] font-bold text-slate-400 ring-1 ring-slate-200"><Command className="h-2.5 w-2.5" />K</span>
+          <span className="flex-1">Buscar en Bridata</span>
+          <span className="flex items-center gap-1 rounded bg-white px-1.5 py-0.5 text-[8px] font-semibold text-slate-400 ring-1 ring-slate-200"><Command className="h-2.5 w-2.5" />K</span>
         </button>
 
         <ApiStatusBadge />
 
         <button
           onClick={() => setActiveTab('inbox')}
-          className={`relative grid h-9 w-9 place-items-center rounded-xl border transition ${activeTab === 'inbox' ? 'border-green-200 bg-green-50 text-green-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
+          className={`grid h-9 w-9 place-items-center rounded-lg border transition ${activeTab === 'inbox' ? 'border-green-200 bg-green-50 text-green-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
           aria-label="Abrir Mi trabajo"
           title="Mi trabajo"
         >
@@ -123,17 +131,17 @@ export const Header: React.FC = () => {
 
         <button
           onClick={() => openCreateModal('TASK')}
-          className="flex h-9 items-center gap-2 rounded-xl bg-green-700 px-3.5 text-[10px] font-bold text-white shadow-[0_6px_16px_rgba(21,128,61,0.2)] transition hover:bg-green-800 active:scale-[0.98]"
+          className="flex h-9 items-center gap-1.5 rounded-lg bg-[#07883F] px-3 text-[10px] font-semibold text-white shadow-sm transition hover:bg-[#067535] active:scale-[0.98]"
         >
           <Plus className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Crear</span>
+          <span className="hidden sm:inline">Nuevo</span>
         </button>
 
-        <div className="ml-1 hidden items-center gap-2.5 border-l border-slate-200 pl-3 sm:flex">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-900 text-[9px] font-black text-white">{userInitials || 'BR'}</div>
-          <div className="hidden max-w-[140px] xl:block">
-            <p className="truncate text-[10px] font-bold text-slate-900">{currentUser.name}</p>
-            <p className="mt-0.5 flex items-center gap-1 truncate text-[8px] font-semibold text-slate-400"><ShieldCheck className="h-2.5 w-2.5 text-emerald-500" /> {currentUser.roleName}</p>
+        <div className="ml-1 flex items-center gap-2 border-l border-slate-200 pl-3">
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-slate-900 text-[9px] font-black text-white">{userInitials || 'BR'}</div>
+          <div className="hidden max-w-[130px] xl:block">
+            <p className="truncate text-[10px] font-semibold text-slate-900">{currentUser.name}</p>
+            <p className="mt-0.5 flex items-center gap-1 truncate text-[8px] text-slate-400"><ShieldCheck className="h-2.5 w-2.5 text-emerald-500" /> {currentUser.roleName}</p>
           </div>
         </div>
       </div>
