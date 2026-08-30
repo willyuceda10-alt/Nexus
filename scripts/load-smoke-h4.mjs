@@ -5,6 +5,8 @@ const workspaceId = process.env.BRIDATA_LOAD_WORKSPACE_ID;
 const confirmation = process.env.BRIDATA_LOAD_TEST_CONFIRM;
 const requests = Number(process.env.BRIDATA_LOAD_REQUESTS ?? 200);
 const concurrency = Number(process.env.BRIDATA_LOAD_CONCURRENCY ?? 10);
+const timeoutMs = Number(process.env.BRIDATA_LOAD_TIMEOUT_MS ?? 5000);
+const p95LimitMs = Number(process.env.BRIDATA_LOAD_P95_LIMIT_MS ?? 1000);
 
 if (confirmation !== 'YES') {
   throw new Error('Set BRIDATA_LOAD_TEST_CONFIRM=YES to run the H4 load smoke intentionally.');
@@ -17,6 +19,12 @@ if (!Number.isInteger(requests) || requests < 1 || requests > 5000) {
 }
 if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 100) {
   throw new Error('BRIDATA_LOAD_CONCURRENCY must be an integer between 1 and 100.');
+}
+if (!Number.isInteger(timeoutMs) || timeoutMs < 250 || timeoutMs > 30000) {
+  throw new Error('BRIDATA_LOAD_TIMEOUT_MS must be an integer between 250 and 30000.');
+}
+if (!Number.isFinite(p95LimitMs) || p95LimitMs < 1 || p95LimitMs > 30000) {
+  throw new Error('BRIDATA_LOAD_P95_LIMIT_MS must be between 1 and 30000.');
 }
 
 const target = `${baseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/summary-v1`;
@@ -31,6 +39,7 @@ async function worker() {
     const startedAt = performance.now();
     try {
       const response = await fetch(target, {
+        signal: AbortSignal.timeout(timeoutMs),
         headers: {
           authorization: `Bearer ${token}`,
           'x-bridata-tenant-id': tenantId,
@@ -40,9 +49,10 @@ async function worker() {
       durations.push(performance.now() - startedAt);
       statuses.set(response.status, (statuses.get(response.status) ?? 0) + 1);
       await response.arrayBuffer();
-    } catch {
+    } catch (error) {
       durations.push(performance.now() - startedAt);
-      statuses.set(0, (statuses.get(0) ?? 0) + 1);
+      const status = error?.name === 'TimeoutError' ? -1 : 0;
+      statuses.set(status, (statuses.get(status) ?? 0) + 1);
     }
   }
 }
@@ -58,6 +68,7 @@ const report = {
   target,
   requests,
   concurrency,
+  timeoutMs,
   elapsedMs: Math.round(elapsedMs),
   requestsPerSecond: Number((requests / (elapsedMs / 1000)).toFixed(2)),
   successRate: Number(((success / requests) * 100).toFixed(2)),
@@ -68,9 +79,13 @@ const report = {
     max: Math.round(sorted.at(-1) ?? 0),
   },
   statuses: Object.fromEntries([...statuses.entries()].sort(([a], [b]) => a - b)),
+  statusLegend: {
+    '-1': 'request timeout',
+    '0': 'network/client error',
+  },
 };
 
 console.log(JSON.stringify(report, null, 2));
 
 if (report.successRate < 99) process.exitCode = 2;
-if (report.latencyMs.p95 > Number(process.env.BRIDATA_LOAD_P95_LIMIT_MS ?? 1000)) process.exitCode = 3;
+if (report.latencyMs.p95 > p95LimitMs) process.exitCode = 3;
