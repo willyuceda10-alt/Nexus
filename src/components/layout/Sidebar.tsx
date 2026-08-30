@@ -74,6 +74,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
     }
   }, [currentUser.id]);
 
+  useEffect(() => {
+    // A collapsed desktop rail must never leak into the mobile drawer experience.
+    if (mobileOpen) setCollapsed(false);
+  }, [mobileOpen]);
+
   const scopedObjects = currentWorkspace
     ? objects.filter((object) => object.workspaceId === currentWorkspace.id)
     : objects;
@@ -84,7 +89,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
     return apiBootstrap.bootstrap.workspaces.find((item) => item.id === currentWorkspace.id)?.role ?? null;
   }, [apiBootstrap.bootstrap, currentWorkspace]);
 
-  const canSeePmo = !workspaceRole || ['PMO_SENIOR', 'OWNER', 'ADMIN'].includes(workspaceRole)
+  const canSeePmo = apiBootstrap.dataMode !== 'api'
+    || ['PMO_SENIOR', 'OWNER', 'ADMIN'].includes(workspaceRole ?? '')
     || ['OWNER', 'TENANT_ADMIN'].includes(apiBootstrap.bootstrap?.actor.role ?? '');
 
   const primaryItems: NavigationItem[] = [
@@ -115,6 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
 
   const navigate = (id: string) => {
     setActiveTab(id);
+    setWorkspaceOpen(false);
     onMobileClose();
   };
 
@@ -128,6 +135,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
     } catch {
       // Preference persistence is best-effort only.
     }
+  };
+
+  const toggleWorkspacePicker = () => {
+    if (collapsed) {
+      setCollapsed(false);
+      setWorkspaceOpen(true);
+      return;
+    }
+    setWorkspaceOpen((value) => !value);
+  };
+
+  const toggleCollapsed = () => {
+    setCollapsed((value) => {
+      const next = !value;
+      if (next) setWorkspaceOpen(false);
+      return next;
+    });
   };
 
   const renderItems = (items: NavigationItem[], allowFavorite = false) => (
@@ -158,8 +182,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
             {!collapsed && allowFavorite && (
               <button
                 onClick={() => toggleFavorite(item.id)}
-                className="grid h-8 w-8 flex-none place-items-center rounded-md text-slate-300 opacity-0 transition hover:bg-white hover:text-amber-500 focus:opacity-100 group-hover:opacity-100"
+                className="grid h-8 w-8 flex-none place-items-center rounded-md text-slate-300 opacity-100 transition hover:bg-white hover:text-amber-500 focus:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
                 aria-label={favoriteIds.includes(item.id) ? `Quitar ${item.label} de favoritos` : `Agregar ${item.label} a favoritos`}
+                aria-pressed={favoriteIds.includes(item.id)}
               >
                 <Star className={`h-3.5 w-3.5 ${favoriteIds.includes(item.id) ? 'fill-amber-400 text-amber-500 opacity-100' : ''}`} />
               </button>
@@ -207,9 +232,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
 
       <div className="relative px-2.5 pt-2.5">
         <button
-          onClick={() => setWorkspaceOpen((value) => !value)}
+          onClick={toggleWorkspacePicker}
           className={`flex w-full items-center rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${collapsed ? 'justify-center px-0 py-2' : 'gap-2 px-2.5 py-2.5 text-left'}`}
           aria-expanded={workspaceOpen}
+          aria-label={collapsed ? `Abrir selector de workspace: ${currentWorkspace?.name || 'Workspace'}` : undefined}
         >
           <span className="grid h-7 w-7 flex-none place-items-center rounded-md bg-green-100 text-[11px] font-black text-green-800">
             {(currentWorkspace?.name || 'W').slice(0, 1).toUpperCase()}
@@ -234,6 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
                 onClick={() => {
                   setCurrentWorkspaceId(workspace.id);
                   setWorkspaceOpen(false);
+                  onMobileClose();
                 }}
                 className={`w-full rounded-lg px-2.5 py-2 text-left text-xs transition ${currentWorkspace?.id === workspace.id ? 'bg-emerald-50 font-bold text-emerald-800' : 'text-slate-700 hover:bg-slate-50'}`}
               >
@@ -277,7 +304,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
           <Settings2 className="h-4 w-4" /> {!collapsed && 'Configuración'}
         </button>
         <button
-          onClick={() => setCollapsed((value) => !value)}
+          onClick={toggleCollapsed}
           className="mt-1 hidden h-9 w-full items-center justify-center gap-2 rounded-lg text-xs font-semibold text-slate-500 transition hover:bg-white hover:text-slate-900 md:flex"
           aria-label={collapsed ? 'Expandir navegación' : 'Contraer navegación'}
         >
