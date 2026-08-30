@@ -85,6 +85,13 @@ async function main() {
       });
 
       await tx.$executeRaw(Prisma.sql`
+        INSERT INTO project_cost_profiles
+          (tenant_id, workspace_id, project_object_id, currency, contingency_amount, updated_at)
+        VALUES
+          (${tenantId}::uuid, ${workspaceId}::uuid, ${projectId}::uuid, ${currency}, 0, CURRENT_TIMESTAMP)
+      `);
+
+      await tx.$executeRaw(Prisma.sql`
         INSERT INTO material_masters
           (id, tenant_id, workspace_id, material_object_id, code, base_uom_id, unit_cost, currency, is_active)
         VALUES
@@ -272,6 +279,7 @@ async function main() {
       await tx.$executeRaw(Prisma.sql`DELETE FROM goods_receipts WHERE purchase_order_id = ${purchaseOrderId}::uuid`);
       await tx.$executeRaw(Prisma.sql`DELETE FROM project_commitments WHERE id = ${prePoCommitmentId}::uuid`);
       await tx.$executeRaw(Prisma.sql`DELETE FROM project_actual_costs WHERE id = ${actualId}::uuid`);
+      await tx.$executeRaw(Prisma.sql`DELETE FROM project_cost_profiles WHERE project_object_id = ${projectId}::uuid AND tenant_id = ${tenantId}::uuid`);
       await tx.$executeRaw(Prisma.sql`DELETE FROM purchase_order_lines WHERE id = ${purchaseOrderLineId}::uuid`);
       await tx.$executeRaw(Prisma.sql`DELETE FROM purchase_orders WHERE id = ${purchaseOrderId}::uuid`);
       await tx.$executeRaw(Prisma.sql`DELETE FROM suppliers WHERE id = ${supplierId}::uuid`);
