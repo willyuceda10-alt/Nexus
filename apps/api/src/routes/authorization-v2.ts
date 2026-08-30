@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { authenticate, resolveActor } from '../auth.js';
 import {
   authorizePermission,
+  authorizePermissions,
   canManageWorkspacePermissions,
   isTenantAdministrator,
 } from '../authorization.js';
@@ -35,9 +36,13 @@ const policyBodySchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
 });
 const idParamsSchema = z.object({ id: uuidSchema });
+const workspaceMemberParamsSchema = z.object({ workspaceId: uuidSchema, userId: uuidSchema });
+const workspaceRoleBodySchema = z.object({
+  role: z.enum(['OWNER', 'ADMIN', 'PMO_SENIOR', 'MANAGER', 'MEMBER', 'VIEWER']),
+});
 
 const tenantRoles = new Set(['OWNER', 'TENANT_ADMIN', 'MEMBER', 'GUEST']);
-const workspaceRoles = new Set(['OWNER', 'ADMIN', 'MANAGER', 'MEMBER', 'VIEWER']);
+const workspaceRoles = new Set(['OWNER', 'ADMIN', 'PMO_SENIOR', 'MANAGER', 'MEMBER', 'VIEWER']);
 
 type PolicyRow = {
   id: string;
@@ -111,6 +116,7 @@ export async function authorizationV2Routes(app: FastifyInstance): Promise<void>
     async (request) => ({
       version: 2,
       permissions: PERMISSIONS_V2,
+      workspaceRoles: [...workspaceRoles],
       precedence: [
         'BREAK_GLASS_OWNER_FOR_TENANT_PERMISSION_ADMIN',
         'EXPLICIT_DENY',
@@ -130,19 +136,19 @@ export async function authorizationV2Routes(app: FastifyInstance): Promise<void>
       if (!query.success) return reply.code(400).send({ error: 'validation_error' });
       const actor = request.actor!;
       const result = await withTenant(actor.tenantId, async (tx) => {
-        const decisions = await Promise.all(PERMISSIONS_V2.map(async (permission) => {
-          const decision = await authorizePermission(tx, actor, permission, {
-            workspaceId: query.data.workspaceId ?? null,
-            projectId: query.data.projectId ?? null,
-          });
+        const decisionMap = await authorizePermissions(tx, actor, PERMISSIONS_V2, {
+          workspaceId: query.data.workspaceId ?? null,
+          projectId: query.data.projectId ?? null,
+        });
+        return PERMISSIONS_V2.map((permission) => {
+          const decision = decisionMap.get(permission)!;
           return {
             permission,
             allowed: decision.allowed,
             source: decision.source,
             matchedPolicyCount: decision.matchedPolicies.length,
           };
-        }));
-        return decisions;
+        });
       });
       return {
         version: 2,
@@ -152,6 +158,98 @@ export async function authorizationV2Routes(app: FastifyInstance): Promise<void>
         projectId: query.data.projectId ?? null,
         decisions: result,
       };
+    },
+  );
+
+  app.patch(
+    '/api/v1/authorization/workspaces/:workspaceId/members/:userId/role',
+    { preHandler: [authenticate, resolveActor] },
+    async (request, reply) => {
+      const params = workspaceMemberParamsSchema.safeParse(request.params);
+      const body = workspaceRoleBodySchema.safeParse(request.body);
+      if (!params.success || !body.success) {
+        return reply.code(400).send({ error: 'validation_error' });
+      }
+      const actor = request.actor!;
+      const result = await withTenant(actor.tenantId, async (tx) => {
+        const workspace = await tx.workspace.findFirst({
+          where: { id: params.data.workspaceId, tenantId: actor.tenantId },
+          select: { id: true },
+        });
+        if (!workspace) return { kind: 'not_found' as const };
+        if (!(await canManageWorkspacePermissions(tx, actor, workspace.id))) {
+          return { kind: 'forbidden' as const };
+        }
+
+        const membership = await tx.workspaceMember.findUnique({
+          where: { workspaceId_userId: { workspaceId: workspace.id, userId: params.data.userId } },
+          select: { id: true, tenantId: true, role: true },
+        });
+        if (!membership || membership.tenantId !== actor.tenantId) {
+          return { kind: 'membership_not_found' as const };
+        }
+
+        if (body.data.role === 'OWNER' && !isTenantAdministrator(actor) && String(membership.role) !== 'OWNER') {
+          return { kind: 'owner_assignment_denied' as const };
+        }
+
+        const previousRole = String(membership.role);
+        const updated = await tx.workspaceMember.update({
+          where: { id: membership.id },
+          data: { role: body.data.role },
+          select: { workspaceId: true, userId: true, role: true },
+        });
+
+        await Promise.all([
+          tx.auditLog.create({
+            data: {
+              tenantId: actor.tenantId,
+              userId: actor.userId,
+              action: 'WORKSPACE_MEMBER_ROLE_UPDATED',
+              resource: 'WORKSPACE_MEMBER',
+              resourceId: membership.id,
+              correlationId: request.id,
+              ipAddress: request.ip,
+              details: {
+                workspaceId: workspace.id,
+                targetUserId: params.data.userId,
+                previousRole,
+                role: String(updated.role),
+              },
+            },
+          }),
+          tx.domainEvent.create({
+            data: {
+              tenantId: actor.tenantId,
+              aggregateId: membership.id,
+              eventType: 'bridata.authorization.workspace-role.changed',
+              idempotencyKey: `workspace-role:${membership.id}:${request.id}`,
+              payload: {
+                workspaceId: workspace.id,
+                targetUserId: params.data.userId,
+                previousRole,
+                role: String(updated.role),
+                actorId: actor.userId,
+              },
+            },
+          }),
+        ]);
+
+        return {
+          kind: 'ok' as const,
+          membership: {
+            workspaceId: updated.workspaceId,
+            userId: updated.userId,
+            role: String(updated.role),
+          },
+        };
+      });
+
+      if (result.kind === 'not_found') return reply.code(404).send({ error: 'workspace_not_found' });
+      if (result.kind === 'membership_not_found') return reply.code(404).send({ error: 'workspace_membership_not_found' });
+      if (result.kind === 'owner_assignment_denied') return reply.code(403).send({ error: 'workspace_owner_assignment_requires_tenant_admin' });
+      if (result.kind === 'forbidden') return reply.code(403).send({ error: 'workspace_permission_management_denied' });
+      return result.membership;
     },
   );
 
