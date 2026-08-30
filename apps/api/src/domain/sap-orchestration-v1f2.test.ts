@@ -34,18 +34,31 @@ describe('SAP orchestration V1-F2', () => {
     )).toBe(true);
   });
 
-  it('fails closed when any required source has never succeeded or its latest attempt failed', () => {
+  it('fails closed when any required source is stale, failed or missing', () => {
     const notReady = notReadySourcesV1f2(
-      ['SAP_PROJECT_PROCUREMENT', 'SAP_OPEN_PURCHASE_ORDERS', 'SAP_MATERIAL_MOVEMENTS'],
+      ['SAP_PROJECT_PROCUREMENT', 'SAP_OPEN_PURCHASE_ORDERS', 'SAP_MATERIAL_MOVEMENTS', 'SAP_PROJECT_ACTUAL_COSTS'],
       [
-        { sourceKey: 'SAP_PROJECT_PROCUREMENT', latestStatus: 'SUCCEEDED' },
+        { sourceKey: 'SAP_PROJECT_PROCUREMENT', latestStatus: 'FRESH' },
         { sourceKey: 'SAP_OPEN_PURCHASE_ORDERS', latestStatus: 'FAILED' },
+        { sourceKey: 'SAP_MATERIAL_MOVEMENTS', latestStatus: 'STALE' },
       ],
     );
     expect(notReady).toEqual([
       { sourceKey: 'SAP_OPEN_PURCHASE_ORDERS', status: 'FAILED' },
-      { sourceKey: 'SAP_MATERIAL_MOVEMENTS', status: 'NEVER' },
+      { sourceKey: 'SAP_MATERIAL_MOVEMENTS', status: 'STALE' },
+      { sourceKey: 'SAP_PROJECT_ACTUAL_COSTS', status: 'NEVER' },
     ]);
+  });
+
+  it('accepts legacy succeeded/partial readiness as well as the explicit FRESH state', () => {
+    expect(notReadySourcesV1f2(
+      ['SAP_PROJECT_PROCUREMENT', 'SAP_OPEN_PURCHASE_ORDERS', 'SAP_MATERIAL_MOVEMENTS'],
+      [
+        { sourceKey: 'SAP_PROJECT_PROCUREMENT', latestStatus: 'FRESH' },
+        { sourceKey: 'SAP_OPEN_PURCHASE_ORDERS', latestStatus: 'SUCCEEDED' },
+        { sourceKey: 'SAP_MATERIAL_MOVEMENTS', latestStatus: 'PARTIAL' },
+      ],
+    )).toEqual([]);
   });
 
   it('preserves unrelated connection config while storing the automation profile', () => {
