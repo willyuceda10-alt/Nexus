@@ -78,6 +78,7 @@ import { workOsBoardManagedOptionCellsV1Routes } from './routes/work-os-board-ma
 import { workOsBoardManagedOptionsV1Routes } from './routes/work-os-board-managed-options-v1.js';
 import { workOsBoardTemporalV1Routes } from './routes/work-os-board-temporal-v1.js';
 import { workOsBoardsV1Routes } from './routes/work-os-boards-v1.js';
+import { workspaceMembersV1Routes } from './routes/workspace-members-v1.js';
 import { workspaceSummaryV1Routes } from './routes/workspace-summary-v1.js';
 
 type PrismaWrappedDatabaseError = FastifyError & {
@@ -285,6 +286,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(notificationPreferencesV1Routes);
   await app.register(notificationCapabilitiesV1Routes);
   await app.register(bootstrapRoutes);
+  await app.register(workspaceMembersV1Routes);
   await app.register(workspaceSummaryV1Routes);
   await app.register(objectRoutes);
   await app.register(collaborationV1Routes);
