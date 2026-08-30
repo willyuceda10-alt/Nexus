@@ -16,6 +16,7 @@ type SummaryRow = {
   open_work_items: bigint;
   my_open_work_items: bigint;
   blocked_items: bigint;
+  attention_items: bigint;
   critical_risks: bigint;
   overdue_items: bigint;
   due_next_14_days: bigint;
@@ -48,6 +49,26 @@ export async function workspaceSummaryV1Routes(app: FastifyInstance): Promise<vo
 
         const [rows, approvalRows] = await Promise.all([
           tx.$queryRaw<SummaryRow[]>(Prisma.sql`
+            WITH scoped_objects AS (
+              SELECT
+                o.*,
+                (
+                  o.object_type_key = 'RISK'
+                  AND o.status NOT IN ('CLOSED','CANCELLED')
+                  AND (
+                    o.priority = 'CRITICAL'
+                    OR CASE
+                      WHEN COALESCE(o.metadata->>'riskScore', '') ~ '^[0-9]+([.][0-9]+)?$'
+                        THEN (o.metadata->>'riskScore')::numeric >= 15
+                      ELSE false
+                    END
+                  )
+                ) AS is_critical_risk
+              FROM nexus_objects o
+              WHERE o.tenant_id = ${actor.tenantId}::uuid
+                AND o.workspace_id = ${workspaceId}::uuid
+                AND o.deleted_at IS NULL
+            )
             SELECT
               COUNT(*)::bigint AS total_objects,
               COUNT(*) FILTER (WHERE object_type_key = 'PROJECT')::bigint AS total_projects,
@@ -74,17 +95,9 @@ export async function workspaceSummaryV1Routes(app: FastifyInstance): Promise<vo
               )::bigint AS my_open_work_items,
               COUNT(*) FILTER (WHERE status = 'BLOCKED')::bigint AS blocked_items,
               COUNT(*) FILTER (
-                WHERE object_type_key = 'RISK'
-                  AND (
-                    priority = 'CRITICAL'
-                    OR CASE
-                      WHEN COALESCE(metadata->>'riskScore', '') ~ '^[0-9]+([.][0-9]+)?$'
-                        THEN (metadata->>'riskScore')::numeric >= 15
-                      ELSE false
-                    END
-                  )
-                  AND status NOT IN ('CLOSED','CANCELLED')
-              )::bigint AS critical_risks,
+                WHERE status = 'BLOCKED' OR is_critical_risk
+              )::bigint AS attention_items,
+              COUNT(*) FILTER (WHERE is_critical_risk)::bigint AS critical_risks,
               COUNT(*) FILTER (
                 WHERE due_date < CURRENT_TIMESTAMP
                   AND status NOT IN ('COMPLETED','CANCELLED','APPROVED','CLOSED')
@@ -94,10 +107,7 @@ export async function workspaceSummaryV1Routes(app: FastifyInstance): Promise<vo
                   AND due_date < CURRENT_TIMESTAMP + INTERVAL '14 days'
                   AND status NOT IN ('COMPLETED','CANCELLED','APPROVED','CLOSED')
               )::bigint AS due_next_14_days
-            FROM nexus_objects
-            WHERE tenant_id = ${actor.tenantId}::uuid
-              AND workspace_id = ${workspaceId}::uuid
-              AND deleted_at IS NULL
+            FROM scoped_objects
           `),
           tx.$queryRaw<ApprovalRow[]>(Prisma.sql`
             SELECT COUNT(*)::bigint AS pending_approvals
@@ -129,6 +139,7 @@ export async function workspaceSummaryV1Routes(app: FastifyInstance): Promise<vo
               open: asNumber(row?.open_work_items),
               mine: asNumber(row?.my_open_work_items),
               blocked: asNumber(row?.blocked_items),
+              attention: asNumber(row?.attention_items),
               overdue: asNumber(row?.overdue_items),
               dueNext14Days: asNumber(row?.due_next_14_days),
             },
