@@ -110,6 +110,23 @@
   background: linear-gradient(90deg, rgba(14, 138, 80, 0.14) 0%, rgba(14, 138, 80, 0) 100%);
 }
 
+/* Contraste gerencial gradual para módulos heredados del shell claro. */
+.bridata-managerial-shell .border-slate-200 {
+  border-color: #cbd5df;
+}
+
+.bridata-managerial-shell .text-slate-400 {
+  color: #718397;
+}
+
+.bridata-managerial-shell .bg-slate-50 {
+  background-color: #edf2f6;
+}
+
+.bridata-managerial-shell .bg-slate-100 {
+  background-color: #e3eaf0;
+}
+
 /*
  * Compatibilidad temporal para módulos que todavía conservan utilidades
  * indigo/violet del prototipo. Visualmente heredan la identidad gerencial
