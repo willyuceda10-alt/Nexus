@@ -37,10 +37,12 @@ function localSummary(
   const today = new Date();
   const in14 = new Date(today.getTime() + 14 * 86_400_000);
   const due = (value?: string) => value ? new Date(`${value}T23:59:59`) : null;
+  const blockedItems = scoped.filter((item) => item.status === 'BLOCKED');
   const criticalRisks = scoped.filter(
     (item) => item.type === 'RISK' && item.status !== 'CLOSED'
       && (item.priority === 'CRITICAL' || (item.riskScore ?? 0) >= 15),
   );
+  const attention = new Set([...blockedItems, ...criticalRisks].map((item) => item.id)).size;
 
   return {
     workspaceId,
@@ -56,7 +58,8 @@ function localSummary(
     work: {
       open: openItems.length,
       mine: openItems.filter((item) => item.assigneeId === currentUserId || item.ownerId === currentUserId).length,
-      blocked: scoped.filter((item) => item.status === 'BLOCKED').length,
+      blocked: blockedItems.length,
+      attention,
       overdue: openItems.filter((item) => {
         const date = due(item.endDate);
         return Boolean(date && date < today);
@@ -120,7 +123,7 @@ function ActionCard({
   return (
     <button
       onClick={onClick}
-      className="group flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left transition hover:border-emerald-200 hover:bg-emerald-50/40"
+      className="group flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left transition hover:border-emerald-200 hover:bg-emerald-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
     >
       <span className="grid h-9 w-9 flex-none place-items-center rounded-lg bg-slate-100 text-slate-600 group-hover:bg-white group-hover:text-emerald-700">
         {icon}
@@ -141,6 +144,7 @@ export const PmoCommandCenterV1H4View: React.FC = () => {
     currentUser,
     objects,
     approvals,
+    objectDataStatus,
     setActiveTab,
     getProjectHealth,
   } = useNexus();
@@ -200,6 +204,12 @@ export const PmoCommandCenterV1H4View: React.FC = () => {
 
   const isPmo = ['PMO_SENIOR', 'OWNER', 'ADMIN', 'TENANT_ADMIN'].includes(workspaceRole.replaceAll(' ', '_').toUpperCase());
   const value = summary;
+  const browserViewIsPartial = Boolean(
+    value
+      && apiBootstrap.dataMode === 'api'
+      && objectDataStatus === 'ready'
+      && value.totalObjects > objects.length,
+  );
 
   return (
     <div className="mx-auto w-full max-w-[1680px] px-4 py-5 sm:px-5 lg:px-7">
@@ -235,6 +245,12 @@ export const PmoCommandCenterV1H4View: React.FC = () => {
               Esta vista puede consultarse, pero las acciones PMO quedan sujetas al RBAC del servidor. El rol recomendado es PMO Senior.
             </div>
           )}
+          {browserViewIsPartial && value && (
+            <div className="mt-4 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs leading-5 text-sky-800" role="status">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
+              <span><strong>Portafolio visual parcial:</strong> se materializaron {objects.length.toLocaleString('es-PE')} de {value.totalObjects.toLocaleString('es-PE')} objetos. Los KPIs PMO son exactos; la lista de salud muestra solo proyectos presentes en la vista del navegador.</span>
+            </div>
+          )}
           {error && <p className="mt-3 text-xs font-semibold text-rose-600">{error}</p>}
         </div>
 
@@ -253,11 +269,11 @@ export const PmoCommandCenterV1H4View: React.FC = () => {
                   <h2 className="text-sm font-black text-slate-950">Salud del portafolio</h2>
                   <p className="mt-0.5 text-xs text-slate-500">Proyectos con menor salud primero</p>
                 </div>
-                <button onClick={() => setActiveTab('portfolios')} className="text-xs font-bold text-emerald-700 hover:text-emerald-800">Ver portafolios</button>
+                <button onClick={() => setActiveTab('portfolios')} className="text-xs font-bold text-emerald-700 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">Ver portafolios</button>
               </div>
               <div className="divide-y divide-slate-100">
                 {activeProjects.map(({ project, health }) => (
-                  <button key={project.id} onClick={() => setActiveTab('projects')} className="grid w-full gap-3 px-4 py-3 text-left transition hover:bg-slate-50 sm:grid-cols-[minmax(0,1fr)_110px_130px] sm:items-center">
+                  <button key={project.id} onClick={() => setActiveTab('projects')} className="grid w-full gap-3 px-4 py-3 text-left transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 sm:grid-cols-[minmax(0,1fr)_110px_130px] sm:items-center">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold text-slate-900">{project.title}</p>
                       <p className="mt-0.5 truncate text-xs text-slate-500">{project.description || 'Sin descripción'}</p>
