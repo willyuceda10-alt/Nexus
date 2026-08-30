@@ -74,6 +74,7 @@ export const WorkspaceHome: React.FC = () => {
   const criticalRisks = objects.filter(
     (object) => object.type === 'RISK' && ((object.riskScore || 0) >= 15 || object.priority === 'CRITICAL'),
   );
+  const localAttentionCount = new Set([...blockedItems, ...criticalRisks].map((object) => object.id)).size;
   const pendingApprovals = approvals.filter((approval) => approval.status === 'PENDING');
   const averageProgress = activeProjects.length
     ? Math.round(activeProjects.reduce((sum, project) => sum + project.progress, 0) / activeProjects.length)
@@ -145,9 +146,7 @@ export const WorkspaceHome: React.FC = () => {
   const exactActiveProjects = serverSummary?.projects.active ?? activeProjects.length;
   const exactAverageProgress = serverSummary?.projects.averageProgress ?? averageProgress;
   const exactMyWork = serverSummary?.work.mine ?? myTasks.length;
-  const exactAttention = serverSummary
-    ? serverSummary.work.blocked + serverSummary.risk.critical
-    : blockedItems.length + criticalRisks.length;
+  const exactAttention = serverSummary?.work.attention ?? localAttentionCount;
   const exactCriticalRisks = serverSummary?.risk.critical ?? criticalRisks.length;
   const exactPendingApprovals = serverSummary?.approvals.pending ?? pendingApprovals.length;
 
