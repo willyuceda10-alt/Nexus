@@ -20,6 +20,7 @@ import type {
 } from '../../api/notificationPreferencesV1Contracts';
 import { useApiBootstrap } from '../../context/ApiBootstrapContext';
 import { useNexus } from '../../context/NexusContext';
+import { WorkspaceRoleManagementV1H4 } from '../settings/WorkspaceRoleManagementV1H4';
 
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 
@@ -219,7 +220,7 @@ export const SettingsV2View: React.FC = () => {
                 <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Configuración y gobernanza</h1>
                 <span className="rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-green-700 ring-1 ring-green-200">Enterprise</span>
               </div>
-              <p className="mt-1 max-w-3xl text-sm text-slate-500">Identidad, aislamiento de tenant y preferencias personales de entrega para el Work OS.</p>
+              <p className="mt-1 max-w-3xl text-sm text-slate-500">Identidad, aislamiento de tenant, roles del workspace y preferencias personales de entrega para el Work OS.</p>
             </div>
           </div>
           <button disabled={saving || loading} onClick={() => void save()} className="inline-flex items-center gap-2 rounded-xl bg-green-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-green-800 disabled:opacity-50">
@@ -253,7 +254,7 @@ export const SettingsV2View: React.FC = () => {
             <div className="mt-4 space-y-3">
               {[
                 ['Aislamiento PostgreSQL RLS', 'Tenant context transaccional y FORCE RLS en dominios tipados.'],
-                ['Authorization V2', 'Permisos efectivos con políticas scoped y DENY explícito.'],
+                ['Authorization V2', 'Permisos efectivos con políticas scoped, roles gobernados y DENY explícito.'],
                 ['Managed Identity', 'Workers Azure sin secretos de Service Bus ni Graph en código.'],
               ].map(([title, text]) => (
                 <div key={title} className="flex gap-3 rounded-2xl bg-slate-50 p-3.5 ring-1 ring-slate-100">
@@ -292,6 +293,8 @@ export const SettingsV2View: React.FC = () => {
           </div>
         </section>
       </div>
+
+      <WorkspaceRoleManagementV1H4 />
     </div>
   );
 };
