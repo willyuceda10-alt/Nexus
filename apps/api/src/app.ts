@@ -65,6 +65,7 @@ import { sapIntegrationHealthV1eRoutes } from './routes/sap-integration-health-v
 import { sapIntegrationServiceImportV1f1Routes } from './routes/sap-integration-service-import-v1f1.js';
 import { sapIntegrationOrchestrationV1f2Routes } from './routes/sap-integration-orchestration-v1f2.js';
 import { sapIntegrationCenterV1g1Routes } from './routes/sap-integration-center-v1g1.js';
+import { sapMaterialFlowV1g2Routes } from './routes/sap-material-flow-v1g2.js';
 import { sessionRoutes } from './routes/session.js';
 import { wbsV2Routes } from './routes/wbs-v2.js';
 import { workCalendarV2Routes } from './routes/work-calendars-v2.js';
@@ -213,6 +214,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await sapIntegrationServiceImportV1f1Routes(app, integrationBinaryStore);
   await app.register(sapIntegrationOrchestrationV1f2Routes);
   await app.register(sapIntegrationCenterV1g1Routes);
+  await app.register(sapMaterialFlowV1g2Routes);
   await app.register(objectRelationsV1Routes);
   await app.register(objectApprovalsV1Routes);
   await app.register(meetingsV1Routes);

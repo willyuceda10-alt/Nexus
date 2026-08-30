@@ -25,9 +25,10 @@ import { useApiBootstrap } from '../../context/ApiBootstrapContext';
 import { useNexus } from '../../context/NexusContext';
 import type { NexusObject } from '../../types/nexus';
 import { MaterialsView } from './MaterialsView';
+import { SapMaterialFlowV1G2 } from './SapMaterialFlowV1G2';
 
 type Panel = 'material' | 'warehouse' | 'supplier' | 'requirement' | 'reserve' | 'order' | 'receive' | 'issue' | null;
-type Tab = 'requirements' | 'stock';
+type Tab = 'sap' | 'requirements' | 'stock';
 
 function messageOf(cause: unknown): string {
   if (cause instanceof BridataApiError) {
@@ -86,7 +87,7 @@ export const MaterialsInventoryV2View: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string>(selectedProjectId ?? 'ALL');
-  const [tab, setTab] = useState<Tab>('requirements');
+  const [tab, setTab] = useState<Tab>('sap');
   const [panel, setPanel] = useState<Panel>(null);
   const [selectedRequirementId, setSelectedRequirementId] = useState<string>('');
 
@@ -171,7 +172,7 @@ export const MaterialsInventoryV2View: React.FC = () => {
             </div>
             <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">Materiales, inventario y abastecimiento</h1>
             <p className="mt-1 max-w-3xl text-[12px] leading-5 text-slate-500">
-              Requerimientos ligados a la WBS, stock derivado del ledger, reservas, compras, recepción y consumo.
+              Flujo SAP, requerimientos ligados a la WBS, stock derivado del ledger, compras, recepción y consumo desde PostgreSQL Bridata.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -210,6 +211,7 @@ export const MaterialsInventoryV2View: React.FC = () => {
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-1 rounded-xl bg-slate-50 p-1">
+              <button onClick={() => setTab('sap')} className={`rounded-lg px-3 py-2 text-[9px] font-bold ${tab === 'sap' ? 'bg-white text-green-800 shadow-sm' : 'text-slate-500'}`}>Flujo SAP</button>
               <button onClick={() => setTab('requirements')} className={`rounded-lg px-3 py-2 text-[9px] font-bold ${tab === 'requirements' ? 'bg-white text-green-800 shadow-sm' : 'text-slate-500'}`}>Requerimientos y riesgo</button>
               <button onClick={() => setTab('stock')} className={`rounded-lg px-3 py-2 text-[9px] font-bold ${tab === 'stock' ? 'bg-white text-green-800 shadow-sm' : 'text-slate-500'}`}>Stock por almacén</button>
             </div>
@@ -222,7 +224,12 @@ export const MaterialsInventoryV2View: React.FC = () => {
             </div>
           </div>
 
-          {tab === 'requirements' ? (
+          {tab === 'sap' ? (
+            <SapMaterialFlowV1G2
+              workspaceId={currentWorkspace.id}
+              projectId={projectFilter === 'ALL' ? null : projectFilter}
+            />
+          ) : tab === 'requirements' ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1380px] text-left text-[10px]">
                 <thead className="bg-slate-50 text-[8px] font-extrabold uppercase tracking-[0.1em] text-slate-400">
