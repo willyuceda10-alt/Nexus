@@ -75,7 +75,14 @@ export async function workspaceSummaryV1Routes(app: FastifyInstance): Promise<vo
               COUNT(*) FILTER (WHERE status = 'BLOCKED')::bigint AS blocked_items,
               COUNT(*) FILTER (
                 WHERE object_type_key = 'RISK'
-                  AND (priority = 'CRITICAL' OR COALESCE((metadata->>'riskScore')::numeric, 0) >= 15)
+                  AND (
+                    priority = 'CRITICAL'
+                    OR CASE
+                      WHEN COALESCE(metadata->>'riskScore', '') ~ '^[0-9]+([.][0-9]+)?$'
+                        THEN (metadata->>'riskScore')::numeric >= 15
+                      ELSE false
+                    END
+                  )
                   AND status NOT IN ('CLOSED','CANCELLED')
               )::bigint AS critical_risks,
               COUNT(*) FILTER (
