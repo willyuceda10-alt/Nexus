@@ -25,38 +25,62 @@ import { DocumentsApprovalsView } from './components/views/DocumentsApprovalsVie
 import { TimelineView } from './components/views/TimelineView';
 import { ExecutiveDashboard } from './components/views/ExecutiveDashboard';
 import { SettingsV2View } from './components/views/SettingsV2View';
-import { SapIntegrationCenterV1G1View } from './components/views/SapIntegrationCenterV1G1View';
-import { SapProcurementV1G3View } from './components/views/SapProcurementV1G3View';
-import { SapInventoryV1G4View } from './components/views/SapInventoryV1G4View';
-import { SapCommandCenterV1H1View } from './components/views/SapCommandCenterV1H1View';
+
+const SapIntegrationCenterV1G1View = React.lazy(() =>
+  import('./components/views/SapIntegrationCenterV1G1View').then((module) => ({ default: module.SapIntegrationCenterV1G1View })),
+);
+const SapProcurementV1G3View = React.lazy(() =>
+  import('./components/views/SapProcurementV1G3View').then((module) => ({ default: module.SapProcurementV1G3View })),
+);
+const SapInventoryV1G4View = React.lazy(() =>
+  import('./components/views/SapInventoryV1G4View').then((module) => ({ default: module.SapInventoryV1G4View })),
+);
+const SapCommandCenterV1H1View = React.lazy(() =>
+  import('./components/views/SapCommandCenterV1H1View').then((module) => ({ default: module.SapCommandCenterV1H1View })),
+);
+
+const RouteFallback: React.FC = () => (
+  <div className="mx-auto flex min-h-[360px] w-full max-w-[1660px] items-center justify-center px-6 py-10 lg:px-8">
+    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+      <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-500" />
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">Bridata</p>
+        <p className="mt-0.5 text-[11px] font-semibold text-slate-500">Cargando módulo operativo…</p>
+      </div>
+    </div>
+  </div>
+);
 
 const MainContentRouter: React.FC = () => {
   const { activeTab } = useNexus();
 
+  let content: React.ReactNode;
   switch (activeTab) {
-    case 'home': return <WorkspaceHome />;
-    case 'inbox': return <MyWorkView />;
-    case 'projects': return <ProjectsOverviewView />;
-    case 'project': return <ProjectCenter />;
-    case 'boards': return <WorkBoardsConfigOptionsV1View />;
-    case 'calendar': return <WorkCalendarTimelineV1View />;
-    case 'portfolios': return <PortfoliosView />;
-    case 'resources': return <ResourceManagementView />;
-    case 'materials': return <MaterialsInventoryV2View />;
-    case 'sap': return <SapCommandCenterV1H1View />;
-    case 'procurement': return <SapProcurementV1G3View />;
-    case 'inventory': return <SapInventoryV1G4View />;
-    case 'costs': return <CostControlV2View />;
-    case 'integrations': return <SapIntegrationCenterV1G1View />;
-    case 'automations': return <AutomationsV2View />;
-    case 'governance': return <GovernanceRiskView />;
-    case 'meetings': return <MeetingsDecisionsView />;
-    case 'documents': return <DocumentsApprovalsView />;
-    case 'timeline': return <TimelineView />;
-    case 'reports': return <ExecutiveDashboard />;
-    case 'settings': return <SettingsV2View />;
-    default: return <WorkspaceHome />;
+    case 'home': content = <WorkspaceHome />; break;
+    case 'inbox': content = <MyWorkView />; break;
+    case 'projects': content = <ProjectsOverviewView />; break;
+    case 'project': content = <ProjectCenter />; break;
+    case 'boards': content = <WorkBoardsConfigOptionsV1View />; break;
+    case 'calendar': content = <WorkCalendarTimelineV1View />; break;
+    case 'portfolios': content = <PortfoliosView />; break;
+    case 'resources': content = <ResourceManagementView />; break;
+    case 'materials': content = <MaterialsInventoryV2View />; break;
+    case 'sap': content = <SapCommandCenterV1H1View />; break;
+    case 'procurement': content = <SapProcurementV1G3View />; break;
+    case 'inventory': content = <SapInventoryV1G4View />; break;
+    case 'costs': content = <CostControlV2View />; break;
+    case 'integrations': content = <SapIntegrationCenterV1G1View />; break;
+    case 'automations': content = <AutomationsV2View />; break;
+    case 'governance': content = <GovernanceRiskView />; break;
+    case 'meetings': content = <MeetingsDecisionsView />; break;
+    case 'documents': content = <DocumentsApprovalsView />; break;
+    case 'timeline': content = <TimelineView />; break;
+    case 'reports': content = <ExecutiveDashboard />; break;
+    case 'settings': content = <SettingsV2View />; break;
+    default: content = <WorkspaceHome />;
   }
+
+  return <React.Suspense fallback={<RouteFallback />}>{content}</React.Suspense>;
 };
 
 export function App() {
