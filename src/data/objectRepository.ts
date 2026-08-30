@@ -119,6 +119,8 @@ type PendingUpdateBatch = {
 };
 
 const UPDATE_BUFFER_MS = 300;
+const OBJECT_PAGE_SIZE = 100;
+const MAX_AUTO_PAGED_OBJECTS = 2_000;
 
 export class ApiObjectRepository implements ObjectRepository {
   private readonly confirmed = new Map<string, NexusObject>();
@@ -126,12 +128,37 @@ export class ApiObjectRepository implements ObjectRepository {
   private readonly chains = new Map<string, Promise<NexusObject>>();
 
   async list(params: ListObjectsParams = {}, signal?: AbortSignal): Promise<ObjectListResult> {
-    const response = await bridataApi.listObjects(params, signal);
-    const items = response.items.map((item) => apiObjectToNexusObject(item));
-    for (const item of items) this.confirmed.set(item.id, item);
+    // Explicit cursor means the caller wants exactly one server page.
+    if (params.cursor) {
+      const response = await bridataApi.listObjects({ ...params, limit: Math.min(params.limit ?? OBJECT_PAGE_SIZE, OBJECT_PAGE_SIZE) }, signal);
+      const items = response.items.map((item) => apiObjectToNexusObject(item));
+      for (const item of items) this.confirmed.set(item.id, item);
+      return { items, nextCursor: response.nextCursor };
+    }
+
+    // NexusContext historically requested limit=100 and then treated that page as the
+    // complete workspace. H4 follows cursors automatically so dashboards are no longer
+    // silently wrong once a workspace crosses 100 objects. A hard safety cap prevents a
+    // single browser session from materializing an unbounded workspace.
+    const pageSize = Math.min(params.limit ?? OBJECT_PAGE_SIZE, OBJECT_PAGE_SIZE);
+    const items: NexusObject[] = [];
+    let cursor: string | undefined;
+    let nextCursor: string | null = null;
+
+    do {
+      const response = await bridataApi.listObjects({ ...params, cursor, limit: pageSize }, signal);
+      const mapped = response.items.map((item) => apiObjectToNexusObject(item));
+      for (const item of mapped) {
+        this.confirmed.set(item.id, item);
+        items.push(item);
+      }
+      nextCursor = response.nextCursor;
+      cursor = response.nextCursor ?? undefined;
+    } while (cursor && items.length < MAX_AUTO_PAGED_OBJECTS);
+
     return {
-      items,
-      nextCursor: response.nextCursor,
+      items: items.slice(0, MAX_AUTO_PAGED_OBJECTS),
+      nextCursor: items.length >= MAX_AUTO_PAGED_OBJECTS ? nextCursor : null,
     };
   }
 
