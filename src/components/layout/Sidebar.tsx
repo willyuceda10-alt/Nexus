@@ -13,6 +13,7 @@ import {
   Gauge,
   Layers3,
   PackageSearch,
+  PlugZap,
   Settings2,
   ShieldAlert,
   UsersRound,
@@ -69,6 +70,7 @@ export const Sidebar: React.FC = () => {
 
   const controlItems: NavigationItem[] = [
     { id: 'governance', label: 'Riesgos y cambios', icon: ShieldAlert },
+    { id: 'integrations', label: 'Integraciones', icon: PlugZap },
     { id: 'automations', label: 'Automatizaciones', icon: Workflow },
   ];
 
