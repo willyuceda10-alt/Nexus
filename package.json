@@ -21,7 +21,7 @@
     "typecheck": "tsc --noEmit && npm run typecheck --workspace @nexus/api",
     "lint": "npm run typecheck",
     "test": "tsx src/domain/myWork.smoke.ts && tsx src/domain/collaborationV1.smoke.ts && tsx src/domain/objectApprovalsV1.smoke.ts && tsx src/domain/documentMetadataV1.smoke.ts && tsx src/domain/sapProcurementV1G3.smoke.ts && npm run test --workspace @nexus/api",
-    "verify:h4": "npm run prisma:validate && npm run typecheck && npm run test && npm run build",
+    "verify:h4": "npm run prisma:validate && npm run prisma:generate && npm run typecheck && npm run test && npm run build",
     "load:h4": "node scripts/load-smoke-h4.mjs",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
