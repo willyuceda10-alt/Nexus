@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Columns3,
+  Database,
   FileText,
   FolderKanban,
   Gauge,
@@ -65,6 +66,7 @@ export const Sidebar: React.FC = () => {
   ];
 
   const operationsItems: NavigationItem[] = [
+    { id: 'sap', label: 'Centro SAP', icon: Database },
     { id: 'resources', label: 'Recursos', icon: UsersRound },
     { id: 'materials', label: 'Materiales', icon: PackageSearch },
     { id: 'procurement', label: 'Compras / Por llegar', icon: ShoppingCart },
