@@ -188,6 +188,7 @@ model WorkspaceMember {
 enum WorkspaceRole {
   OWNER
   ADMIN
+  PMO_SENIOR
   MANAGER
   MEMBER
   VIEWER
