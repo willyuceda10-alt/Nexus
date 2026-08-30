@@ -10,10 +10,12 @@ import {
 } from '../authorization.js';
 import {
   PERMISSIONS_V2,
+  canTransitionWorkspaceRoleV2,
   isPermissionKeyV2,
   type AuthorizationEffectV2,
   type AuthorizationScopeTypeV2,
   type AuthorizationSubjectTypeV2,
+  type WorkspaceRoleKeyV2,
 } from '../domain/permission-engine-v2.js';
 import { withTenant } from '../tenant-transaction.js';
 
@@ -183,17 +185,32 @@ export async function authorizationV2Routes(app: FastifyInstance): Promise<void>
 
         const membership = await tx.workspaceMember.findUnique({
           where: { workspaceId_userId: { workspaceId: workspace.id, userId: params.data.userId } },
-          select: { id: true, tenantId: true, role: true },
+          select: { id: true, tenantId: true, role: true, workspaceId: true, userId: true },
         });
         if (!membership || membership.tenantId !== actor.tenantId) {
           return { kind: 'membership_not_found' as const };
         }
 
-        if (body.data.role === 'OWNER' && !isTenantAdministrator(actor) && String(membership.role) !== 'OWNER') {
-          return { kind: 'owner_assignment_denied' as const };
+        const previousRole = String(membership.role) as WorkspaceRoleKeyV2;
+        if (!canTransitionWorkspaceRoleV2({
+          actorTenantRole: actor.role,
+          currentRole: previousRole,
+          nextRole: body.data.role,
+        })) {
+          return { kind: 'owner_role_change_denied' as const };
         }
 
-        const previousRole = String(membership.role);
+        if (previousRole === body.data.role) {
+          return {
+            kind: 'ok' as const,
+            membership: {
+              workspaceId: membership.workspaceId,
+              userId: membership.userId,
+              role: previousRole,
+            },
+          };
+        }
+
         const updated = await tx.workspaceMember.update({
           where: { id: membership.id },
           data: { role: body.data.role },
@@ -247,7 +264,7 @@ export async function authorizationV2Routes(app: FastifyInstance): Promise<void>
 
       if (result.kind === 'not_found') return reply.code(404).send({ error: 'workspace_not_found' });
       if (result.kind === 'membership_not_found') return reply.code(404).send({ error: 'workspace_membership_not_found' });
-      if (result.kind === 'owner_assignment_denied') return reply.code(403).send({ error: 'workspace_owner_assignment_requires_tenant_admin' });
+      if (result.kind === 'owner_role_change_denied') return reply.code(403).send({ error: 'workspace_owner_role_change_requires_tenant_admin' });
       if (result.kind === 'forbidden') return reply.code(403).send({ error: 'workspace_permission_management_denied' });
       return result.membership;
     },
