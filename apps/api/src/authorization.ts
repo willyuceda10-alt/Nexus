@@ -15,6 +15,12 @@ export interface AuthorizationContextV2 {
   projectId?: string | null;
 }
 
+type ResolvedAuthorizationContextV2 = {
+  workspaceId: string | null;
+  workspaceRole: string | null;
+  projectId: string | null;
+};
+
 type PolicyRow = {
   scope_type: AuthorizationScopeTypeV2;
   scope_id: string;
@@ -32,7 +38,7 @@ async function resolveWorkspaceContext(
   tx: Prisma.TransactionClient,
   actor: ActorContext,
   context: AuthorizationContextV2,
-): Promise<{ workspaceId: string | null; workspaceRole: string | null; projectId: string | null } | null> {
+): Promise<ResolvedAuthorizationContextV2 | null> {
   let workspaceId = context.workspaceId ?? null;
   const projectId = context.projectId ?? null;
 
@@ -72,7 +78,7 @@ async function resolveWorkspaceContext(
 
   return {
     workspaceId,
-    workspaceRole: membership?.tenantId === actor.tenantId ? membership.role : null,
+    workspaceRole: membership?.tenantId === actor.tenantId ? String(membership.role) : null,
     projectId,
   };
 }
@@ -80,14 +86,15 @@ async function resolveWorkspaceContext(
 async function loadPolicies(
   tx: Prisma.TransactionClient,
   actor: ActorContext,
-  permission: PermissionKeyV2,
+  permissions: readonly PermissionKeyV2[],
   context: { workspaceId: string | null; projectId: string | null },
 ): Promise<PermissionPolicyV2[]> {
+  if (permissions.length === 0) return [];
   const rows = await tx.$queryRaw<PolicyRow[]>(Prisma.sql`
     SELECT scope_type, scope_id, subject_type, subject_key, permission_key, effect
     FROM authorization_policies
     WHERE tenant_id = ${actor.tenantId}::uuid
-      AND permission_key = ${permission}
+      AND permission_key IN (${Prisma.join([...permissions])})
       AND (
         (scope_type = 'TENANT' AND scope_id = ${actor.tenantId}::uuid)
         OR (${context.workspaceId}::uuid IS NOT NULL AND scope_type = 'WORKSPACE' AND scope_id = ${context.workspaceId}::uuid)
@@ -105,33 +112,52 @@ async function loadPolicies(
   }));
 }
 
+export async function authorizePermissions(
+  tx: Prisma.TransactionClient,
+  actor: ActorContext,
+  permissions: readonly PermissionKeyV2[],
+  context: AuthorizationContextV2 = {},
+): Promise<Map<PermissionKeyV2, PermissionDecisionV2>> {
+  const decisions = new Map<PermissionKeyV2, PermissionDecisionV2>();
+  const resolved = await resolveWorkspaceContext(tx, actor, context);
+  if (!resolved) {
+    for (const permission of permissions) {
+      decisions.set(permission, { allowed: false, source: 'DEFAULT_DENY', matchedPolicies: [] });
+    }
+    return decisions;
+  }
+
+  if (resolved.workspaceId && !isTenantAdministrator(actor) && !resolved.workspaceRole) {
+    for (const permission of permissions) {
+      decisions.set(permission, { allowed: false, source: 'DEFAULT_DENY', matchedPolicies: [] });
+    }
+    return decisions;
+  }
+
+  const policies = await loadPolicies(tx, actor, permissions, resolved);
+  for (const permission of permissions) {
+    decisions.set(permission, evaluatePermissionV2({
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      tenantRole: actor.role,
+      workspaceRole: resolved.workspaceRole,
+      workspaceId: resolved.workspaceId,
+      projectId: resolved.projectId,
+      permission,
+      policies,
+    }));
+  }
+  return decisions;
+}
+
 export async function authorizePermission(
   tx: Prisma.TransactionClient,
   actor: ActorContext,
   permission: PermissionKeyV2,
   context: AuthorizationContextV2 = {},
 ): Promise<PermissionDecisionV2> {
-  const resolved = await resolveWorkspaceContext(tx, actor, context);
-  if (!resolved) {
-    return { allowed: false, source: 'DEFAULT_DENY', matchedPolicies: [] };
-  }
-
-  // Non-admin users need workspace membership before role or policy evaluation.
-  if (resolved.workspaceId && !isTenantAdministrator(actor) && !resolved.workspaceRole) {
-    return { allowed: false, source: 'DEFAULT_DENY', matchedPolicies: [] };
-  }
-
-  const policies = await loadPolicies(tx, actor, permission, resolved);
-  return evaluatePermissionV2({
-    tenantId: actor.tenantId,
-    userId: actor.userId,
-    tenantRole: actor.role,
-    workspaceRole: resolved.workspaceRole,
-    workspaceId: resolved.workspaceId,
-    projectId: resolved.projectId,
-    permission,
-    policies,
-  });
+  const decisions = await authorizePermissions(tx, actor, [permission], context);
+  return decisions.get(permission) ?? { allowed: false, source: 'DEFAULT_DENY', matchedPolicies: [] };
 }
 
 export async function canAccessWorkspace(
