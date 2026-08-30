@@ -38,6 +38,9 @@ param m365TeamsTopicWebUrl string = ''
 param m365TeamsTopicValue string = 'Bridata'
 
 var baseName = 'nexus-${environment}'
+var runtimeCpu = environment == 'prod' ? json('0.5') : json('0.25')
+var runtimeMemory = environment == 'prod' ? '1Gi' : '0.5Gi'
+var runtimeConcurrency = environment == 'prod' ? '30' : '50'
 
 resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
   name: '${baseName}-api'
@@ -131,7 +134,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
               successThreshold: 1
             }
           ]
-          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          resources: { cpu: runtimeCpu, memory: runtimeMemory }
         }
       ]
       scale: {
@@ -140,7 +143,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
         rules: [
           {
             name: 'http'
-            http: { metadata: { concurrentRequests: '50' } }
+            http: { metadata: { concurrentRequests: runtimeConcurrency } }
           }
         ]
       }
@@ -182,7 +185,7 @@ resource outboxWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployOutbo
             { name: 'SERVICE_BUS_TOPIC', value: serviceBusTopicName }
             { name: 'AZURE_CLIENT_ID', value: apiIdentityClientId }
           ]
-          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          resources: { cpu: runtimeCpu, memory: runtimeMemory }
         }
       ]
       scale: { minReplicas: 1, maxReplicas: 1 }
@@ -225,7 +228,7 @@ resource automationWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployA
             { name: 'SERVICE_BUS_AUTOMATION_SUBSCRIPTION', value: serviceBusAutomationSubscriptionName }
             { name: 'AZURE_CLIENT_ID', value: automationIdentityClientId }
           ]
-          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          resources: { cpu: runtimeCpu, memory: runtimeMemory }
         }
       ]
       scale: { minReplicas: 1, maxReplicas: environment == 'prod' ? 3 : 1 }
@@ -274,7 +277,7 @@ resource notificationWorker 'Microsoft.App/containerApps@2024-03-01' = if (deplo
             { name: 'M365_TEAMS_TOPIC_VALUE', value: m365TeamsTopicValue }
             { name: 'AZURE_CLIENT_ID', value: notificationIdentityClientId }
           ]
-          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          resources: { cpu: runtimeCpu, memory: runtimeMemory }
         }
       ]
       scale: { minReplicas: 1, maxReplicas: environment == 'prod' ? 3 : 1 }
@@ -313,7 +316,7 @@ resource migrations 'Microsoft.App/jobs@2024-03-01' = if (deployMigrationJob) {
             { name: 'ADMIN_DATABASE_URL', secretRef: 'admin-database-url' }
             { name: 'RUNTIME_DATABASE_URL', secretRef: 'runtime-database-url' }
           ]
-          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          resources: { cpu: runtimeCpu, memory: runtimeMemory }
         }
       ]
     }
