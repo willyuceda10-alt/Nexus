@@ -18,6 +18,7 @@ import {
   Settings2,
   ShieldAlert,
   UsersRound,
+  Warehouse,
   Workflow,
 } from 'lucide-react';
 import { BRAND } from '../../config/brand';
@@ -67,6 +68,7 @@ export const Sidebar: React.FC = () => {
     { id: 'resources', label: 'Recursos', icon: UsersRound },
     { id: 'materials', label: 'Materiales', icon: PackageSearch },
     { id: 'procurement', label: 'Compras / Por llegar', icon: ShoppingCart },
+    { id: 'inventory', label: 'Inventario', icon: Warehouse },
     { id: 'costs', label: 'Costos', icon: CircleDollarSign },
   ];
 
