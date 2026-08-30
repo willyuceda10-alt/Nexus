@@ -16,7 +16,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PlugZap,
-  Plus,
   Settings2,
   ShieldAlert,
   ShieldCheck,
@@ -37,7 +36,16 @@ interface NavigationItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: number;
+  accent?: 'pmo';
 }
+
+type NavigationGroupId = 'work' | 'pmo' | 'operations' | 'platform';
+
+type NavigationGroup = {
+  id: NavigationGroupId;
+  label: string;
+  items: NavigationItem[];
+};
 
 export interface SidebarProps {
   mobileOpen: boolean;
@@ -45,6 +53,26 @@ export interface SidebarProps {
 }
 
 const FAVORITES_KEY = 'bridata.sidebar.favorites.v1';
+const GROUPS_KEY = 'bridata.sidebar.groups.v1';
+const DEFAULT_GROUPS: Record<NavigationGroupId, boolean> = {
+  work: true,
+  pmo: true,
+  operations: true,
+  platform: false,
+};
+
+function formatWorkspaceRole(role: string | null): string {
+  if (!role) return 'Espacio de trabajo';
+  const labels: Record<string, string> = {
+    PMO_SENIOR: 'PMO Senior',
+    OWNER: 'Propietario',
+    ADMIN: 'Administrador',
+    MANAGER: 'Manager',
+    MEMBER: 'Miembro',
+    VIEWER: 'Solo lectura',
+  };
+  return labels[role] ?? role.replaceAll('_', ' ');
+}
 
 export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) => {
   const apiBootstrap = useApiBootstrap();
@@ -56,11 +84,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
     currentWorkspace,
     workspaces,
     setCurrentWorkspaceId,
-    openCreateModal,
   } = useNexus();
   const [collapsed, setCollapsed] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [openGroups, setOpenGroups] = useState<Record<NavigationGroupId, boolean>>(DEFAULT_GROUPS);
 
   useEffect(() => {
     try {
@@ -71,6 +99,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
       }
     } catch {
       // Local preference failure must never block navigation.
+    }
+  }, [currentUser.id]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`${GROUPS_KEY}.${currentUser.id}`);
+      if (!raw) {
+        setOpenGroups(DEFAULT_GROUPS);
+        return;
+      }
+      const parsed = JSON.parse(raw) as Partial<Record<NavigationGroupId, boolean>>;
+      setOpenGroups({ ...DEFAULT_GROUPS, ...parsed });
+    } catch {
+      setOpenGroups(DEFAULT_GROUPS);
     }
   }, [currentUser.id]);
 
@@ -95,29 +137,54 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
 
   const primaryItems: NavigationItem[] = [
     { id: 'home', label: 'Inicio', icon: Gauge },
-    { id: 'inbox', label: 'Mi trabajo', icon: CheckSquare2, badge: personalWorkCount },
-    ...(canSeePmo ? [{ id: 'pmo', label: 'Control PMO', icon: ShieldCheck }] : []),
   ];
 
-  const workspaceItems: NavigationItem[] = [
-    { id: 'projects', label: 'Proyectos', icon: FolderKanban },
-    { id: 'boards', label: 'Tableros', icon: Columns3 },
-    { id: 'calendar', label: 'Calendario y Timeline', icon: CalendarDays },
-    { id: 'portfolios', label: 'Portafolios', icon: Layers3 },
-    { id: 'resources', label: 'Recursos', icon: UsersRound },
-    { id: 'materials', label: 'Materiales', icon: PackageSearch },
-    { id: 'procurement', label: 'Compras / Por llegar', icon: ShoppingCart },
-    { id: 'inventory', label: 'Inventario', icon: Warehouse },
-    { id: 'costs', label: 'Costos', icon: CircleDollarSign },
-    { id: 'sap', label: 'Centro SAP', icon: Database },
-    { id: 'governance', label: 'Riesgos y cambios', icon: ShieldAlert },
-    { id: 'automations', label: 'Automatizaciones', icon: Workflow },
-    { id: 'integrations', label: 'Integraciones', icon: PlugZap },
-    { id: 'documents', label: 'Documentos', icon: FileText },
-    { id: 'reports', label: 'Analítica', icon: BarChart3 },
-  ];
+  const navigationGroups = useMemo<NavigationGroup[]>(() => [
+    {
+      id: 'work',
+      label: 'Trabajo',
+      items: [
+        { id: 'projects', label: 'Proyectos', icon: FolderKanban },
+        { id: 'boards', label: 'Tableros', icon: Columns3 },
+        { id: 'inbox', label: 'Mi trabajo', icon: CheckSquare2, badge: personalWorkCount },
+        { id: 'calendar', label: 'Calendario y Timeline', icon: CalendarDays },
+      ],
+    },
+    {
+      id: 'pmo',
+      label: 'PMO',
+      items: [
+        ...(canSeePmo ? [{ id: 'pmo', label: 'Control PMO', icon: ShieldCheck, accent: 'pmo' as const }] : []),
+        { id: 'portfolios', label: 'Portafolios', icon: Layers3 },
+        { id: 'resources', label: 'Recursos', icon: UsersRound },
+        { id: 'governance', label: 'Riesgos y cambios', icon: ShieldAlert },
+      ],
+    },
+    {
+      id: 'operations',
+      label: 'Operaciones',
+      items: [
+        { id: 'materials', label: 'Materiales', icon: PackageSearch },
+        { id: 'procurement', label: 'Compras / Por llegar', icon: ShoppingCart },
+        { id: 'inventory', label: 'Inventario', icon: Warehouse },
+        { id: 'costs', label: 'Costos', icon: CircleDollarSign },
+        { id: 'sap', label: 'Centro SAP', icon: Database },
+      ],
+    },
+    {
+      id: 'platform',
+      label: 'Plataforma',
+      items: [
+        { id: 'automations', label: 'Automatizaciones', icon: Workflow },
+        { id: 'integrations', label: 'Integraciones', icon: PlugZap },
+        { id: 'documents', label: 'Documentos', icon: FileText },
+        { id: 'reports', label: 'Analítica', icon: BarChart3 },
+      ],
+    },
+  ], [canSeePmo, personalWorkCount]);
 
-  const favoriteItems = workspaceItems.filter((item) => favoriteIds.includes(item.id));
+  const allGroupedItems = navigationGroups.flatMap((group) => group.items);
+  const favoriteItems = allGroupedItems.filter((item) => favoriteIds.includes(item.id));
 
   const navigate = (id: string) => {
     setActiveTab(id);
@@ -134,6 +201,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
       localStorage.setItem(`${FAVORITES_KEY}.${currentUser.id}`, JSON.stringify(next));
     } catch {
       // Preference persistence is best-effort only.
+    }
+  };
+
+  const toggleGroup = (groupId: NavigationGroupId) => {
+    const next = { ...openGroups, [groupId]: !openGroups[groupId] };
+    setOpenGroups(next);
+    try {
+      localStorage.setItem(`${GROUPS_KEY}.${currentUser.id}`, JSON.stringify(next));
+    } catch {
+      // Group state is a personal UI preference only.
     }
   };
 
@@ -165,18 +242,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
               onClick={() => navigate(item.id)}
               title={collapsed ? item.label : undefined}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex h-10 min-w-0 flex-1 items-center justify-between rounded-lg px-2.5 text-left text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+              className={`flex h-10 min-w-0 flex-1 items-center justify-between rounded-lg px-2.5 text-left text-[13px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                 isActive
                   ? 'bg-[#E8F6EC] font-bold text-[#0B6B35]'
                   : 'font-medium text-slate-700 hover:bg-slate-100/80 hover:text-slate-950'
               } ${collapsed ? 'justify-center px-0' : ''}`}
             >
               <span className={`flex min-w-0 items-center ${collapsed ? '' : 'gap-2.5'}`}>
-                <Icon className={`h-4 w-4 flex-none ${isActive ? 'text-[#07883F]' : 'text-slate-500'}`} />
+                <Icon className={`h-4 w-4 flex-none ${isActive || item.accent === 'pmo' ? 'text-[#07883F]' : 'text-slate-500'}`} />
                 {!collapsed && <span className="truncate">{item.label}</span>}
               </span>
-              {!collapsed && item.badge !== undefined && item.badge > 0 && (
-                <span className="ml-2 min-w-5 rounded-full bg-slate-200 px-1.5 py-0.5 text-center text-[10px] font-bold text-slate-700">{item.badge}</span>
+              {!collapsed && (
+                <span className="ml-2 flex items-center gap-1.5">
+                  {item.accent === 'pmo' && <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-emerald-700">PMO</span>}
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <span className="min-w-5 rounded-full bg-slate-200 px-1.5 py-0.5 text-center text-[10px] font-bold text-slate-700">{item.badge}</span>
+                  )}
+                </span>
               )}
             </button>
             {!collapsed && allowFavorite && (
@@ -194,6 +276,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
       })}
     </nav>
   );
+
+  const renderNavigationGroup = (group: NavigationGroup) => {
+    if (group.items.length === 0) return null;
+    if (collapsed) {
+      return <section key={group.id} className="mt-3 border-t border-slate-200/80 pt-3">{renderItems(group.items)}</section>;
+    }
+    const isOpen = openGroups[group.id];
+    return (
+      <section key={group.id} className="mt-3">
+        <button
+          onClick={() => toggleGroup(group.id)}
+          className="flex h-8 w-full items-center justify-between rounded-md px-2.5 text-left text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500 transition hover:bg-white hover:text-slate-800"
+          aria-expanded={isOpen}
+        >
+          <span>{group.label}</span>
+          {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </button>
+        {isOpen && <div className="mt-0.5">{renderItems(group.items, true)}</div>}
+      </section>
+    );
+  };
 
   const sidebar = (
     <aside
@@ -219,15 +322,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
         >
           <X className="h-4 w-4" />
         </button>
-        {!collapsed && (
-          <button
-            onClick={() => openCreateModal('TASK')}
-            className="hidden h-8 w-8 flex-none place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-green-300 hover:text-green-700 sm:grid"
-            aria-label="Crear elemento"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        )}
       </div>
 
       <div className="relative px-2.5 pt-2.5">
@@ -243,8 +337,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
           {!collapsed && (
             <>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-bold text-slate-900">{currentWorkspace?.name || 'Workspace'}</span>
-                <span className="mt-0.5 block truncate text-[10px] text-slate-500">{workspaceRole?.replaceAll('_', ' ') ?? 'Espacio de trabajo'}</span>
+                <span className="block truncate text-[13px] font-bold text-slate-900">{currentWorkspace?.name || 'Workspace'}</span>
+                <span className="mt-0.5 block truncate text-[11px] text-slate-500">{formatWorkspaceRole(workspaceRole)}</span>
               </span>
               {workspaceOpen ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />}
             </>
@@ -265,7 +359,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
                 className={`w-full rounded-lg px-2.5 py-2 text-left text-xs transition ${currentWorkspace?.id === workspace.id ? 'bg-emerald-50 font-bold text-emerald-800' : 'text-slate-700 hover:bg-slate-50'}`}
               >
                 <span className="block truncate">{workspace.name}</span>
-                <span className="mt-0.5 block truncate text-[10px] font-normal text-slate-400">{workspace.organizationName}</span>
+                <span className="mt-0.5 block truncate text-[11px] font-normal text-slate-400">{workspace.organizationName}</span>
               </button>
             ))}
           </div>
@@ -275,31 +369,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
       <div className="flex-1 overflow-y-auto px-2.5 py-3 no-scrollbar">
         {renderItems(primaryItems)}
 
-        {favoriteItems.length > 0 && (
-          <section className="mt-5">
-            {!collapsed && <p className="mb-1.5 flex items-center gap-1.5 px-2.5 text-[11px] font-bold text-slate-500"><Star className="h-3 w-3 fill-amber-300 text-amber-500" /> Favoritos</p>}
+        {!collapsed && favoriteItems.length > 0 && (
+          <section className="mt-4">
+            <p className="mb-1 flex items-center gap-1.5 px-2.5 text-[11px] font-bold text-slate-500"><Star className="h-3 w-3 fill-amber-300 text-amber-500" /> Favoritos</p>
             {renderItems(favoriteItems)}
           </section>
         )}
 
-        <section className="mt-5">
-          {!collapsed && (
-            <div className="mb-1.5 flex items-center justify-between px-2.5">
-              <p className="text-[11px] font-bold text-slate-500">Contenido del workspace</p>
-              <button onClick={() => openCreateModal('PROJECT')} className="grid h-6 w-6 place-items-center rounded-md text-slate-400 hover:bg-white hover:text-green-700" aria-label="Nuevo proyecto">
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-          {renderItems(workspaceItems, true)}
-        </section>
+        <div className="mt-2">{navigationGroups.map(renderNavigationGroup)}</div>
       </div>
 
       <div className="border-t border-slate-200 p-2.5">
         <button
           onClick={() => navigate('settings')}
           title={collapsed ? 'Configuración' : undefined}
-          className={`flex h-10 w-full items-center rounded-lg text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5'} ${activeTab === 'settings' ? 'bg-[#E8F6EC] text-[#0B6B35]' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}
+          className={`flex h-10 w-full items-center rounded-lg text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5'} ${activeTab === 'settings' ? 'bg-[#E8F6EC] text-[#0B6B35]' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}
         >
           <Settings2 className="h-4 w-4" /> {!collapsed && 'Configuración'}
         </button>
