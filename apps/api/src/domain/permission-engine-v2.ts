@@ -67,6 +67,10 @@ export interface PermissionDecisionV2 {
 }
 
 const ALL_PERMISSIONS = new Set<PermissionKeyV2>(PERMISSIONS_V2);
+const OWNER_BREAK_GLASS_PERMISSIONS = new Set<PermissionKeyV2>([
+  'tenant.manage_permissions',
+  'workspace.manage_permissions',
+]);
 
 const WORKSPACE_ADMIN_PERMISSIONS = new Set<PermissionKeyV2>([
   'workspace.read', 'workspace.manage', 'workspace.manage_permissions', 'workspace.manage_automation',
@@ -163,7 +167,7 @@ export function evaluatePermissionV2(input: PermissionDecisionInputV2): Permissi
     policy.permissionKey === input.permission && policyScopeMatches(input, policy) && policySubjectMatches(input, policy),
   );
 
-  if (input.tenantRole === 'OWNER' && input.permission === 'tenant.manage_permissions') {
+  if (input.tenantRole === 'OWNER' && OWNER_BREAK_GLASS_PERMISSIONS.has(input.permission)) {
     return { allowed: true, source: 'BREAK_GLASS_OWNER', matchedPolicies };
   }
 
