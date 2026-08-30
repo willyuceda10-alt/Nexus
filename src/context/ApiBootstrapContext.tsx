@@ -69,6 +69,55 @@ function setAuthenticatedApiSession(tenantId: string | null): void {
   });
 }
 
+function ApiBootstrapGate({
+  authMode,
+  status,
+  error,
+  correlationId,
+  onRetry,
+}: {
+  authMode: WebAuthMode;
+  status: ApiBootstrapStatus;
+  error: string | null;
+  correlationId: string | null;
+  onRetry: () => Promise<void>;
+}) {
+  const isError = status === 'error';
+  const authLabel = authMode === 'entra' ? 'Microsoft Entra ID' : 'DEV';
+
+  return (
+    <main className="grid min-h-dvh place-items-center bg-[#F4F7F5] px-5 py-10 text-slate-900">
+      <section className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8" role={isError ? 'alert' : 'status'} aria-live="polite">
+        <div className={`grid h-11 w-11 place-items-center rounded-2xl text-sm font-black ${isError ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
+          BR
+        </div>
+        <p className="mt-5 text-xs font-black uppercase tracking-[0.14em] text-emerald-700">Bridata Project</p>
+        <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+          {isError ? 'No se pudo iniciar la sesión' : 'Validando sesión segura'}
+        </h1>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          {isError
+            ? error || 'La API no pudo completar la autenticación y el bootstrap del tenant.'
+            : `Autenticando con ${authLabel}, resolviendo membresías y preparando el workspace.`}
+        </p>
+        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-xs text-slate-500">
+          Modo de autenticación: <strong className="text-slate-800">{authLabel}</strong>
+          {correlationId && <span className="mt-1 block">Referencia: {correlationId}</span>}
+        </div>
+        {isError && (
+          <button
+            type="button"
+            onClick={() => void onRetry()}
+            className="mt-5 inline-flex h-10 items-center rounded-xl bg-slate-900 px-4 text-xs font-bold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          >
+            Reintentar conexión
+          </button>
+        )}
+      </section>
+    </main>
+  );
+}
+
 export function ApiBootstrapProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<ApiBootstrapStatus>(
     runtimeConfig.dataMode === 'api' ? 'loading' : 'mock',
@@ -192,7 +241,21 @@ export function ApiBootstrapProvider({ children }: { children: ReactNode }) {
     [status, session, selectedTenantId, bootstrap, error, correlationId, retry, selectTenant],
   );
 
-  return <ApiBootstrapContext.Provider value={value}>{children}</ApiBootstrapContext.Provider>;
+  const apiGateActive = runtimeConfig.dataMode === 'api' && status !== 'ready';
+
+  return (
+    <ApiBootstrapContext.Provider value={value}>
+      {apiGateActive ? (
+        <ApiBootstrapGate
+          authMode={runtimeConfig.authMode}
+          status={status}
+          error={error}
+          correlationId={correlationId}
+          onRetry={retry}
+        />
+      ) : children}
+    </ApiBootstrapContext.Provider>
+  );
 }
 
 export function useApiBootstrap(): ApiBootstrapContextValue {
