@@ -28,6 +28,7 @@ import { SettingsV2View } from './components/views/SettingsV2View';
 import { SapIntegrationCenterV1G1View } from './components/views/SapIntegrationCenterV1G1View';
 import { SapProcurementV1G3View } from './components/views/SapProcurementV1G3View';
 import { SapInventoryV1G4View } from './components/views/SapInventoryV1G4View';
+import { SapCommandCenterV1H1View } from './components/views/SapCommandCenterV1H1View';
 
 const MainContentRouter: React.FC = () => {
   const { activeTab } = useNexus();
@@ -42,6 +43,7 @@ const MainContentRouter: React.FC = () => {
     case 'portfolios': return <PortfoliosView />;
     case 'resources': return <ResourceManagementView />;
     case 'materials': return <MaterialsInventoryV2View />;
+    case 'sap': return <SapCommandCenterV1H1View />;
     case 'procurement': return <SapProcurementV1G3View />;
     case 'inventory': return <SapInventoryV1G4View />;
     case 'costs': return <CostControlV2View />;
