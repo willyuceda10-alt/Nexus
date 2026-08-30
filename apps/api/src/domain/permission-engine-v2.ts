@@ -8,6 +8,8 @@ export const PERMISSIONS_V2 = [
   'workspace.manage',
   'workspace.manage_permissions',
   'workspace.manage_automation',
+  'portfolio.read',
+  'portfolio.manage',
   'project.read',
   'project.manage',
   'project.schedule.read',
@@ -16,9 +18,16 @@ export const PERMISSIONS_V2 = [
   'project.material.write',
   'project.cost.read',
   'project.cost.write',
+  'project.forecast.read',
+  'project.forecast.write',
   'project.baseline.create',
+  'project.baseline.approve',
+  'project.change.approve',
+  'resource.capacity.read',
   'governance.read',
   'governance.write',
+  'report.executive.read',
+  'audit.read',
   'meetings.read',
   'meetings.write',
   'documents.read',
@@ -58,6 +67,16 @@ export interface PermissionDecisionV2 {
 
 const ALL_PERMISSIONS = new Set<PermissionKeyV2>(PERMISSIONS_V2);
 
+const WORKSPACE_ADMIN_PERMISSIONS = new Set<PermissionKeyV2>([
+  'workspace.read', 'workspace.manage', 'workspace.manage_permissions', 'workspace.manage_automation',
+  'portfolio.read', 'portfolio.manage',
+  'project.read', 'project.manage', 'project.schedule.read', 'project.schedule.write',
+  'project.material.read', 'project.material.write', 'project.cost.read', 'project.cost.write',
+  'project.forecast.read', 'project.forecast.write', 'project.baseline.create', 'project.baseline.approve',
+  'project.change.approve', 'resource.capacity.read', 'governance.read', 'governance.write',
+  'report.executive.read', 'audit.read', 'meetings.read', 'meetings.write', 'documents.read', 'documents.write',
+]);
+
 const TENANT_ROLE_GRANTS: Record<string, ReadonlySet<PermissionKeyV2>> = {
   OWNER: ALL_PERMISSIONS,
   TENANT_ADMIN: ALL_PERMISSIONS,
@@ -66,33 +85,42 @@ const TENANT_ROLE_GRANTS: Record<string, ReadonlySet<PermissionKeyV2>> = {
 };
 
 const WORKSPACE_ROLE_GRANTS: Record<string, ReadonlySet<PermissionKeyV2>> = {
-  OWNER: new Set<PermissionKeyV2>([
-    'workspace.read', 'workspace.manage', 'workspace.manage_permissions', 'workspace.manage_automation',
-    'project.read', 'project.manage', 'project.schedule.read', 'project.schedule.write',
-    'project.material.read', 'project.material.write', 'project.cost.read', 'project.cost.write',
-    'project.baseline.create', 'governance.read', 'governance.write', 'meetings.read', 'meetings.write',
-    'documents.read', 'documents.write',
-  ]),
-  ADMIN: new Set<PermissionKeyV2>([
-    'workspace.read', 'workspace.manage', 'workspace.manage_permissions', 'workspace.manage_automation',
-    'project.read', 'project.manage', 'project.schedule.read', 'project.schedule.write',
-    'project.material.read', 'project.material.write', 'project.cost.read', 'project.cost.write',
-    'project.baseline.create', 'governance.read', 'governance.write', 'meetings.read', 'meetings.write',
+  OWNER: WORKSPACE_ADMIN_PERMISSIONS,
+  ADMIN: WORKSPACE_ADMIN_PERMISSIONS,
+  PMO_SENIOR: new Set<PermissionKeyV2>([
+    'workspace.read',
+    'portfolio.read', 'portfolio.manage',
+    'project.read', 'project.manage',
+    'project.schedule.read', 'project.schedule.write',
+    'project.material.read',
+    'project.cost.read',
+    'project.forecast.read', 'project.forecast.write',
+    'project.baseline.create', 'project.baseline.approve',
+    'project.change.approve',
+    'resource.capacity.read',
+    'governance.read', 'governance.write',
+    'report.executive.read', 'audit.read',
+    'meetings.read', 'meetings.write',
     'documents.read', 'documents.write',
   ]),
   MANAGER: new Set<PermissionKeyV2>([
-    'workspace.read', 'workspace.manage', 'workspace.manage_automation', 'project.read', 'project.manage',
-    'project.schedule.read', 'project.schedule.write', 'project.material.read', 'project.material.write',
-    'project.cost.read', 'project.cost.write', 'project.baseline.create', 'governance.read', 'governance.write',
-    'meetings.read', 'meetings.write', 'documents.read', 'documents.write',
+    'workspace.read', 'workspace.manage', 'workspace.manage_automation',
+    'portfolio.read',
+    'project.read', 'project.manage', 'project.schedule.read', 'project.schedule.write',
+    'project.material.read', 'project.material.write', 'project.cost.read', 'project.cost.write',
+    'project.forecast.read', 'project.forecast.write', 'project.baseline.create',
+    'resource.capacity.read', 'governance.read', 'governance.write',
+    'report.executive.read', 'meetings.read', 'meetings.write', 'documents.read', 'documents.write',
   ]),
   MEMBER: new Set<PermissionKeyV2>([
-    'workspace.read', 'project.read', 'project.schedule.read', 'project.material.read', 'project.cost.read',
-    'governance.read', 'meetings.read', 'meetings.write', 'documents.read', 'documents.write',
+    'workspace.read', 'portfolio.read', 'project.read', 'project.schedule.read', 'project.material.read',
+    'project.cost.read', 'project.forecast.read', 'resource.capacity.read', 'governance.read',
+    'meetings.read', 'meetings.write', 'documents.read', 'documents.write',
   ]),
   VIEWER: new Set<PermissionKeyV2>([
-    'workspace.read', 'project.read', 'project.schedule.read', 'project.material.read', 'project.cost.read',
-    'governance.read', 'meetings.read', 'documents.read',
+    'workspace.read', 'portfolio.read', 'project.read', 'project.schedule.read', 'project.material.read',
+    'project.cost.read', 'project.forecast.read', 'resource.capacity.read', 'governance.read',
+    'report.executive.read', 'meetings.read', 'documents.read',
   ]),
 };
 
