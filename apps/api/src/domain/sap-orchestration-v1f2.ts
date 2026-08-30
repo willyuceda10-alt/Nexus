@@ -52,7 +52,7 @@ export function notReadySourcesV1f2(
   return requiredSourceKeys.flatMap((raw) => {
     const sourceKey = raw.trim().toUpperCase();
     const status = byKey.get(sourceKey) ?? null;
-    return status === 'SUCCEEDED' || status === 'PARTIAL'
+    return status === 'FRESH' || status === 'SUCCEEDED' || status === 'PARTIAL'
       ? []
       : [{ sourceKey, status: status ?? 'NEVER' }];
   });
