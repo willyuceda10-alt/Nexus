@@ -155,7 +155,7 @@ describe('permission engine v2', () => {
     expect(evaluatePermissionV2(input)).toMatchObject({ allowed: false, source: 'EXPLICIT_DENY' });
   });
 
-  it('keeps tenant OWNER as break-glass for permission administration', () => {
+  it('keeps tenant OWNER as break-glass for tenant permission administration', () => {
     const input = base({
       tenantRole: 'OWNER',
       workspaceRole: null,
@@ -172,6 +172,39 @@ describe('permission engine v2', () => {
       }],
     });
     expect(evaluatePermissionV2(input)).toMatchObject({ allowed: true, source: 'BREAK_GLASS_OWNER' });
+  });
+
+  it('keeps tenant OWNER as break-glass for workspace permission administration', () => {
+    const input = base({
+      tenantRole: 'OWNER',
+      workspaceRole: null,
+      permission: 'workspace.manage_permissions',
+      policies: [{
+        scopeType: 'WORKSPACE',
+        scopeId: '00000000-0000-0000-0000-000000000003',
+        subjectType: 'TENANT_ROLE',
+        subjectKey: 'OWNER',
+        permissionKey: 'workspace.manage_permissions',
+        effect: 'DENY',
+      }],
+    });
+    expect(evaluatePermissionV2(input)).toMatchObject({ allowed: true, source: 'BREAK_GLASS_OWNER' });
+  });
+
+  it('does not let OWNER break-glass bypass operational denies', () => {
+    const input = base({
+      tenantRole: 'OWNER',
+      permission: 'project.cost.write',
+      policies: [{
+        scopeType: 'PROJECT',
+        scopeId: '00000000-0000-0000-0000-000000000004',
+        subjectType: 'TENANT_ROLE',
+        subjectKey: 'OWNER',
+        permissionKey: 'project.cost.write',
+        effect: 'DENY',
+      }],
+    });
+    expect(evaluatePermissionV2(input)).toMatchObject({ allowed: false, source: 'EXPLICIT_DENY' });
   });
 
   it('ignores a policy from another project scope', () => {
