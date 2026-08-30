@@ -78,6 +78,7 @@ import { workOsBoardManagedOptionCellsV1Routes } from './routes/work-os-board-ma
 import { workOsBoardManagedOptionsV1Routes } from './routes/work-os-board-managed-options-v1.js';
 import { workOsBoardTemporalV1Routes } from './routes/work-os-board-temporal-v1.js';
 import { workOsBoardsV1Routes } from './routes/work-os-boards-v1.js';
+import { workspaceSummaryV1Routes } from './routes/workspace-summary-v1.js';
 
 type PrismaWrappedDatabaseError = FastifyError & {
   meta?: { code?: string; message?: string };
@@ -88,6 +89,8 @@ type MeetingSchedulingV2PolicyBody = {
   validateAvailability?: unknown;
 };
 
+type RateBucket = { count: number; resetAt: number };
+
 export type BuildAppOptions = {
   documentBinaryStore?: DocumentBinaryStoreV1;
   integrationBinaryStore?: IntegrationBinaryStoreV1;
@@ -95,10 +98,21 @@ export type BuildAppOptions = {
 
 const legacyBoardOptionsPath = /^\/api\/v1\/work-os\/boards-v1\/[^/]+\/columns\/[^/]+\/options(?:\?|$)/;
 const meetingSchedulingV2Path = /^\/api\/v1\/meetings-v2\/schedule(?:\?|$)/;
+const RATE_WINDOW_MS = 60_000;
+
+function requestRateLimit(method: string, rawUrl: string): number {
+  if (rawUrl.startsWith('/health/')) return Number.POSITIVE_INFINITY;
+  if (rawUrl.includes('/binary') || rawUrl.includes('/imports') || rawUrl.includes('/service-import')) return 30;
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return 600;
+  return 120;
+}
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const documentBinaryStore = options.documentBinaryStore ?? createConfiguredDocumentBinaryStoreV1();
   const integrationBinaryStore = options.integrationBinaryStore ?? createConfiguredIntegrationBinaryStoreV1();
+  const rateBuckets = new Map<string, RateBucket>();
+  const requestStartedAt = new WeakMap<object, number>();
+
   const app = Fastify({
     logger: {
       level: config.LOG_LEVEL,
@@ -120,10 +134,24 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       return typeof incoming === 'string' && incoming.length <= 128 ? incoming : randomUUID();
     },
     bodyLimit: 1_048_576,
+    trustProxy: true,
   });
 
   registerRequestContext(app);
-  await app.register(helmet, { contentSecurityPolicy: false });
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+      },
+    },
+    referrerPolicy: { policy: 'no-referrer' },
+    hsts: config.NODE_ENV === 'production'
+      ? { maxAge: 31_536_000, includeSubDomains: true, preload: true }
+      : false,
+  });
   await app.register(cors, {
     origin(origin, callback) {
       if (!origin || config.corsOrigins.includes(origin)) {
@@ -141,7 +169,41 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   );
 
   app.addHook('onRequest', async (request, reply) => {
-    if (request.method === 'PUT' && legacyBoardOptionsPath.test(request.raw.url ?? '')) {
+    requestStartedAt.set(request, Date.now());
+
+    const rawUrl = request.raw.url ?? '/';
+    const limit = requestRateLimit(request.method, rawUrl);
+    if (Number.isFinite(limit)) {
+      const now = Date.now();
+      if (rateBuckets.size > 10_000) {
+        for (const [key, bucket] of rateBuckets) {
+          if (bucket.resetAt <= now) rateBuckets.delete(key);
+        }
+      }
+
+      const tenantHint = request.headers['x-bridata-tenant-id'];
+      const bucketKey = `${request.ip}:${typeof tenantHint === 'string' ? tenantHint : '-'}:${request.method}:${rawUrl.split('?')[0]}`;
+      const existing = rateBuckets.get(bucketKey);
+      const bucket = !existing || existing.resetAt <= now
+        ? { count: 1, resetAt: now + RATE_WINDOW_MS }
+        : { count: existing.count + 1, resetAt: existing.resetAt };
+      rateBuckets.set(bucketKey, bucket);
+
+      reply.header('x-ratelimit-limit', String(limit));
+      reply.header('x-ratelimit-remaining', String(Math.max(0, limit - bucket.count)));
+      if (bucket.count > limit) {
+        const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+        reply.header('retry-after', String(retryAfter));
+        return reply.code(429).send({
+          error: 'rate_limit_exceeded',
+          message: 'Too many requests. Retry later.',
+          retryAfterSeconds: retryAfter,
+          correlationId: request.id,
+        });
+      }
+    }
+
+    if (request.method === 'PUT' && legacyBoardOptionsPath.test(rawUrl)) {
       return reply.code(410).send({
         error: 'legacy_board_options_endpoint_disabled',
         message: 'Use the governed managed-options endpoint instead.',
@@ -164,7 +226,19 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.addHook('onSend', async (request, reply, payload) => {
     reply.header('x-correlation-id', request.id);
+    reply.header('cache-control', 'no-store');
     return payload;
+  });
+
+  app.addHook('onResponse', async (request, reply) => {
+    const startedAt = requestStartedAt.get(request);
+    if (startedAt === undefined) return;
+    const durationMs = Date.now() - startedAt;
+    if (durationMs >= 1000) {
+      request.log.warn({ durationMs, statusCode: reply.statusCode, method: request.method, url: request.raw.url }, 'Slow Bridata API request');
+    } else {
+      request.log.debug({ durationMs, statusCode: reply.statusCode }, 'Bridata API request completed');
+    }
   });
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
@@ -201,6 +275,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(notificationPreferencesV1Routes);
   await app.register(notificationCapabilitiesV1Routes);
   await app.register(bootstrapRoutes);
+  await app.register(workspaceSummaryV1Routes);
   await app.register(objectRoutes);
   await app.register(collaborationV1Routes);
   await app.register(documentMetadataV1Routes);
