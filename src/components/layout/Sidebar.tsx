@@ -13,6 +13,7 @@ import {
   Gauge,
   Layers3,
   PackageSearch,
+  ShoppingCart,
   PlugZap,
   Settings2,
   ShieldAlert,
@@ -65,6 +66,7 @@ export const Sidebar: React.FC = () => {
   const operationsItems: NavigationItem[] = [
     { id: 'resources', label: 'Recursos', icon: UsersRound },
     { id: 'materials', label: 'Materiales', icon: PackageSearch },
+    { id: 'procurement', label: 'Compras / Por llegar', icon: ShoppingCart },
     { id: 'costs', label: 'Costos', icon: CircleDollarSign },
   ];
 
