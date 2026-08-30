@@ -38,6 +38,7 @@ export type PermissionKeyV2 = (typeof PERMISSIONS_V2)[number];
 export type AuthorizationEffectV2 = 'ALLOW' | 'DENY';
 export type AuthorizationScopeTypeV2 = 'TENANT' | 'WORKSPACE' | 'PROJECT';
 export type AuthorizationSubjectTypeV2 = 'USER' | 'TENANT_ROLE' | 'WORKSPACE_ROLE';
+export type WorkspaceRoleKeyV2 = 'OWNER' | 'ADMIN' | 'PMO_SENIOR' | 'MANAGER' | 'MEMBER' | 'VIEWER';
 
 export interface PermissionPolicyV2 {
   scopeType: AuthorizationScopeTypeV2;
@@ -126,6 +127,16 @@ const WORKSPACE_ROLE_GRANTS: Record<string, ReadonlySet<PermissionKeyV2>> = {
 
 export function isPermissionKeyV2(value: string): value is PermissionKeyV2 {
   return (PERMISSIONS_V2 as readonly string[]).includes(value);
+}
+
+export function canTransitionWorkspaceRoleV2(input: {
+  actorTenantRole: string;
+  currentRole: WorkspaceRoleKeyV2;
+  nextRole: WorkspaceRoleKeyV2;
+}): boolean {
+  const tenantAdministrator = input.actorTenantRole === 'OWNER' || input.actorTenantRole === 'TENANT_ADMIN';
+  if (input.currentRole === 'OWNER' || input.nextRole === 'OWNER') return tenantAdministrator;
+  return true;
 }
 
 function policyScopeMatches(input: PermissionDecisionInputV2, policy: PermissionPolicyV2): boolean {
