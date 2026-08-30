@@ -20,7 +20,7 @@
     "clean": "rm -rf dist apps/api/dist coverage",
     "typecheck": "tsc --noEmit && npm run typecheck --workspace @nexus/api",
     "lint": "npm run typecheck",
-    "test": "tsx src/domain/myWork.smoke.ts && tsx src/domain/collaborationV1.smoke.ts && tsx src/domain/objectApprovalsV1.smoke.ts && tsx src/domain/documentMetadataV1.smoke.ts && npm run test --workspace @nexus/api",
+    "test": "tsx src/domain/myWork.smoke.ts && tsx src/domain/collaborationV1.smoke.ts && tsx src/domain/objectApprovalsV1.smoke.ts && tsx src/domain/documentMetadataV1.smoke.ts && tsx src/domain/sapProcurementV1G3.smoke.ts && npm run test --workspace @nexus/api",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:format": "prisma format",
