@@ -51,6 +51,7 @@ export const WorkspaceHome: React.FC = () => {
     currentUser,
     objects,
     approvals,
+    objectDataStatus,
     openObjectDrawer,
     openCreateModal,
     setSelectedProjectId,
@@ -149,6 +150,11 @@ export const WorkspaceHome: React.FC = () => {
   const exactAttention = serverSummary?.work.attention ?? localAttentionCount;
   const exactCriticalRisks = serverSummary?.risk.critical ?? criticalRisks.length;
   const exactPendingApprovals = serverSummary?.approvals.pending ?? pendingApprovals.length;
+  const browserViewIsPartial = Boolean(
+    serverSummary
+      && objectDataStatus === 'ready'
+      && serverSummary.totalObjects > objects.length,
+  );
 
   const openProject = (projectId: string, subTab = 'summary') => {
     setSelectedProjectId(projectId);
@@ -217,6 +223,12 @@ export const WorkspaceHome: React.FC = () => {
 
         {homeTab === 'overview' && (
           <div className="p-5" role="tabpanel" id="workspace-home-overview" aria-labelledby="workspace-home-tab-overview">
+            {browserViewIsPartial && serverSummary && (
+              <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-800" role="status">
+                <strong>Vista operativa parcial:</strong> el navegador materializó {objects.length.toLocaleString('es-PE')} de {serverSummary.totalObjects.toLocaleString('es-PE')} objetos. Los KPIs de esta cabecera siguen siendo exactos porque se calculan en PostgreSQL.
+              </div>
+            )}
+
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <SummaryMetric label="Proyectos activos" value={exactActiveProjects} hint={`${exactAverageProgress}% avance promedio`} />
               <SummaryMetric label="Mi trabajo" value={exactMyWork} hint="Elementos abiertos" />
