@@ -25,6 +25,7 @@ import { DocumentsApprovalsView } from './components/views/DocumentsApprovalsVie
 import { TimelineView } from './components/views/TimelineView';
 import { ExecutiveDashboard } from './components/views/ExecutiveDashboard';
 import { SettingsV2View } from './components/views/SettingsV2View';
+import { SapIntegrationCenterV1G1View } from './components/views/SapIntegrationCenterV1G1View';
 
 const MainContentRouter: React.FC = () => {
   const { activeTab } = useNexus();
@@ -40,6 +41,7 @@ const MainContentRouter: React.FC = () => {
     case 'resources': return <ResourceManagementView />;
     case 'materials': return <MaterialsInventoryV2View />;
     case 'costs': return <CostControlV2View />;
+    case 'integrations': return <SapIntegrationCenterV1G1View />;
     case 'automations': return <AutomationsV2View />;
     case 'governance': return <GovernanceRiskView />;
     case 'meetings': return <MeetingsDecisionsView />;
