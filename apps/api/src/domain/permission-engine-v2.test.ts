@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { evaluatePermissionV2, type PermissionDecisionInputV2 } from './permission-engine-v2.js';
+import {
+  canTransitionWorkspaceRoleV2,
+  evaluatePermissionV2,
+  type PermissionDecisionInputV2,
+} from './permission-engine-v2.js';
 
 function base(overrides: Partial<PermissionDecisionInputV2> = {}): PermissionDecisionInputV2 {
   return {
@@ -60,6 +64,30 @@ describe('permission engine v2', () => {
       expect(evaluatePermissionV2(base({ workspaceRole: 'PMO_SENIOR', permission })))
         .toMatchObject({ allowed: false, source: 'DEFAULT_DENY' });
     }
+  });
+
+  it('protects workspace OWNER assignment and removal behind tenant administration', () => {
+    expect(canTransitionWorkspaceRoleV2({
+      actorTenantRole: 'MEMBER', currentRole: 'ADMIN', nextRole: 'OWNER',
+    })).toBe(false);
+    expect(canTransitionWorkspaceRoleV2({
+      actorTenantRole: 'MEMBER', currentRole: 'OWNER', nextRole: 'PMO_SENIOR',
+    })).toBe(false);
+    expect(canTransitionWorkspaceRoleV2({
+      actorTenantRole: 'TENANT_ADMIN', currentRole: 'ADMIN', nextRole: 'OWNER',
+    })).toBe(true);
+    expect(canTransitionWorkspaceRoleV2({
+      actorTenantRole: 'OWNER', currentRole: 'OWNER', nextRole: 'ADMIN',
+    })).toBe(true);
+  });
+
+  it('allows ordinary governed role transitions once workspace permission checks pass', () => {
+    expect(canTransitionWorkspaceRoleV2({
+      actorTenantRole: 'MEMBER', currentRole: 'MANAGER', nextRole: 'PMO_SENIOR',
+    })).toBe(true);
+    expect(canTransitionWorkspaceRoleV2({
+      actorTenantRole: 'MEMBER', currentRole: 'PMO_SENIOR', nextRole: 'VIEWER',
+    })).toBe(true);
   });
 
   it('denies automation management to a viewer by default', () => {
