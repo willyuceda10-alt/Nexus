@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { BRAND } from '../../config/brand';
 import { runtimeConfig } from '../../config/runtime';
+import { hasBridataEntraAccessTokenProvider } from '../../auth/accessTokenProvider';
 
 type LoginPageProps = {
   onNavigate: (path: string) => void;
@@ -17,6 +18,13 @@ type LoginPageProps = {
 export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
   const isEntra = runtimeConfig.dataMode === 'api' && runtimeConfig.authMode === 'entra';
   const isApiDev = runtimeConfig.dataMode === 'api' && runtimeConfig.authMode === 'dev';
+  const entraProviderReady = !isEntra || hasBridataEntraAccessTokenProvider();
+  const entraBlocked = isEntra && !entraProviderReady;
+
+  const enterPlatform = () => {
+    if (entraBlocked) return;
+    onNavigate('/app');
+  };
 
   return (
     <main className="grid min-h-dvh bg-[#E9EEF3] lg:grid-cols-[0.95fr_1.05fr]">
@@ -78,22 +86,43 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
 
             <button
               type="button"
-              onClick={() => onNavigate('/app')}
-              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#0B6B4A] px-4 text-sm font-extrabold text-white shadow-lg shadow-emerald-950/15 transition hover:-translate-y-0.5 hover:bg-[#095A3E]"
+              onClick={enterPlatform}
+              disabled={entraBlocked}
+              aria-disabled={entraBlocked}
+              className={`mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-extrabold text-white shadow-lg transition ${
+                entraBlocked
+                  ? 'cursor-not-allowed bg-slate-400 shadow-none'
+                  : 'bg-[#0B6B4A] shadow-emerald-950/15 hover:-translate-y-0.5 hover:bg-[#095A3E]'
+              }`}
             >
-              {isEntra ? 'Continuar con Microsoft' : isApiDev ? 'Entrar al entorno DEV' : 'Entrar a la demo'}
-              <ArrowRight className="h-4 w-4" />
+              {entraBlocked
+                ? 'SSO pendiente de configuración'
+                : isEntra
+                  ? 'Continuar con Microsoft'
+                  : isApiDev
+                    ? 'Entrar al entorno DEV'
+                    : 'Entrar a la demo'}
+              {!entraBlocked && <ArrowRight className="h-4 w-4" />}
             </button>
 
-            <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-emerald-200/80 bg-emerald-50 px-3.5 py-3 text-xs leading-5 text-emerald-900">
-              <ShieldCheck className="mt-0.5 h-4 w-4 flex-none text-emerald-700" />
-              <span>Los permisos reales se validan en el backend. La interfaz solo representa el acceso autorizado para la sesión.</span>
-            </div>
+            {entraBlocked ? (
+              <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs leading-5 text-amber-900" role="status">
+                <LockKeyhole className="mt-0.5 h-4 w-4 flex-none text-amber-700" />
+                <span>Este entorno está configurado para Microsoft Entra ID, pero el frontend todavía no tiene un proveedor MSAL/SSO registrado. El acceso queda bloqueado para evitar una sesión aparente o un token simulado.</span>
+              </div>
+            ) : (
+              <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-emerald-200/80 bg-emerald-50 px-3.5 py-3 text-xs leading-5 text-emerald-900">
+                <ShieldCheck className="mt-0.5 h-4 w-4 flex-none text-emerald-700" />
+                <span>Los permisos reales se validan en el backend. La interfaz solo representa el acceso autorizado para la sesión.</span>
+              </div>
+            )}
 
             <p className="mt-5 text-center text-[11px] leading-5 text-slate-500">
-              {isEntra
-                ? 'Al continuar se inicia el bootstrap seguro del entorno Entra configurado.'
-                : 'Este entorno no representa una sesión productiva de Microsoft Entra ID.'}
+              {entraBlocked
+                ? 'Registra el proveedor MSAL y el scope delegado de Bridata API antes de habilitar el acceso Entra.'
+                : isEntra
+                  ? 'Al continuar se inicia el bootstrap seguro del entorno Entra configurado.'
+                  : 'Este entorno no representa una sesión productiva de Microsoft Entra ID.'}
             </p>
           </div>
 
