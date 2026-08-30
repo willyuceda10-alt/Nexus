@@ -78,6 +78,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
     .join('')
     .toUpperCase();
 
+  const sessionTenants = apiBootstrap.session?.tenants ?? [];
+  const canSwitchTenant = apiBootstrap.dataMode === 'api' && sessionTenants.length > 1;
+
   return (
     <header className="relative z-30 flex h-[58px] flex-none items-center justify-between border-b border-slate-200 bg-white px-2.5 sm:px-4 lg:px-5">
       <div className="flex min-w-0 items-center gap-2">
@@ -94,6 +97,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
             onClick={() => setWorkspaceOpen((open) => !open)}
             className="flex h-9 max-w-[250px] items-center gap-2 rounded-lg px-2.5 text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             aria-expanded={workspaceOpen}
+            aria-haspopup="menu"
           >
             <Building2 className="h-4 w-4 flex-none text-[#07883F]" />
             <span className="truncate text-xs font-semibold">{currentWorkspace?.name || 'Workspace'}</span>
@@ -101,7 +105,34 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
           </button>
 
           {workspaceOpen && (
-            <div className="absolute left-0 top-11 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-[0_18px_48px_rgba(15,23,42,0.14)]">
+            <div className="absolute left-0 top-11 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-[0_18px_48px_rgba(15,23,42,0.14)]" role="menu">
+              {canSwitchTenant && (
+                <section className="mb-2 border-b border-slate-100 pb-2">
+                  <p className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">Organización</p>
+                  {sessionTenants.map((sessionTenant) => {
+                    const active = apiBootstrap.bootstrap?.tenant.id === sessionTenant.id;
+                    return (
+                      <button
+                        key={sessionTenant.id}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setWorkspaceOpen(false);
+                          if (!active) void apiBootstrap.selectTenant(sessionTenant.id);
+                        }}
+                        className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition ${active ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-bold text-slate-900">{sessionTenant.name}</span>
+                          <span className="mt-0.5 block truncate text-[10px] text-slate-400">Rol tenant · {sessionTenant.role.replaceAll('_', ' ')}</span>
+                        </span>
+                        {active && <Check className="h-4 w-4 flex-none text-[#07883F]" />}
+                      </button>
+                    );
+                  })}
+                </section>
+              )}
+
               <div className="px-2.5 pb-2 pt-1">
                 <p className="text-xs font-semibold text-slate-500">Cambiar espacio de trabajo</p>
                 <p className="mt-0.5 truncate text-[11px] text-slate-400">{tenant.name}</p>
@@ -109,6 +140,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
               {workspaces.map((workspace) => (
                 <button
                   key={workspace.id}
+                  type="button"
+                  role="menuitem"
                   onClick={() => {
                     setCurrentWorkspaceId(workspace.id);
                     setWorkspaceOpen(false);
