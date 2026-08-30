@@ -139,11 +139,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
   };
 
   return (
-    <header className="relative z-30 flex h-[58px] flex-none items-center justify-between border-b border-slate-200 bg-white px-2.5 sm:px-4 lg:px-5">
+    <header className="relative z-30 flex h-[58px] flex-none items-center justify-between border-b border-[#294657] bg-[#102A3A] px-2.5 text-white shadow-[0_6px_18px_rgba(15,42,58,0.16)] sm:px-4 lg:px-5">
       <div className="flex min-w-0 items-center gap-2">
         <button
           onClick={onOpenMobileSidebar}
-          className="grid h-9 w-9 flex-none place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 md:hidden"
+          className="grid h-9 w-9 flex-none place-items-center rounded-lg border border-white/10 bg-white/[0.045] text-slate-200 hover:bg-white/[0.08] md:hidden"
           aria-label="Abrir navegación"
         >
           <Menu className="h-4 w-4" />
@@ -155,20 +155,20 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
               setWorkspaceOpen((open) => !open);
               setCreateOpen(false);
             }}
-            className="flex h-9 max-w-[250px] items-center gap-2 rounded-lg px-2.5 text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            className="flex h-9 max-w-[250px] items-center gap-2 rounded-lg px-2.5 text-slate-200 transition hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
             aria-expanded={workspaceOpen}
             aria-haspopup="menu"
           >
-            <Building2 className="h-4 w-4 flex-none text-[#07883F]" />
+            <Building2 className="h-4 w-4 flex-none text-emerald-300" />
             <span className="truncate text-xs font-semibold">{currentWorkspace?.name || 'Workspace'}</span>
             <ChevronDown className="h-3.5 w-3.5 flex-none text-slate-400" />
           </button>
 
           {workspaceOpen && (
-            <div className="absolute left-0 top-11 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-[0_18px_48px_rgba(15,23,42,0.14)]" role="menu">
+            <div className="absolute left-0 top-11 w-80 overflow-hidden rounded-xl border border-slate-300 bg-[#F8FAFC] p-2 text-slate-900 shadow-[0_18px_48px_rgba(15,23,42,0.2)]" role="menu">
               {canSwitchTenant && (
-                <section className="mb-2 border-b border-slate-100 pb-2">
-                  <p className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">Organización</p>
+                <section className="mb-2 border-b border-slate-200 pb-2">
+                  <p className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">Organización</p>
                   {sessionTenants.map((sessionTenant) => {
                     const active = apiBootstrap.bootstrap?.tenant.id === sessionTenant.id;
                     return (
@@ -180,13 +180,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
                           setWorkspaceOpen(false);
                           if (!active) void apiBootstrap.selectTenant(sessionTenant.id);
                         }}
-                        className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition ${active ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}
+                        className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition ${active ? 'bg-emerald-50' : 'hover:bg-slate-100'}`}
                       >
                         <span className="min-w-0">
                           <span className="block truncate text-xs font-bold text-slate-900">{sessionTenant.name}</span>
-                          <span className="mt-0.5 block truncate text-[11px] text-slate-400">Rol tenant · {formatRoleLabel(sessionTenant.role)}</span>
+                          <span className="mt-0.5 block truncate text-[11px] text-slate-500">Rol tenant · {formatRoleLabel(sessionTenant.role)}</span>
                         </span>
-                        {active && <Check className="h-4 w-4 flex-none text-[#07883F]" />}
+                        {active && <Check className="h-4 w-4 flex-none text-[#0B6B4A]" />}
                       </button>
                     );
                   })}
@@ -194,8 +194,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
               )}
 
               <div className="px-2.5 pb-2 pt-1">
-                <p className="text-xs font-semibold text-slate-500">Cambiar espacio de trabajo</p>
-                <p className="mt-0.5 truncate text-[11px] text-slate-400">{tenant.name}</p>
+                <p className="text-xs font-semibold text-slate-600">Cambiar espacio de trabajo</p>
+                <p className="mt-0.5 truncate text-[11px] text-slate-500">{tenant.name}</p>
               </div>
               {workspaces.map((workspace) => (
                 <button
@@ -206,38 +206,38 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
                     setCurrentWorkspaceId(workspace.id);
                     setWorkspaceOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2.5 text-left transition ${currentWorkspace?.id === workspace.id ? 'bg-green-50' : 'hover:bg-slate-50'}`}
+                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2.5 text-left transition ${currentWorkspace?.id === workspace.id ? 'bg-emerald-50' : 'hover:bg-slate-100'}`}
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-xs font-semibold text-slate-900">{workspace.name}</span>
-                    <span className="mt-0.5 block truncate text-[11px] text-slate-400">{workspace.organizationName}</span>
+                    <span className="mt-0.5 block truncate text-[11px] text-slate-500">{workspace.organizationName}</span>
                   </span>
-                  {currentWorkspace?.id === workspace.id && <Check className="h-4 w-4 text-[#07883F]" />}
+                  {currentWorkspace?.id === workspace.id && <Check className="h-4 w-4 text-[#0B6B4A]" />}
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        <div className="hidden h-5 w-px bg-slate-200 md:block" />
-        <p className="max-w-[190px] truncate px-1 text-sm font-semibold text-slate-900 sm:max-w-[260px]">{pageTitle}</p>
+        <div className="hidden h-5 w-px bg-white/12 md:block" />
+        <p className="max-w-[190px] truncate px-1 text-sm font-semibold text-white sm:max-w-[260px]">{pageTitle}</p>
       </div>
 
       <div className="flex items-center gap-1.5 sm:gap-2">
         <button
           onClick={() => setIsCommandPaletteOpen(true)}
-          className="hidden h-9 min-w-[300px] items-center gap-2 rounded-lg border border-slate-200 bg-[#F7F8FA] px-3 text-left text-xs text-slate-400 transition hover:border-slate-300 hover:bg-white lg:flex"
+          className="hidden h-9 min-w-[300px] items-center gap-2 rounded-lg border border-white/10 bg-white/[0.055] px-3 text-left text-xs text-slate-400 transition hover:border-emerald-300/30 hover:bg-white/[0.08] lg:flex"
         >
           <Search className="h-3.5 w-3.5" />
           <span className="flex-1">Buscar en Bridata</span>
-          <span className="flex items-center gap-1 rounded bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 ring-1 ring-slate-200"><Command className="h-2.5 w-2.5" />K</span>
+          <span className="flex items-center gap-1 rounded bg-white/8 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 ring-1 ring-white/10"><Command className="h-2.5 w-2.5" />K</span>
         </button>
 
         <div className="hidden sm:block"><ApiStatusBadge /></div>
 
         <button
           onClick={() => setActiveTab('inbox')}
-          className={`grid h-9 w-9 place-items-center rounded-lg border transition ${activeTab === 'inbox' ? 'border-green-200 bg-green-50 text-green-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
+          className={`grid h-9 w-9 place-items-center rounded-lg border transition ${activeTab === 'inbox' ? 'border-emerald-300/30 bg-emerald-300/10 text-emerald-200' : 'border-white/10 bg-white/[0.045] text-slate-300 hover:bg-white/[0.08] hover:text-white'}`}
           aria-label="Abrir Mi trabajo"
           title="Mi trabajo"
         >
@@ -250,7 +250,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
               setCreateOpen((open) => !open);
               setWorkspaceOpen(false);
             }}
-            className="flex h-9 items-center gap-1.5 rounded-lg bg-[#07883F] px-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#067535] active:scale-[0.98] sm:px-3"
+            className="flex h-9 items-center gap-1.5 rounded-lg bg-[#0E8A50] px-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#0C7746] active:scale-[0.98] sm:px-3"
             aria-haspopup="menu"
             aria-expanded={createOpen}
           >
@@ -260,10 +260,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
           </button>
 
           {createOpen && (
-            <div className="absolute right-0 top-11 w-[290px] overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-[0_18px_48px_rgba(15,23,42,0.16)]" role="menu" aria-label="Crear en Bridata">
+            <div className="absolute right-0 top-11 w-[290px] overflow-hidden rounded-xl border border-slate-300 bg-[#F8FAFC] p-2 text-slate-900 shadow-[0_18px_48px_rgba(15,23,42,0.2)]" role="menu" aria-label="Crear en Bridata">
               <div className="px-2.5 pb-2 pt-1">
                 <p className="text-xs font-bold text-slate-900">Crear nuevo</p>
-                <p className="mt-0.5 text-[11px] text-slate-400">La acción global abre el formulario adecuado.</p>
+                <p className="mt-0.5 text-[11px] text-slate-500">La acción global abre el formulario adecuado.</p>
               </div>
               <div className="grid grid-cols-2 gap-1">
                 {CREATE_OPTIONS.map((option) => {
@@ -276,9 +276,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
                       onClick={() => createObject(option.type)}
                       className="rounded-lg p-2.5 text-left transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
-                      <span className="grid h-7 w-7 place-items-center rounded-md bg-slate-100 text-slate-600"><Icon className="h-3.5 w-3.5" /></span>
+                      <span className="grid h-7 w-7 place-items-center rounded-md bg-[#E9EEF3] text-[#102A3A]"><Icon className="h-3.5 w-3.5" /></span>
                       <span className="mt-2 block text-xs font-semibold text-slate-900">{option.label}</span>
-                      <span className="mt-0.5 block text-[10px] leading-4 text-slate-400">{option.detail}</span>
+                      <span className="mt-0.5 block text-[10px] leading-4 text-slate-500">{option.detail}</span>
                     </button>
                   );
                 })}
@@ -287,11 +287,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
           )}
         </div>
 
-        <div className="ml-0.5 flex items-center gap-2 border-l border-slate-200 pl-2 sm:ml-1 sm:pl-3">
-          <div className="grid h-8 w-8 place-items-center rounded-full bg-slate-900 text-[10px] font-black text-white">{userInitials || 'BR'}</div>
+        <div className="ml-0.5 flex items-center gap-2 border-l border-white/12 pl-2 sm:ml-1 sm:pl-3">
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-[#081A24] text-[10px] font-black text-white ring-1 ring-white/10">{userInitials || 'BR'}</div>
           <div className="hidden max-w-[170px] xl:block">
-            <p className="truncate text-xs font-semibold text-slate-900">{currentUser.name}</p>
-            <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-slate-500"><ShieldCheck className="h-2.5 w-2.5 flex-none text-emerald-500" /> {workspaceRole}</p>
+            <p className="truncate text-xs font-semibold text-white">{currentUser.name}</p>
+            <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-slate-400"><ShieldCheck className="h-2.5 w-2.5 flex-none text-emerald-300" /> {workspaceRole}</p>
           </div>
         </div>
       </div>
