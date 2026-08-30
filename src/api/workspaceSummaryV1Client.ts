@@ -13,6 +13,7 @@ export interface WorkspaceSummaryV1 {
     open: number;
     mine: number;
     blocked: number;
+    attention?: number;
     overdue: number;
     dueNext14Days: number;
   };
