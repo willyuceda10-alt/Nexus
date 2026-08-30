@@ -143,9 +143,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       return typeof incoming === 'string' && incoming.length <= 128 ? incoming : randomUUID();
     },
     bodyLimit: 1_048_576,
-    // Azure Container Apps contributes the closest ingress proxy. Do not trust an
-    // arbitrary forwarded chain supplied by the public client.
-    trustProxy: 1,
+    // Azure Container Apps contributes the closest ingress proxy. Trust only the
+    // directly connected ingress hop; never trust a forwarded chain from clients.
+    trustProxy: (_address: string, hop: number) => hop === 0,
   });
 
   registerRequestContext(app);
