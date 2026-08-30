@@ -78,13 +78,7 @@ const envSchema = z
           message: 'ENTRA_API_CLIENT_ID is required when AUTH_MODE=entra',
         });
       }
-      if (!env.ENTRA_TENANT_ID) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['ENTRA_TENANT_ID'],
-          message: 'ENTRA_TENANT_ID is required when AUTH_MODE=entra',
-        });
-      }
+
     }
 
     if (env.AUTH_MODE === 'dev') {

@@ -32,6 +32,7 @@
     "prisma:seed:dev": "tsx prisma/seed.ts && tsx prisma/seed-resource-capacity.ts && tsx prisma/seed-materials.ts"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.20.0",
     "lucide-react": "^0.546.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1"

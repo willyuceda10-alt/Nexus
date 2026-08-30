@@ -10,6 +10,10 @@ import {
 import { BRAND } from '../../config/brand';
 import { runtimeConfig } from '../../config/runtime';
 import { hasBridataEntraAccessTokenProvider } from '../../auth/accessTokenProvider';
+import {
+  hasBridataMicrosoftAccount,
+  signInBridataWithMicrosoft,
+} from '../../auth/msalBridata';
 
 type LoginPageProps = {
   onNavigate: (path: string) => void;
@@ -21,8 +25,29 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
   const entraProviderReady = !isEntra || hasBridataEntraAccessTokenProvider();
   const entraBlocked = isEntra && !entraProviderReady;
 
-  const enterPlatform = () => {
+  React.useEffect(() => {
+    if (
+      isEntra &&
+      entraProviderReady &&
+      hasBridataMicrosoftAccount()
+    ) {
+      onNavigate('/app');
+    }
+  }, [isEntra, entraProviderReady, onNavigate]);
+
+  const enterPlatform = async () => {
     if (entraBlocked) return;
+
+    if (isEntra) {
+      await signInBridataWithMicrosoft();
+
+      if (hasBridataMicrosoftAccount()) {
+        onNavigate('/app');
+      }
+
+      return;
+    }
+
     onNavigate('/app');
   };
 

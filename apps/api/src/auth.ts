@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
 import { config } from './config.js';
+import { validateEntraTenantClaims } from './entra-multitenant-auth-h44.js';
 import { prisma } from './db.js';
 import { withTenant } from './tenant-transaction.js';
 import {
@@ -49,10 +50,38 @@ declare module 'fastify' {
   }
 }
 
-const jwksTenant = config.ENTRA_TENANT_ID ?? 'common';
-const entraJwks = createRemoteJWKSet(
-  new URL(`https://login.microsoftonline.com/${jwksTenant}/discovery/v2.0/keys`),
-);
+const MAX_ENTRA_JWKS_TENANTS = 128;
+
+const entraJwksByTenant =
+  new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+
+function getEntraJwksForTenant(
+  tenantId: string,
+): ReturnType<typeof createRemoteJWKSet> {
+  const cached = entraJwksByTenant.get(tenantId);
+
+  if (cached) {
+    return cached;
+  }
+
+  if (entraJwksByTenant.size >= MAX_ENTRA_JWKS_TENANTS) {
+    const oldestTenantId = entraJwksByTenant.keys().next().value;
+
+    if (oldestTenantId) {
+      entraJwksByTenant.delete(oldestTenantId);
+    }
+  }
+
+  const jwks = createRemoteJWKSet(
+    new URL(
+      `https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`,
+    ),
+  );
+
+  entraJwksByTenant.set(tenantId, jwks);
+
+  return jwks;
+}
 
 function isUuidV1f2(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -120,29 +149,48 @@ export async function authenticate(
   const token = authorization.slice('Bearer '.length).trim();
 
   try {
+    // Phase 1: read tid only to determine which tenant-specific issuer
+    // must be cryptographically validated. No authorization occurs here.
     const unverified = decodeJwt(token);
-    const entraTenantId = typeof unverified.tid === 'string' ? unverified.tid : undefined;
-    if (!entraTenantId) {
-      throw new Error('Token does not contain an Entra tenant id (tid).');
-    }
-    if (entraTenantId !== config.ENTRA_TENANT_ID) {
-      throw new Error('Token was issued by an unexpected Entra tenant.');
-    }
+    const unverifiedTenantId =
+      typeof unverified.tid === 'string' ? unverified.tid : undefined;
 
-    const issuer = `https://login.microsoftonline.com/${config.ENTRA_TENANT_ID}/v2.0`;
-    const { payload } = await jwtVerify(token, entraJwks, {
-      audience: config.ENTRA_API_CLIENT_ID!,
-      issuer,
-      clockTolerance: 5,
+    const unverifiedTenantContext = validateEntraTenantClaims({
+      tenantId: unverifiedTenantId,
+      configuredTenantId: config.ENTRA_TENANT_ID,
     });
+
+    const { payload } = await jwtVerify(
+      token,
+      getEntraJwksForTenant(unverifiedTenantContext.tenantId),
+      {
+        audience: config.ENTRA_API_CLIENT_ID!,
+        issuer: unverifiedTenantContext.issuer,
+        clockTolerance: 5,
+      },
+    );
 
     const delegatedScopes =
       typeof payload.scp === 'string'
         ? payload.scp.split(' ').map((scope) => scope.trim()).filter(Boolean)
         : [];
-    if (!delegatedScopes.includes(config.ENTRA_REQUIRED_SCOPE)) {
-      throw new Error('Token does not contain the required delegated API scope.');
+
+    // Phase 2: only trusted, cryptographically verified claims are used
+    // for the authenticated Bridata principal.
+    const verifiedTenantContext = validateEntraTenantClaims({
+      tenantId: typeof payload.tid === 'string' ? payload.tid : undefined,
+      configuredTenantId: config.ENTRA_TENANT_ID,
+      issuer: typeof payload.iss === 'string' ? payload.iss : undefined,
+      scopes: delegatedScopes,
+      requiredScope: config.ENTRA_REQUIRED_SCOPE,
+    });
+
+    if (verifiedTenantContext.tenantId !== unverifiedTenantContext.tenantId) {
+      throw new Error('Verified Entra tenant does not match token tenant.');
     }
+
+    const entraTenantId = verifiedTenantContext.tenantId;
+    const issuer = verifiedTenantContext.issuer;
 
     const subject =
       typeof payload.oid === 'string'
