@@ -1,20 +1,23 @@
 import React, { useMemo } from 'react';
 import {
+  Activity,
   ArrowRight,
   BadgeCheck,
   Boxes,
   CircleDollarSign,
   Database,
   FileSpreadsheet,
+  Layers3,
   PackageSearch,
-  ShoppingCart,
   ShieldCheck,
+  ShoppingCart,
   Warehouse,
   Workflow,
 } from 'lucide-react';
+import { runtimeConfig } from '../../config/runtime';
 import { useNexus } from '../../context/NexusContext';
 
-type TargetTab = 'procurement' | 'inventory' | 'costs' | 'integrations' | 'materials';
+type TargetTab = 'procurement' | 'inventory' | 'costs' | 'integrations' | 'materials' | 'reports';
 
 interface ModuleCard {
   id: TargetTab;
@@ -69,6 +72,33 @@ const flow = [
   { label: 'DATA PEP', detail: 'Costo real', icon: CircleDollarSign },
 ];
 
+const executiveStats = [
+  {
+    label: 'Cadena canónica',
+    value: '6 / 6',
+    detail: 'SolP → DATA PEP',
+    icon: Activity,
+  },
+  {
+    label: 'Centros operativos',
+    value: '4',
+    detail: 'Compras · Stock · Costos · Integración',
+    icon: Layers3,
+  },
+  {
+    label: 'Autoridad financiera',
+    value: 'DATA PEP',
+    detail: 'Gobierna el costo real',
+    icon: BadgeCheck,
+  },
+  {
+    label: 'Excel en runtime',
+    value: '0',
+    detail: 'Solo transporte / evidencia',
+    icon: ShieldCheck,
+  },
+];
+
 export const SapCommandCenterV1H1View: React.FC = () => {
   const {
     currentWorkspace,
@@ -88,6 +118,7 @@ export const SapCommandCenterV1H1View: React.FC = () => {
     : projects[0]?.id ?? null;
 
   const selectedProject = projects.find((project) => project.id === projectId) ?? null;
+  const isApiMode = runtimeConfig.dataMode === 'api';
 
   const openModule = (tab: TargetTab) => {
     if (projectId && selectedProjectId !== projectId) setSelectedProjectId(projectId);
@@ -95,14 +126,25 @@ export const SapCommandCenterV1H1View: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1660px] space-y-5 px-6 py-6 lg:px-8">
+    <div className="mx-auto w-full max-w-[1660px] space-y-5 px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
       <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_14px_45px_rgba(15,23,42,0.045)]">
         <div className="grid xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.55fr)]">
-          <div className="p-6 lg:p-7">
-            <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-green-700">
-              <Database className="h-4 w-4" /> Centro SAP · V1-H1
+          <div className="p-5 sm:p-6 lg:p-7">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-green-700">
+                <Database className="h-4 w-4" /> Centro SAP · V1-H2
+              </div>
+              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.08em] ring-1 ${
+                isApiMode
+                  ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                  : 'bg-amber-50 text-amber-700 ring-amber-200'
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${isApiMode ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                {isApiMode ? 'API real' : 'Vista demo / mock'}
+              </span>
             </div>
-            <h1 className="mt-3 max-w-4xl text-[30px] font-extrabold tracking-[-0.04em] text-slate-950">
+
+            <h1 className="mt-3 max-w-4xl text-[28px] font-extrabold tracking-[-0.04em] text-slate-950 sm:text-[30px]">
               La cadena SAP completa, visible desde una sola pantalla.
             </h1>
             <p className="mt-3 max-w-3xl text-[12px] leading-5 text-slate-500">
@@ -120,9 +162,24 @@ export const SapCommandCenterV1H1View: React.FC = () => {
                 <ShieldCheck className="h-3.5 w-3.5" /> Sin dependencia Excel en runtime
               </span>
             </div>
+
+            <div className="mt-6 flex flex-wrap gap-2">
+              <button
+                onClick={() => openModule('procurement')}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-[9px] font-extrabold text-white transition hover:bg-slate-800"
+              >
+                Abrir operación SAP <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => openModule('reports')}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[9px] font-extrabold text-slate-700 transition hover:border-green-200 hover:text-green-700"
+              >
+                Ver analítica ejecutiva
+              </button>
+            </div>
           </div>
 
-          <div className="border-t border-slate-100 bg-slate-50/70 p-6 xl:border-l xl:border-t-0">
+          <div className="border-t border-slate-100 bg-slate-50/70 p-5 sm:p-6 xl:border-l xl:border-t-0">
             <p className="text-[9px] font-black uppercase tracking-[0.13em] text-slate-400">Contexto operativo</p>
             <p className="mt-2 text-[13px] font-extrabold text-slate-900">{currentWorkspace?.name ?? 'Workspace'}</p>
             <p className="mt-1 text-[9px] text-slate-400">Selecciona el proyecto que gobernará costos y trazabilidad financiera.</p>
@@ -150,8 +207,40 @@ export const SapCommandCenterV1H1View: React.FC = () => {
                 <p className="mt-1 text-[10px] font-bold text-green-700">Cadena habilitada</p>
               </div>
             </div>
+
+            <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[8px] font-black uppercase tracking-[0.09em] text-slate-400">Origen de datos</p>
+                  <p className="mt-1 text-[10px] font-bold text-slate-800">{isApiMode ? runtimeConfig.apiBaseUrl : 'Dataset visual de desarrollo'}</p>
+                </div>
+                <div className={`grid h-8 w-8 place-items-center rounded-xl ${isApiMode ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                  <Database className="h-4 w-4" />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {executiveStats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <div key={stat.label} className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_5px_22px_rgba(15,23,42,0.025)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[8px] font-black uppercase tracking-[0.12em] text-slate-400">{stat.label}</p>
+                  <p className="mt-2 text-[20px] font-black tracking-[-0.03em] text-slate-950">{stat.value}</p>
+                  <p className="mt-1 text-[8px] font-semibold text-slate-400">{stat.detail}</p>
+                </div>
+                <div className="grid h-9 w-9 place-items-center rounded-xl bg-green-50 text-green-700 ring-1 ring-green-100">
+                  <Icon className="h-4 w-4" />
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </section>
 
       <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_6px_28px_rgba(15,23,42,0.03)]">
