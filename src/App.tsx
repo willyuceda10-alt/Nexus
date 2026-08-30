@@ -7,6 +7,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { UniversalObjectDrawer } from './components/layout/UniversalObjectDrawer';
 import { CreateObjectModal } from './components/layout/CreateObjectModal';
 import { CommandPalette } from './components/layout/CommandPalette';
+import { ModuleErrorBoundary } from './components/system/ModuleErrorBoundary';
 
 const WorkspaceHome = React.lazy(() => import('./components/views/WorkspaceHome').then((m) => ({ default: m.WorkspaceHome })));
 const MyWorkView = React.lazy(() => import('./components/views/MyWorkView').then((m) => ({ default: m.MyWorkView })));
@@ -73,7 +74,11 @@ const MainContentRouter: React.FC = () => {
     default: content = <WorkspaceHome />;
   }
 
-  return <React.Suspense fallback={<RouteFallback />}>{content}</React.Suspense>;
+  return (
+    <ModuleErrorBoundary resetKey={activeTab}>
+      <React.Suspense fallback={<RouteFallback />}>{content}</React.Suspense>
+    </ModuleErrorBoundary>
+  );
 };
 
 export function App() {
