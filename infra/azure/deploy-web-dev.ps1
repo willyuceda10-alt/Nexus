@@ -26,6 +26,70 @@ function Invoke-Checked {
   }
 }
 
+function Test-SymlinkSupport {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path
+  )
+
+  $probeRoot = Join-Path $Path ".bridata-symlink-probe-$PID"
+  try {
+    New-Item -ItemType Directory -Force -Path $probeRoot | Out-Null
+    $target = Join-Path $probeRoot 'target.txt'
+    $link = Join-Path $probeRoot 'link.txt'
+    Set-Content -Path $target -Value 'ok' -NoNewline
+    New-Item -ItemType SymbolicLink -Path $link -Target $target -ErrorAction Stop | Out-Null
+    return (Test-Path $link)
+  } catch {
+    return $false
+  } finally {
+    Remove-Item -Recurse -Force $probeRoot -ErrorAction SilentlyContinue
+  }
+}
+
+function New-WebBuildSnapshot {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$SourceRoot,
+    [Parameter(Mandatory = $true)]
+    [string]$DestinationRoot
+  )
+
+  if (-not (Get-Command tar -ErrorAction SilentlyContinue)) {
+    throw 'tar es obligatorio para copiar el snapshot a almacenamiento temporal en Cloud Shell.'
+  }
+
+  $archive = Join-Path ([System.IO.Path]::GetTempPath()) "bridata-web-source-$PID.tar"
+  Remove-Item -Force $archive -ErrorAction SilentlyContinue
+  Remove-Item -Recurse -Force $DestinationRoot -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $DestinationRoot | Out-Null
+
+  try {
+    Push-Location $SourceRoot
+    try {
+      Invoke-Checked -FailureMessage 'No se pudo crear el snapshot temporal del frontend.' -Command {
+        tar -cf $archive `
+          --exclude='.git' `
+          --exclude='node_modules' `
+          --exclude='*/node_modules' `
+          --exclude='dist' `
+          --exclude='*/dist' `
+          --exclude='coverage' `
+          --exclude='*/coverage' `
+          .
+      }
+    } finally {
+      Pop-Location
+    }
+
+    Invoke-Checked -FailureMessage 'No se pudo extraer el snapshot temporal del frontend.' -Command {
+      tar -xf $archive -C $DestinationRoot
+    }
+  } finally {
+    Remove-Item -Force $archive -ErrorAction SilentlyContinue
+  }
+}
+
 if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
   throw 'Azure CLI (az) no está disponible en esta sesión.'
 }
@@ -42,8 +106,13 @@ if ($DataMode -eq 'api' -and [string]::IsNullOrWhiteSpace($ApiBaseUrl)) {
   throw 'ApiBaseUrl es obligatorio cuando DataMode=api.'
 }
 
+$sourceRoot = (Get-Location).Path
 $webName = "$NamePrefix-$Environment-web"
-$templateFile = './infra/azure/web-dev.bicep'
+$templateFile = Join-Path $sourceRoot 'infra/azure/web-dev.bicep'
+$tempRoot = [System.IO.Path]::GetTempPath()
+$buildRoot = $sourceRoot
+$stagedBuild = $false
+$npmCacheRoot = Join-Path $tempRoot "bridata-npm-cache-$PID"
 
 Write-Host ''
 Write-Host '=== BRIDATA WEB DEV / AZURE STATIC WEB APPS ===' -ForegroundColor Green
@@ -77,28 +146,75 @@ Invoke-Checked -FailureMessage 'Falló el despliegue del recurso Azure Static We
     --output none
 }
 
-Write-Host '[4/6] Instalando dependencias frontend y compilando...' -ForegroundColor Cyan
-# Azure Cloud Shell clouddrive is backed by Azure Files and does not support the
-# workspace symlink npm creates for apps/api. The web build only needs root deps,
-# so workspaces are intentionally excluded for this visual DEV deployment.
-if (Test-Path './package-lock.json') {
-  Invoke-Checked -FailureMessage 'npm ci del frontend falló.' -Command { npm ci --workspaces=false }
-} else {
-  Invoke-Checked -FailureMessage 'npm install del frontend falló.' -Command { npm install --workspaces=false }
+Write-Host '[4/6] Preparando build y compilando frontend...' -ForegroundColor Cyan
+if (-not (Test-SymlinkSupport -Path $sourceRoot)) {
+  $buildRoot = Join-Path $tempRoot "bridata-web-build-$PID"
+  Write-Host 'El filesystem actual no soporta symlinks. Creando snapshot seguro en almacenamiento temporal...' -ForegroundColor Yellow
+  New-WebBuildSnapshot -SourceRoot $sourceRoot -DestinationRoot $buildRoot
+  $stagedBuild = $true
 }
+
+if (-not (Test-SymlinkSupport -Path $buildRoot)) {
+  throw "El directorio de build '$buildRoot' tampoco soporta symlinks. No es seguro continuar con npm."
+}
+
+Write-Host "Build root     : $buildRoot"
 
 $previousDataMode = $env:VITE_DATA_MODE
 $previousApiBaseUrl = $env:VITE_API_BASE_URL
+$previousNpmCache = $env:npm_config_cache
 
 try {
-  $env:VITE_DATA_MODE = $DataMode
-  if ($DataMode -eq 'api') {
-    $env:VITE_API_BASE_URL = $ApiBaseUrl.TrimEnd('/')
-  } else {
-    Remove-Item Env:VITE_API_BASE_URL -ErrorAction SilentlyContinue
-  }
+  Remove-Item -Recurse -Force $npmCacheRoot -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $npmCacheRoot | Out-Null
+  $env:npm_config_cache = $npmCacheRoot
 
-  Invoke-Checked -FailureMessage 'El build web de Bridata falló.' -Command { npm run build:web }
+  Push-Location $buildRoot
+  try {
+    if (Test-Path './package-lock.json') {
+      Invoke-Checked -FailureMessage 'npm ci del frontend falló.' -Command { npm ci --workspaces=false }
+    } else {
+      Invoke-Checked -FailureMessage 'npm install del frontend falló.' -Command { npm install --workspaces=false }
+    }
+
+    $env:VITE_DATA_MODE = $DataMode
+    if ($DataMode -eq 'api') {
+      $env:VITE_API_BASE_URL = $ApiBaseUrl.TrimEnd('/')
+    } else {
+      Remove-Item Env:VITE_API_BASE_URL -ErrorAction SilentlyContinue
+    }
+
+    Invoke-Checked -FailureMessage 'El build web de Bridata falló.' -Command { npm run build:web }
+
+    if (-not (Test-Path './dist/index.html')) {
+      throw 'No se encontró dist/index.html después del build.'
+    }
+
+    Write-Host '[5/6] Obteniendo token de despliegue...' -ForegroundColor Cyan
+    $deploymentToken = az staticwebapp secrets list `
+      --name $webName `
+      --resource-group $ResourceGroup `
+      --query 'properties.apiKey' `
+      --output tsv `
+      --only-show-errors
+
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($deploymentToken)) {
+      throw 'No se pudo obtener el token de despliegue de Static Web Apps.'
+    }
+
+    Write-Host '[6/6] Publicando dist en Azure...' -ForegroundColor Cyan
+    try {
+      Invoke-Checked -FailureMessage 'La publicación del frontend en Static Web Apps falló.' -Command {
+        npx --yes --package @azure/static-web-apps-cli swa deploy ./dist `
+          --deployment-token $deploymentToken `
+          --env production
+      }
+    } finally {
+      $deploymentToken = $null
+    }
+  } finally {
+    Pop-Location
+  }
 } finally {
   if ($null -eq $previousDataMode) {
     Remove-Item Env:VITE_DATA_MODE -ErrorAction SilentlyContinue
@@ -111,33 +227,17 @@ try {
   } else {
     $env:VITE_API_BASE_URL = $previousApiBaseUrl
   }
-}
 
-if (-not (Test-Path './dist/index.html')) {
-  throw 'No se encontró dist/index.html después del build.'
-}
-
-Write-Host '[5/6] Obteniendo token de despliegue...' -ForegroundColor Cyan
-$deploymentToken = az staticwebapp secrets list `
-  --name $webName `
-  --resource-group $ResourceGroup `
-  --query 'properties.apiKey' `
-  --output tsv `
-  --only-show-errors
-
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($deploymentToken)) {
-  throw 'No se pudo obtener el token de despliegue de Static Web Apps.'
-}
-
-Write-Host '[6/6] Publicando dist en Azure...' -ForegroundColor Cyan
-try {
-  Invoke-Checked -FailureMessage 'La publicación del frontend en Static Web Apps falló.' -Command {
-    npx --yes --package @azure/static-web-apps-cli swa deploy ./dist `
-      --deployment-token $deploymentToken `
-      --env production
+  if ($null -eq $previousNpmCache) {
+    Remove-Item Env:npm_config_cache -ErrorAction SilentlyContinue
+  } else {
+    $env:npm_config_cache = $previousNpmCache
   }
-} finally {
-  $deploymentToken = $null
+
+  Remove-Item -Recurse -Force $npmCacheRoot -ErrorAction SilentlyContinue
+  if ($stagedBuild) {
+    Remove-Item -Recurse -Force $buildRoot -ErrorAction SilentlyContinue
+  }
 }
 
 $defaultHostname = az staticwebapp show `
