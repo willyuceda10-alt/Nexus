@@ -117,7 +117,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
   }, [currentUser.id]);
 
   useEffect(() => {
-    // A collapsed desktop rail must never leak into the mobile drawer experience.
     if (mobileOpen) setCollapsed(false);
   }, [mobileOpen]);
 
@@ -242,21 +241,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
               onClick={() => navigate(item.id)}
               title={collapsed ? item.label : undefined}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex h-10 min-w-0 flex-1 items-center justify-between rounded-lg px-2.5 text-left text-[13px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+              className={`flex h-10 min-w-0 flex-1 items-center justify-between rounded-lg px-2.5 text-left text-[13px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
                 isActive
-                  ? 'bg-[#E8F6EC] font-bold text-[#0B6B35]'
-                  : 'font-medium text-slate-700 hover:bg-slate-100/80 hover:text-slate-950'
+                  ? 'bg-[#173F43] font-bold text-white shadow-sm'
+                  : 'font-medium text-slate-300 hover:bg-white/[0.055] hover:text-white'
               } ${collapsed ? 'justify-center px-0' : ''}`}
             >
               <span className={`flex min-w-0 items-center ${collapsed ? '' : 'gap-2.5'}`}>
-                <Icon className={`h-4 w-4 flex-none ${isActive || item.accent === 'pmo' ? 'text-[#07883F]' : 'text-slate-500'}`} />
+                <Icon className={`h-4 w-4 flex-none ${isActive || item.accent === 'pmo' ? 'text-emerald-300' : 'text-slate-400'}`} />
                 {!collapsed && <span className="truncate">{item.label}</span>}
               </span>
               {!collapsed && (
                 <span className="ml-2 flex items-center gap-1.5">
-                  {item.accent === 'pmo' && <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-emerald-700">PMO</span>}
+                  {item.accent === 'pmo' && <span className="rounded-md bg-emerald-300/10 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-emerald-300">PMO</span>}
                   {item.badge !== undefined && item.badge > 0 && (
-                    <span className="min-w-5 rounded-full bg-slate-200 px-1.5 py-0.5 text-center text-[10px] font-bold text-slate-700">{item.badge}</span>
+                    <span className="min-w-5 rounded-full bg-white/10 px-1.5 py-0.5 text-center text-[10px] font-bold text-slate-200">{item.badge}</span>
                   )}
                 </span>
               )}
@@ -264,11 +263,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
             {!collapsed && allowFavorite && (
               <button
                 onClick={() => toggleFavorite(item.id)}
-                className="grid h-8 w-8 flex-none place-items-center rounded-md text-slate-300 opacity-100 transition hover:bg-white hover:text-amber-500 focus:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+                className="grid h-8 w-8 flex-none place-items-center rounded-md text-slate-600 opacity-100 transition hover:bg-white/[0.06] hover:text-amber-300 focus:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
                 aria-label={favoriteIds.includes(item.id) ? `Quitar ${item.label} de favoritos` : `Agregar ${item.label} a favoritos`}
                 aria-pressed={favoriteIds.includes(item.id)}
               >
-                <Star className={`h-3.5 w-3.5 ${favoriteIds.includes(item.id) ? 'fill-amber-400 text-amber-500 opacity-100' : ''}`} />
+                <Star className={`h-3.5 w-3.5 ${favoriteIds.includes(item.id) ? 'fill-amber-300 text-amber-300 opacity-100' : ''}`} />
               </button>
             )}
           </div>
@@ -280,14 +279,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
   const renderNavigationGroup = (group: NavigationGroup) => {
     if (group.items.length === 0) return null;
     if (collapsed) {
-      return <section key={group.id} className="mt-3 border-t border-slate-200/80 pt-3">{renderItems(group.items)}</section>;
+      return <section key={group.id} className="mt-3 border-t border-white/10 pt-3">{renderItems(group.items)}</section>;
     }
     const isOpen = openGroups[group.id];
     return (
       <section key={group.id} className="mt-3">
         <button
           onClick={() => toggleGroup(group.id)}
-          className="flex h-8 w-full items-center justify-between rounded-md px-2.5 text-left text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-500 transition hover:bg-white hover:text-slate-800"
+          className="flex h-8 w-full items-center justify-between rounded-md px-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.11em] text-slate-400 transition hover:bg-white/[0.045] hover:text-slate-200"
           aria-expanded={isOpen}
         >
           <span>{group.label}</span>
@@ -300,24 +299,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
 
   const sidebar = (
     <aside
-      className={`flex h-full flex-col border-r border-slate-200 bg-[#F7F8FA] shadow-2xl transition-[width,transform] duration-200 md:relative md:translate-x-0 md:shadow-none ${collapsed ? 'md:w-[72px]' : 'md:w-[252px]'} w-[280px] ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-50 md:static`}
+      className={`flex h-full flex-col border-r border-[#294657] bg-[#0D2533] shadow-2xl transition-[width,transform] duration-200 md:relative md:translate-x-0 md:shadow-none ${collapsed ? 'md:w-[72px]' : 'md:w-[252px]'} w-[280px] ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-50 md:static`}
       aria-label="Barra lateral principal"
     >
-      <div className={`flex h-[58px] items-center gap-2 border-b border-slate-200 ${collapsed ? 'px-2' : 'px-3'}`}>
-        <button onClick={() => navigate('home')} className={`flex min-w-0 flex-1 items-center rounded-lg py-1 text-left hover:bg-white/70 ${collapsed ? 'justify-center px-0' : 'gap-2.5 px-1'}`}>
-          <div className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-[#07883F] shadow-sm">
+      <div className={`flex h-[58px] items-center gap-2 border-b border-white/10 ${collapsed ? 'px-2' : 'px-3'}`}>
+        <button onClick={() => navigate('home')} className={`flex min-w-0 flex-1 items-center rounded-lg py-1 text-left hover:bg-white/[0.04] ${collapsed ? 'justify-center px-0' : 'gap-2.5 px-1'}`}>
+          <div className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-[#0E8A50] shadow-lg shadow-emerald-950/20">
             <span className="text-[10px] font-black tracking-[0.08em] text-white">{BRAND.initials}</span>
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-extrabold tracking-tight text-slate-950">{BRAND.name}</p>
-              <p className="truncate text-[10px] font-bold uppercase tracking-[0.13em] text-[#07883F]">Work OS</p>
+              <p className="truncate text-sm font-extrabold tracking-tight text-white">{BRAND.name}</p>
+              <p className="truncate text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-300">Work OS</p>
             </div>
           )}
         </button>
         <button
           onClick={onMobileClose}
-          className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-white md:hidden"
+          className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-white/[0.06] hover:text-white md:hidden"
           aria-label="Cerrar navegación"
         >
           <X className="h-4 w-4" />
@@ -327,18 +326,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
       <div className="relative px-2.5 pt-2.5">
         <button
           onClick={toggleWorkspacePicker}
-          className={`flex w-full items-center rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${collapsed ? 'justify-center px-0 py-2' : 'gap-2 px-2.5 py-2.5 text-left'}`}
+          className={`flex w-full items-center rounded-lg border border-white/10 bg-[#153747] shadow-sm transition hover:border-emerald-300/30 hover:bg-[#193D4D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${collapsed ? 'justify-center px-0 py-2' : 'gap-2 px-2.5 py-2.5 text-left'}`}
           aria-expanded={workspaceOpen}
           aria-label={collapsed ? `Abrir selector de workspace: ${currentWorkspace?.name || 'Workspace'}` : undefined}
         >
-          <span className="grid h-7 w-7 flex-none place-items-center rounded-md bg-green-100 text-[11px] font-black text-green-800">
+          <span className="grid h-7 w-7 flex-none place-items-center rounded-md bg-emerald-300/12 text-[11px] font-black text-emerald-200">
             {(currentWorkspace?.name || 'W').slice(0, 1).toUpperCase()}
           </span>
           {!collapsed && (
             <>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-bold text-slate-900">{currentWorkspace?.name || 'Workspace'}</span>
-                <span className="mt-0.5 block truncate text-[11px] text-slate-500">{formatWorkspaceRole(workspaceRole)}</span>
+                <span className="block truncate text-[13px] font-bold text-white">{currentWorkspace?.name || 'Workspace'}</span>
+                <span className="mt-0.5 block truncate text-[11px] text-slate-400">{formatWorkspaceRole(workspaceRole)}</span>
               </span>
               {workspaceOpen ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />}
             </>
@@ -346,8 +345,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
         </button>
 
         {workspaceOpen && !collapsed && (
-          <div className="absolute left-2.5 right-2.5 top-[56px] z-30 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
-            <p className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">Cambiar workspace</p>
+          <div className="absolute left-2.5 right-2.5 top-[56px] z-30 overflow-hidden rounded-xl border border-slate-300 bg-[#F8FAFC] p-1.5 text-slate-900 shadow-2xl">
+            <p className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Cambiar workspace</p>
             {workspaces.map((workspace) => (
               <button
                 key={workspace.id}
@@ -356,10 +355,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
                   setWorkspaceOpen(false);
                   onMobileClose();
                 }}
-                className={`w-full rounded-lg px-2.5 py-2 text-left text-xs transition ${currentWorkspace?.id === workspace.id ? 'bg-emerald-50 font-bold text-emerald-800' : 'text-slate-700 hover:bg-slate-50'}`}
+                className={`w-full rounded-lg px-2.5 py-2 text-left text-xs transition ${currentWorkspace?.id === workspace.id ? 'bg-emerald-50 font-bold text-emerald-800' : 'text-slate-700 hover:bg-slate-100'}`}
               >
                 <span className="block truncate">{workspace.name}</span>
-                <span className="mt-0.5 block truncate text-[11px] font-normal text-slate-400">{workspace.organizationName}</span>
+                <span className="mt-0.5 block truncate text-[11px] font-normal text-slate-500">{workspace.organizationName}</span>
               </button>
             ))}
           </div>
@@ -371,7 +370,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
 
         {!collapsed && favoriteItems.length > 0 && (
           <section className="mt-4">
-            <p className="mb-1 flex items-center gap-1.5 px-2.5 text-[11px] font-bold text-slate-500"><Star className="h-3 w-3 fill-amber-300 text-amber-500" /> Favoritos</p>
+            <p className="mb-1 flex items-center gap-1.5 px-2.5 text-[11px] font-bold text-slate-400"><Star className="h-3 w-3 fill-amber-300 text-amber-300" /> Favoritos</p>
             {renderItems(favoriteItems)}
           </section>
         )}
@@ -379,17 +378,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
         <div className="mt-2">{navigationGroups.map(renderNavigationGroup)}</div>
       </div>
 
-      <div className="border-t border-slate-200 p-2.5">
+      <div className="border-t border-white/10 p-2.5">
         <button
           onClick={() => navigate('settings')}
           title={collapsed ? 'Configuración' : undefined}
-          className={`flex h-10 w-full items-center rounded-lg text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5'} ${activeTab === 'settings' ? 'bg-[#E8F6EC] text-[#0B6B35]' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}
+          className={`flex h-10 w-full items-center rounded-lg text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5'} ${activeTab === 'settings' ? 'bg-[#173F43] text-white' : 'text-slate-300 hover:bg-white/[0.055] hover:text-white'}`}
         >
-          <Settings2 className="h-4 w-4" /> {!collapsed && 'Configuración'}
+          <Settings2 className={`h-4 w-4 ${activeTab === 'settings' ? 'text-emerald-300' : 'text-slate-400'}`} /> {!collapsed && 'Configuración'}
         </button>
         <button
           onClick={toggleCollapsed}
-          className="mt-1 hidden h-9 w-full items-center justify-center gap-2 rounded-lg text-xs font-semibold text-slate-500 transition hover:bg-white hover:text-slate-900 md:flex"
+          className="mt-1 hidden h-9 w-full items-center justify-center gap-2 rounded-lg text-xs font-semibold text-slate-400 transition hover:bg-white/[0.055] hover:text-white md:flex"
           aria-label={collapsed ? 'Expandir navegación' : 'Contraer navegación'}
         >
           {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <><PanelLeftClose className="h-4 w-4" /><span>Contraer</span></>}
@@ -400,7 +399,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) =
 
   return (
     <>
-      {mobileOpen && <button onClick={onMobileClose} className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-[1px] md:hidden" aria-label="Cerrar menú" />}
+      {mobileOpen && <button onClick={onMobileClose} className="fixed inset-0 z-40 bg-slate-950/55 backdrop-blur-[1px] md:hidden" aria-label="Cerrar menú" />}
       {sidebar}
     </>
   );
