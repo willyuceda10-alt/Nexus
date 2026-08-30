@@ -230,7 +230,7 @@ const ControlRule: React.FC<{ title: string; detail: string }> = ({ title, detai
   <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
     <div className="flex items-center gap-2">
       <ShieldCheck className="h-4 w-4 flex-none text-emerald-600" />
-      <p className="text-[10px] font-extrabold text-slate-850">{title}</p>
+      <p className="text-[10px] font-extrabold text-slate-800">{title}</p>
     </div>
     <p className="mt-2 text-[8px] leading-4 text-slate-400">{detail}</p>
   </div>
