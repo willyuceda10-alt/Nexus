@@ -77,11 +77,14 @@ Invoke-Checked -FailureMessage 'Falló el despliegue del recurso Azure Static We
     --output none
 }
 
-Write-Host '[4/6] Instalando dependencias y compilando frontend...' -ForegroundColor Cyan
+Write-Host '[4/6] Instalando dependencias frontend y compilando...' -ForegroundColor Cyan
+# Azure Cloud Shell clouddrive is backed by Azure Files and does not support the
+# workspace symlink npm creates for apps/api. The web build only needs root deps,
+# so workspaces are intentionally excluded for this visual DEV deployment.
 if (Test-Path './package-lock.json') {
-  Invoke-Checked -FailureMessage 'npm ci falló.' -Command { npm ci }
+  Invoke-Checked -FailureMessage 'npm ci del frontend falló.' -Command { npm ci --workspaces=false }
 } else {
-  Invoke-Checked -FailureMessage 'npm install falló.' -Command { npm install }
+  Invoke-Checked -FailureMessage 'npm install del frontend falló.' -Command { npm install --workspaces=false }
 }
 
 $previousDataMode = $env:VITE_DATA_MODE
