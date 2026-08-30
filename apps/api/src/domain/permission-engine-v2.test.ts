@@ -27,6 +27,41 @@ describe('permission engine v2', () => {
       .toMatchObject({ allowed: false, source: 'DEFAULT_DENY' });
   });
 
+  it('gives PMO Senior governed portfolio, schedule, baseline and executive capabilities', () => {
+    const governed = [
+      'portfolio.manage',
+      'project.schedule.write',
+      'project.cost.read',
+      'project.forecast.write',
+      'project.baseline.approve',
+      'project.change.approve',
+      'resource.capacity.read',
+      'governance.write',
+      'report.executive.read',
+      'audit.read',
+    ] as const;
+
+    for (const permission of governed) {
+      expect(evaluatePermissionV2(base({ workspaceRole: 'PMO_SENIOR', permission })))
+        .toMatchObject({ allowed: true, source: 'BASE_ROLE' });
+    }
+  });
+
+  it('keeps PMO Senior out of technical administration and SAP-authoritative writes', () => {
+    const denied = [
+      'workspace.manage_permissions',
+      'workspace.manage_automation',
+      'project.material.write',
+      'project.cost.write',
+      'tenant.manage_integrations',
+    ] as const;
+
+    for (const permission of denied) {
+      expect(evaluatePermissionV2(base({ workspaceRole: 'PMO_SENIOR', permission })))
+        .toMatchObject({ allowed: false, source: 'DEFAULT_DENY' });
+    }
+  });
+
   it('denies automation management to a viewer by default', () => {
     expect(evaluatePermissionV2(base({ workspaceRole: 'VIEWER', permission: 'workspace.manage_automation' })))
       .toMatchObject({ allowed: false, source: 'DEFAULT_DENY' });
@@ -72,6 +107,22 @@ describe('permission engine v2', () => {
           effect: 'DENY',
         },
       ],
+    });
+    expect(evaluatePermissionV2(input)).toMatchObject({ allowed: false, source: 'EXPLICIT_DENY' });
+  });
+
+  it('lets explicit deny restrict a PMO Senior base permission', () => {
+    const input = base({
+      workspaceRole: 'PMO_SENIOR',
+      permission: 'project.baseline.approve',
+      policies: [{
+        scopeType: 'WORKSPACE',
+        scopeId: '00000000-0000-0000-0000-000000000003',
+        subjectType: 'WORKSPACE_ROLE',
+        subjectKey: 'PMO_SENIOR',
+        permissionKey: 'project.baseline.approve',
+        effect: 'DENY',
+      }],
     });
     expect(evaluatePermissionV2(input)).toMatchObject({ allowed: false, source: 'EXPLICIT_DENY' });
   });
