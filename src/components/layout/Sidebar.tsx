@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   CalendarDays,
   CheckSquare2,
   ChevronDown,
+  ChevronUp,
   CircleDollarSign,
   Columns3,
   Database,
@@ -12,17 +13,22 @@ import {
   Gauge,
   Layers3,
   PackageSearch,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PlugZap,
   Plus,
   Settings2,
   ShieldAlert,
+  ShieldCheck,
   ShoppingCart,
   Star,
   UsersRound,
   Warehouse,
   Workflow,
-  PlugZap,
+  X,
 } from 'lucide-react';
 import { BRAND } from '../../config/brand';
+import { useApiBootstrap } from '../../context/ApiBootstrapContext';
 import { useNexus } from '../../context/NexusContext';
 import { isOpenPersonalWork } from '../../domain/myWork';
 
@@ -33,34 +39,63 @@ interface NavigationItem {
   badge?: number;
 }
 
-export const Sidebar: React.FC = () => {
+export interface SidebarProps {
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+}
+
+const FAVORITES_KEY = 'bridata.sidebar.favorites.v1';
+
+export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onMobileClose }) => {
+  const apiBootstrap = useApiBootstrap();
   const {
     activeTab,
     setActiveTab,
     objects,
     currentUser,
     currentWorkspace,
+    workspaces,
+    setCurrentWorkspaceId,
     openCreateModal,
   } = useNexus();
+  const [collapsed, setCollapsed] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`${FAVORITES_KEY}.${currentUser.id}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) setFavoriteIds(parsed);
+      }
+    } catch {
+      // Local preference failure must never block navigation.
+    }
+  }, [currentUser.id]);
 
   const scopedObjects = currentWorkspace
     ? objects.filter((object) => object.workspaceId === currentWorkspace.id)
     : objects;
-
   const personalWorkCount = scopedObjects.filter((object) => isOpenPersonalWork(object, currentUser.id)).length;
+
+  const workspaceRole = useMemo(() => {
+    if (!currentWorkspace || !apiBootstrap.bootstrap) return null;
+    return apiBootstrap.bootstrap.workspaces.find((item) => item.id === currentWorkspace.id)?.role ?? null;
+  }, [apiBootstrap.bootstrap, currentWorkspace]);
+
+  const canSeePmo = !workspaceRole || ['PMO_SENIOR', 'OWNER', 'ADMIN'].includes(workspaceRole)
+    || ['OWNER', 'TENANT_ADMIN'].includes(apiBootstrap.bootstrap?.actor.role ?? '');
 
   const primaryItems: NavigationItem[] = [
     { id: 'home', label: 'Inicio', icon: Gauge },
     { id: 'inbox', label: 'Mi trabajo', icon: CheckSquare2, badge: personalWorkCount },
-  ];
-
-  const favoriteItems: NavigationItem[] = [
-    { id: 'projects', label: 'Proyectos', icon: FolderKanban },
-    { id: 'boards', label: 'Tableros', icon: Columns3 },
-    { id: 'sap', label: 'Centro SAP', icon: Database },
+    ...(canSeePmo ? [{ id: 'pmo', label: 'Control PMO', icon: ShieldCheck }] : []),
   ];
 
   const workspaceItems: NavigationItem[] = [
+    { id: 'projects', label: 'Proyectos', icon: FolderKanban },
+    { id: 'boards', label: 'Tableros', icon: Columns3 },
     { id: 'calendar', label: 'Calendario y Timeline', icon: CalendarDays },
     { id: 'portfolios', label: 'Portafolios', icon: Layers3 },
     { id: 'resources', label: 'Recursos', icon: UsersRound },
@@ -68,6 +103,7 @@ export const Sidebar: React.FC = () => {
     { id: 'procurement', label: 'Compras / Por llegar', icon: ShoppingCart },
     { id: 'inventory', label: 'Inventario', icon: Warehouse },
     { id: 'costs', label: 'Costos', icon: CircleDollarSign },
+    { id: 'sap', label: 'Centro SAP', icon: Database },
     { id: 'governance', label: 'Riesgos y cambios', icon: ShieldAlert },
     { id: 'automations', label: 'Automatizaciones', icon: Workflow },
     { id: 'integrations', label: 'Integraciones', icon: PlugZap },
@@ -75,98 +111,186 @@ export const Sidebar: React.FC = () => {
     { id: 'reports', label: 'Analítica', icon: BarChart3 },
   ];
 
-  const renderItems = (items: NavigationItem[]) => (
-    <nav className="space-y-0.5">
+  const favoriteItems = workspaceItems.filter((item) => favoriteIds.includes(item.id));
+
+  const navigate = (id: string) => {
+    setActiveTab(id);
+    onMobileClose();
+  };
+
+  const toggleFavorite = (id: string) => {
+    const next = favoriteIds.includes(id)
+      ? favoriteIds.filter((item) => item !== id)
+      : [...favoriteIds, id];
+    setFavoriteIds(next);
+    try {
+      localStorage.setItem(`${FAVORITES_KEY}.${currentUser.id}`, JSON.stringify(next));
+    } catch {
+      // Preference persistence is best-effort only.
+    }
+  };
+
+  const renderItems = (items: NavigationItem[], allowFavorite = false) => (
+    <nav className="space-y-0.5" aria-label="Navegación Bridata">
       {items.map((item) => {
         const Icon = item.icon;
         const isActive = activeTab === item.id || (item.id === 'projects' && activeTab === 'project');
         return (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id)}
-            className={`group flex h-9 w-full items-center justify-between rounded-lg px-2.5 text-left text-[12px] transition ${
-              isActive
-                ? 'bg-[#E8F6EC] font-semibold text-[#0B6B35]'
-                : 'font-medium text-slate-700 hover:bg-slate-100/80 hover:text-slate-950'
-            }`}
-          >
-            <span className="flex min-w-0 items-center gap-2.5">
-              <Icon className={`h-[15px] w-[15px] flex-none ${isActive ? 'text-[#07883F]' : 'text-slate-500'}`} />
-              <span className="truncate">{item.label}</span>
-            </span>
-            {item.badge !== undefined && item.badge > 0 && (
-              <span className="ml-2 min-w-5 rounded-full bg-slate-200 px-1.5 py-0.5 text-center text-[9px] font-bold text-slate-600">{item.badge}</span>
+          <div key={item.id} className="group flex items-center gap-1">
+            <button
+              onClick={() => navigate(item.id)}
+              title={collapsed ? item.label : undefined}
+              aria-current={isActive ? 'page' : undefined}
+              className={`flex h-10 min-w-0 flex-1 items-center justify-between rounded-lg px-2.5 text-left text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                isActive
+                  ? 'bg-[#E8F6EC] font-bold text-[#0B6B35]'
+                  : 'font-medium text-slate-700 hover:bg-slate-100/80 hover:text-slate-950'
+              } ${collapsed ? 'justify-center px-0' : ''}`}
+            >
+              <span className={`flex min-w-0 items-center ${collapsed ? '' : 'gap-2.5'}`}>
+                <Icon className={`h-4 w-4 flex-none ${isActive ? 'text-[#07883F]' : 'text-slate-500'}`} />
+                {!collapsed && <span className="truncate">{item.label}</span>}
+              </span>
+              {!collapsed && item.badge !== undefined && item.badge > 0 && (
+                <span className="ml-2 min-w-5 rounded-full bg-slate-200 px-1.5 py-0.5 text-center text-[10px] font-bold text-slate-700">{item.badge}</span>
+              )}
+            </button>
+            {!collapsed && allowFavorite && (
+              <button
+                onClick={() => toggleFavorite(item.id)}
+                className="grid h-8 w-8 flex-none place-items-center rounded-md text-slate-300 opacity-0 transition hover:bg-white hover:text-amber-500 focus:opacity-100 group-hover:opacity-100"
+                aria-label={favoriteIds.includes(item.id) ? `Quitar ${item.label} de favoritos` : `Agregar ${item.label} a favoritos`}
+              >
+                <Star className={`h-3.5 w-3.5 ${favoriteIds.includes(item.id) ? 'fill-amber-400 text-amber-500 opacity-100' : ''}`} />
+              </button>
             )}
-          </button>
+          </div>
         );
       })}
     </nav>
   );
 
-  return (
-    <aside className="flex h-full w-[252px] flex-none flex-col border-r border-slate-200 bg-[#F7F8FA]">
-      <div className="flex h-[58px] items-center gap-2 border-b border-slate-200 px-3">
-        <button onClick={() => setActiveTab('home')} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-white/70">
+  const sidebar = (
+    <aside
+      className={`flex h-full flex-col border-r border-slate-200 bg-[#F7F8FA] shadow-2xl transition-[width,transform] duration-200 md:relative md:translate-x-0 md:shadow-none ${collapsed ? 'md:w-[72px]' : 'md:w-[252px]'} w-[280px] ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-50 md:static`}
+      aria-label="Barra lateral principal"
+    >
+      <div className={`flex h-[58px] items-center gap-2 border-b border-slate-200 ${collapsed ? 'px-2' : 'px-3'}`}>
+        <button onClick={() => navigate('home')} className={`flex min-w-0 flex-1 items-center rounded-lg py-1 text-left hover:bg-white/70 ${collapsed ? 'justify-center px-0' : 'gap-2.5 px-1'}`}>
           <div className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-[#07883F] shadow-sm">
-            <span className="text-[9px] font-black tracking-[0.08em] text-white">{BRAND.initials}</span>
+            <span className="text-[10px] font-black tracking-[0.08em] text-white">{BRAND.initials}</span>
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-[13px] font-extrabold tracking-tight text-slate-950">{BRAND.name}</p>
-            <p className="truncate text-[8px] font-bold uppercase tracking-[0.13em] text-[#07883F]">Work OS</p>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <p className="truncate text-sm font-extrabold tracking-tight text-slate-950">{BRAND.name}</p>
+              <p className="truncate text-[10px] font-bold uppercase tracking-[0.13em] text-[#07883F]">Work OS</p>
+            </div>
+          )}
         </button>
         <button
-          onClick={() => openCreateModal('TASK')}
-          className="grid h-8 w-8 flex-none place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-green-300 hover:text-green-700"
-          aria-label="Crear elemento"
-          title="Crear elemento"
+          onClick={onMobileClose}
+          className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-white md:hidden"
+          aria-label="Cerrar navegación"
         >
-          <Plus className="h-4 w-4" />
+          <X className="h-4 w-4" />
         </button>
+        {!collapsed && (
+          <button
+            onClick={() => openCreateModal('TASK')}
+            className="hidden h-8 w-8 flex-none place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-green-300 hover:text-green-700 sm:grid"
+            aria-label="Crear elemento"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      <div className="px-2.5 pt-2.5">
-        <button className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2.5 text-left shadow-sm transition hover:border-slate-300">
-          <span className="grid h-7 w-7 flex-none place-items-center rounded-md bg-green-100 text-[10px] font-black text-green-800">
+      <div className="relative px-2.5 pt-2.5">
+        <button
+          onClick={() => setWorkspaceOpen((value) => !value)}
+          className={`flex w-full items-center rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${collapsed ? 'justify-center px-0 py-2' : 'gap-2 px-2.5 py-2.5 text-left'}`}
+          aria-expanded={workspaceOpen}
+        >
+          <span className="grid h-7 w-7 flex-none place-items-center rounded-md bg-green-100 text-[11px] font-black text-green-800">
             {(currentWorkspace?.name || 'W').slice(0, 1).toUpperCase()}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[11px] font-bold text-slate-900">{currentWorkspace?.name || 'Workspace'}</span>
-            <span className="mt-0.5 block text-[9px] text-slate-400">Espacio de trabajo</span>
-          </span>
-          <ChevronDown className="h-3.5 w-3.5 flex-none text-slate-400" />
+          {!collapsed && (
+            <>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-bold text-slate-900">{currentWorkspace?.name || 'Workspace'}</span>
+                <span className="mt-0.5 block truncate text-[10px] text-slate-500">{workspaceRole?.replaceAll('_', ' ') ?? 'Espacio de trabajo'}</span>
+              </span>
+              {workspaceOpen ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />}
+            </>
+          )}
         </button>
+
+        {workspaceOpen && !collapsed && (
+          <div className="absolute left-2.5 right-2.5 top-[56px] z-30 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
+            <p className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">Cambiar workspace</p>
+            {workspaces.map((workspace) => (
+              <button
+                key={workspace.id}
+                onClick={() => {
+                  setCurrentWorkspaceId(workspace.id);
+                  setWorkspaceOpen(false);
+                }}
+                className={`w-full rounded-lg px-2.5 py-2 text-left text-xs transition ${currentWorkspace?.id === workspace.id ? 'bg-emerald-50 font-bold text-emerald-800' : 'text-slate-700 hover:bg-slate-50'}`}
+              >
+                <span className="block truncate">{workspace.name}</span>
+                <span className="mt-0.5 block truncate text-[10px] font-normal text-slate-400">{workspace.organizationName}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto px-2.5 py-3 no-scrollbar">
         {renderItems(primaryItems)}
 
-        <section className="mt-5">
-          <div className="mb-1.5 flex items-center justify-between px-2.5">
-            <p className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500"><Star className="h-3 w-3" /> Favoritos</p>
-          </div>
-          {renderItems(favoriteItems)}
-        </section>
+        {favoriteItems.length > 0 && (
+          <section className="mt-5">
+            {!collapsed && <p className="mb-1.5 flex items-center gap-1.5 px-2.5 text-[11px] font-bold text-slate-500"><Star className="h-3 w-3 fill-amber-300 text-amber-500" /> Favoritos</p>}
+            {renderItems(favoriteItems)}
+          </section>
+        )}
 
         <section className="mt-5">
-          <div className="mb-1.5 flex items-center justify-between px-2.5">
-            <p className="text-[10px] font-semibold text-slate-500">Contenido del workspace</p>
-            <button onClick={() => openCreateModal('PROJECT')} className="grid h-6 w-6 place-items-center rounded-md text-slate-400 hover:bg-white hover:text-green-700" aria-label="Nuevo proyecto">
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          {renderItems(workspaceItems)}
+          {!collapsed && (
+            <div className="mb-1.5 flex items-center justify-between px-2.5">
+              <p className="text-[11px] font-bold text-slate-500">Contenido del workspace</p>
+              <button onClick={() => openCreateModal('PROJECT')} className="grid h-6 w-6 place-items-center rounded-md text-slate-400 hover:bg-white hover:text-green-700" aria-label="Nuevo proyecto">
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          {renderItems(workspaceItems, true)}
         </section>
       </div>
 
       <div className="border-t border-slate-200 p-2.5">
         <button
-          onClick={() => setActiveTab('settings')}
-          className={`flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[12px] font-medium transition ${activeTab === 'settings' ? 'bg-[#E8F6EC] text-[#0B6B35]' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}
+          onClick={() => navigate('settings')}
+          title={collapsed ? 'Configuración' : undefined}
+          className={`flex h-10 w-full items-center rounded-lg text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5'} ${activeTab === 'settings' ? 'bg-[#E8F6EC] text-[#0B6B35]' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}
         >
-          <Settings2 className="h-[15px] w-[15px]" /> Configuración
+          <Settings2 className="h-4 w-4" /> {!collapsed && 'Configuración'}
+        </button>
+        <button
+          onClick={() => setCollapsed((value) => !value)}
+          className="mt-1 hidden h-9 w-full items-center justify-center gap-2 rounded-lg text-xs font-semibold text-slate-500 transition hover:bg-white hover:text-slate-900 md:flex"
+          aria-label={collapsed ? 'Expandir navegación' : 'Contraer navegación'}
+        >
+          {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <><PanelLeftClose className="h-4 w-4" /><span>Contraer</span></>}
         </button>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {mobileOpen && <button onClick={onMobileClose} className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-[1px] md:hidden" aria-label="Cerrar menú" />}
+      {sidebar}
+    </>
   );
 };
