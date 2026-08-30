@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { authenticate, resolveActor } from '../auth.js';
+import { resolveSapFreshnessMinutesV1e } from '../domain/sap-integration-health-v1e.js';
 import { isTenantAdministrator } from '../authorization.js';
 import {
   SAP_ORCHESTRATION_REQUIRED_SOURCES_V1F2,
@@ -28,8 +29,15 @@ const profileBodySchema = z.object({
 });
 const orchestrationBodySchema = z.object({ dryRun: z.boolean().default(false) });
 
-type SourceStatusRow = { source_key: string; latest_status: string | null };
+type SourceStatusRow = {
+  source_key: string;
+  config: Prisma.JsonValue | null;
+  latest_status: string | null;
+  latest_source_generated_at: Date | null;
+  latest_received_at: Date | null;
+};
 type LeaseRow = { id: string };
+type InjectResponseV1f2 = { statusCode: number; body: string };
 
 type CompactStepResult = {
   step: string;
@@ -53,7 +61,7 @@ function toInputJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
-function responseJson(response: LightMyRequestResponse): Record<string, unknown> {
+function responseJson(response: InjectResponseV1f2): Record<string, unknown> {
   try {
     const parsed = JSON.parse(response.body) as unknown;
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
@@ -64,7 +72,7 @@ function responseJson(response: LightMyRequestResponse): Record<string, unknown>
   }
 }
 
-function compactStep(step: string, response: LightMyRequestResponse): CompactStepResult {
+function compactStep(step: string, response: InjectResponseV1f2): CompactStepResult {
   const body = responseJson(response);
   const blockers = Array.isArray(body.blockers) ? body.blockers : [];
   return {
@@ -81,13 +89,17 @@ function compactStep(step: string, response: LightMyRequestResponse): CompactSte
 }
 
 async function sourceReadiness(tenantId: string, connectionId: string) {
+  const now = new Date();
   return withTenant(tenantId, async (tx) => {
     const rows = await tx.$queryRaw<SourceStatusRow[]>(Prisma.sql`
       SELECT s.source_key,
-             latest.status AS latest_status
+             s.config,
+             latest.status AS latest_status,
+             latest.source_generated_at AS latest_source_generated_at,
+             latest.received_at AS latest_received_at
       FROM integration_sources s
       LEFT JOIN LATERAL (
-        SELECT b.status
+        SELECT b.status, b.source_generated_at, b.received_at
         FROM integration_import_batches b
         WHERE b.tenant_id = s.tenant_id
           AND b.integration_source_id = s.id
@@ -99,7 +111,20 @@ async function sourceReadiness(tenantId: string, connectionId: string) {
         AND s.is_active = true
         AND s.source_key IN (${Prisma.join([...SAP_ORCHESTRATION_REQUIRED_SOURCES_V1F2])})
     `);
-    return rows.map((row) => ({ sourceKey: row.source_key, latestStatus: row.latest_status }));
+    return rows.map((row) => {
+      const status = row.latest_status?.toUpperCase() ?? null;
+      if (status !== 'SUCCEEDED' && status !== 'PARTIAL') {
+        return { sourceKey: row.source_key, latestStatus: status };
+      }
+      const generatedAt = row.latest_source_generated_at ?? row.latest_received_at;
+      if (!generatedAt) return { sourceKey: row.source_key, latestStatus: 'NEVER' };
+      const freshnessMinutes = resolveSapFreshnessMinutesV1e(row.config);
+      const ageMinutes = Math.max(0, Math.round((now.getTime() - generatedAt.getTime()) / 60_000));
+      return {
+        sourceKey: row.source_key,
+        latestStatus: ageMinutes > freshnessMinutes ? 'STALE' : 'FRESH',
+      };
+    });
   });
 }
 
@@ -386,7 +411,9 @@ export async function sapIntegrationOrchestrationV1f2Routes(app: FastifyInstance
             data: {
               tenantId: serviceActor.tenantId,
               userId: runtime.profile!.ownerUserId,
-              action: `SAP_ORCHESTRATION_V1F2_${status}`,
+              action: body.data.dryRun
+                ? `SAP_ORCHESTRATION_V1F2_DRY_RUN_${status}`
+                : `SAP_ORCHESTRATION_V1F2_${status}`,
               resource: 'INTEGRATION_CONNECTION',
               resourceId: serviceActor.connectionId,
               correlationId: request.id,
@@ -408,7 +435,9 @@ export async function sapIntegrationOrchestrationV1f2Routes(app: FastifyInstance
             data: {
               tenantId: serviceActor.tenantId,
               aggregateId: serviceActor.connectionId,
-              eventType: 'bridata.integration.sap.orchestration.v1f2.completed',
+              eventType: body.data.dryRun
+                ? 'bridata.integration.sap.orchestration.v1f2.dry-run.completed'
+                : 'bridata.integration.sap.orchestration.v1f2.completed',
               payload: toInputJson({
                 runId,
                 status,

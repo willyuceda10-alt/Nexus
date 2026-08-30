@@ -3,8 +3,14 @@ import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
 import { config } from './config.js';
 import { prisma } from './db.js';
 import { withTenant } from './tenant-transaction.js';
+import {
+  SAP_INTERNAL_ORCHESTRATION_HEADER_V1F2,
+  SAP_INTERNAL_OWNER_HEADER_V1F2,
+  isAllowedSapInternalOrchestrationPathV1f2,
+  matchesSapInternalOrchestrationSecretV1f2,
+} from './internal-sap-orchestration-auth-v1f2.js';
 
-export type AuthProvider = 'ENTRA_ID' | 'DEV';
+export type AuthProvider = 'ENTRA_ID' | 'DEV' | 'INTERNAL_AUTOMATION';
 
 export interface AuthPrincipal {
   provider: AuthProvider;
@@ -15,6 +21,8 @@ export interface AuthPrincipal {
   name?: string;
   devUserId?: string;
   devTenantId?: string;
+  internalUserId?: string;
+  internalTenantId?: string;
 }
 
 export interface AuthenticatedUser {
@@ -46,6 +54,10 @@ const entraJwks = createRemoteJWKSet(
   new URL(`https://login.microsoftonline.com/${jwksTenant}/discovery/v2.0/keys`),
 );
 
+function isUuidV1f2(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export function registerRequestContext(app: FastifyInstance): void {
   app.decorateRequest('authPrincipal', null);
   app.decorateRequest('actor', null);
@@ -55,6 +67,36 @@ export async function authenticate(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
+  const internalToken = readHeader(request, SAP_INTERNAL_ORCHESTRATION_HEADER_V1F2);
+  if (internalToken) {
+    if (
+      !isAllowedSapInternalOrchestrationPathV1f2(request.method, request.raw.url)
+      || !matchesSapInternalOrchestrationSecretV1f2(internalToken)
+    ) {
+      await reply.code(401).send({ error: 'unauthorized_internal_orchestration' });
+      return;
+    }
+    const internalTenantId = getTenantHeader(request);
+    const internalUserId = readHeader(request, SAP_INTERNAL_OWNER_HEADER_V1F2);
+    if (
+      !internalTenantId
+      || !internalUserId
+      || !isUuidV1f2(internalTenantId)
+      || !isUuidV1f2(internalUserId)
+    ) {
+      await reply.code(400).send({ error: 'invalid_internal_orchestration_actor' });
+      return;
+    }
+    request.authPrincipal = {
+      provider: 'INTERNAL_AUTOMATION',
+      issuer: 'bridata://internal/sap-orchestration-v1f2',
+      subject: internalUserId,
+      internalUserId,
+      internalTenantId,
+    };
+    return;
+  }
+
   if (config.AUTH_MODE === 'dev') {
     request.authPrincipal = {
       provider: 'DEV',
@@ -150,6 +192,10 @@ export async function resolveAuthenticatedUser(
     });
   }
 
+  if (principal.provider === 'INTERNAL_AUTOMATION') {
+    return null;
+  }
+
   const identity = await prisma.userIdentity.findUnique({
     where: {
       provider_issuer_subject: {
@@ -214,6 +260,38 @@ export async function resolveActor(
       return;
     }
 
+    request.actor = {
+      tenantId,
+      userId,
+      membershipId: membership.id,
+      role: membership.role,
+      email: membership.user.email,
+      name: membership.user.fullName,
+    };
+    return;
+  }
+
+  if (principal.provider === 'INTERNAL_AUTOMATION') {
+    const tenantId = principal.internalTenantId!;
+    const userId = principal.internalUserId!;
+    const membership = await withTenant(tenantId, (tx) =>
+      tx.tenantMembership.findUnique({
+        where: { tenantId_userId: { tenantId, userId } },
+        include: { user: true },
+      }),
+    );
+    if (
+      !membership
+      || membership.status !== 'ACTIVE'
+      || !membership.user.isActive
+      || (membership.role !== 'OWNER' && membership.role !== 'TENANT_ADMIN')
+    ) {
+      await reply.code(403).send({
+        error: 'internal_automation_owner_not_authorized',
+        message: 'The configured SAP automation owner must remain an active tenant administrator.',
+      });
+      return;
+    }
     request.actor = {
       tenantId,
       userId,

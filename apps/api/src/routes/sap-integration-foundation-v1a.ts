@@ -661,6 +661,7 @@ export async function sapIntegrationFoundationV1aRoutes(
     idempotency: 'tenant+source+sha256',
     servicePrincipalFoundation: true,
       servicePrincipalAuthenticationEnabled: true,
+      servicePrincipalOrchestrationEnabled: true,
     }),
   );
 }

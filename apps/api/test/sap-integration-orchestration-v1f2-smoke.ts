@@ -206,15 +206,18 @@ async function main() {
     assert(JSON.stringify(after) === JSON.stringify(before), 'Empty F2 orchestration unexpectedly mutated canonical business data.');
 
     const persisted = await withTenant(tenantId, async (tx) => {
-      const [audits, events, principal, connection] = await Promise.all([
+      const [audits, events, dryRunAudits, dryRunEvents, principal, connection] = await Promise.all([
         tx.auditLog.count({ where: { tenantId, resourceId: connectionId, action: 'SAP_ORCHESTRATION_V1F2_SUCCEEDED' } }),
         tx.domainEvent.count({ where: { tenantId, aggregateId: connectionId, eventType: 'bridata.integration.sap.orchestration.v1f2.completed' } }),
+        tx.auditLog.count({ where: { tenantId, resourceId: connectionId, action: 'SAP_ORCHESTRATION_V1F2_DRY_RUN_SUCCEEDED' } }),
+        tx.domainEvent.count({ where: { tenantId, aggregateId: connectionId, eventType: 'bridata.integration.sap.orchestration.v1f2.dry-run.completed' } }),
         tx.integrationServicePrincipal.findFirst({ where: { tenantId, integrationConnectionId: connectionId, clientId: fullClientId }, select: { lastUsedAt: true } }),
         tx.integrationConnection.findUnique({ where: { id: connectionId }, select: { config: true } }),
       ]);
-      return { audits, events, principal, config: connection?.config };
+      return { audits, events, dryRunAudits, dryRunEvents, principal, config: connection?.config };
     });
-    assert(persisted.audits === 2 && persisted.events === 2, 'Successful F2 runs were not audited exactly once each.');
+    assert(persisted.audits === 2 && persisted.events === 2, 'Successful F2 apply runs were not audited exactly once each.');
+    assert(persisted.dryRunAudits === 1 && persisted.dryRunEvents === 1, 'F2 dry-run audit/event semantics are not isolated from apply runs.');
     assert(persisted.principal?.lastUsedAt, 'F2 did not update service principal last_used_at.');
     const config = persisted.config as Record<string, unknown> | null;
     assert(!config || !Object.prototype.hasOwnProperty.call(config, 'sapOrchestrationLeaseV1f2'), 'F2 lease was not released.');
