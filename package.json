@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit && npm run typecheck --workspace @nexus/api",
     "lint": "npm run typecheck",
     "test": "tsx src/domain/myWork.smoke.ts && tsx src/domain/collaborationV1.smoke.ts && tsx src/domain/objectApprovalsV1.smoke.ts && tsx src/domain/documentMetadataV1.smoke.ts && tsx src/domain/sapProcurementV1G3.smoke.ts && npm run test --workspace @nexus/api",
+    "test:sap:g5": "tsx apps/api/test/sap-financial-view-v1g5-smoke.ts",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:format": "prisma format",
