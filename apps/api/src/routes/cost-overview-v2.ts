@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { authenticate, resolveActor } from '../auth.js';
 import { canAccessWorkspace } from '../authorization.js';
 import { calculateBudgetLineForecastV2, calculateProjectCostSummaryV2 } from '../domain/cost-engine-v2.js';
+import { buildSapFinancialForecastV1g6 } from '../domain/sap-financial-forecast-v1g6.js';
 import { withTenant } from '../tenant-transaction.js';
 import { tenantCurrency, validProject } from './cost-engine-v2-utils.js';
 
@@ -285,6 +286,31 @@ export async function costOverviewV2Routes(app: FastifyInstance): Promise<void> 
             }
           : null;
 
+        const sapFinancialForecastV1g6 = buildSapFinancialForecastV1g6({
+          controlBudget: summary.controlBudget,
+          actualCost: summary.actualCost,
+          openCommitment: summary.openCommitment,
+          forecastRemainingUncommitted: summary.forecastRemainingUncommitted,
+          estimateAtCompletion: summary.estimateAtCompletion,
+          varianceAtCompletion: summary.varianceAtCompletion,
+          forecastVariancePercent: summary.forecastVariancePercent,
+          health: summary.health,
+          baselineApprovedBudget: baseline?.approvedBudget ?? null,
+          baselineContingencyAmount: baseline?.contingencyAmount ?? null,
+          unallocatedActual,
+          unallocatedCommitment,
+          lines: lineResults.map((line) => ({
+            id: line.id,
+            description: line.description,
+            approvedAmount: line.approvedAmount,
+            actualAmount: line.actualAmount,
+            commitmentAmount: line.commitmentAmount,
+            forecastRemainingUncommitted: line.forecastRemainingUncommitted,
+            estimateAtCompletion: line.estimateAtCompletion,
+            varianceAtCompletion: line.varianceAtCompletion,
+          })),
+        });
+
         const workItemMap = new Map<string, { workItemId: string; budget: number; actual: number; commitment: number; eac: number }>();
         for (const line of lineResults) {
           if (!line.workItemId) continue;
@@ -304,6 +330,7 @@ export async function costOverviewV2Routes(app: FastifyInstance): Promise<void> 
             currency,
             actualAuthority: sapDataPepAuthority ? 'SAP_DATA_PEP' : 'BRIDATA_MIXED',
             summary,
+            sapFinancialForecastV1g6,
             lines: lineResults,
             unallocated: {
               actual: Math.round(unallocatedActual * 10_000) / 10_000,
