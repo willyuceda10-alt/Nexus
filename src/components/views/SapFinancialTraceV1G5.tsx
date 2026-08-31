@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   BadgeDollarSign,
-  CheckCircle2,
   ClipboardList,
   Database,
   FileSearch,
@@ -61,8 +60,8 @@ export const SapFinancialTraceV1G5: React.FC<{ projectId: string }> = ({ project
   }, [apiBootstrap.dataMode, apiBootstrap.status, projectId]);
 
   const money = useMemo(() => {
-    const currency = data?.currency ?? 'USD';
-    return (value: number) => {
+    const defaultCurrency = data?.currency ?? 'USD';
+    return (value: number, currency = defaultCurrency) => {
       try {
         return new Intl.NumberFormat('es-PE', {
           style: 'currency',
@@ -191,7 +190,7 @@ export const SapFinancialTraceV1G5: React.FC<{ projectId: string }> = ({ project
                     <p className="mt-0.5 max-w-[380px] truncate text-[8px] text-slate-400">{row.description}</p>
                   </td>
                   <td className={`whitespace-nowrap px-2 py-2.5 text-right font-extrabold ${row.includedInSummary ? 'text-slate-900' : 'text-amber-700'}`}>
-                    {money(row.amount)}
+                    {money(row.amount, row.currency)}
                   </td>
                 </tr>
               ))}
@@ -244,7 +243,7 @@ const EmptyRow: React.FC<{ colSpan: number; text: string }> = ({ colSpan, text }
 
 const CommitmentRow: React.FC<{
   row: SapFinancialCommitmentV1G5;
-  money: (value: number) => string;
+  money: (value: number, currency?: string) => string;
 }> = ({ row, money }) => {
   if (row.kind === 'PRE_PO') {
     return (
@@ -253,7 +252,7 @@ const CommitmentRow: React.FC<{
         <td className="px-2 py-2.5"><p className="font-bold text-slate-800">{row.sourceReference ?? row.externalKey}</p><p className="mt-0.5 font-mono text-[8px] text-slate-400">{row.wbsElement ?? '—'}</p></td>
         <td className="px-2 py-2.5">{row.costCodeName ?? row.costCode ?? row.description}</td>
         <td className="whitespace-nowrap px-2 py-2.5">{shortDate(row.committedAt)}</td>
-        <td className={`whitespace-nowrap px-2 py-2.5 text-right font-extrabold ${row.includedInSummary ? 'text-slate-900' : 'text-amber-700'}`}>{money(row.amount)}</td>
+        <td className={`whitespace-nowrap px-2 py-2.5 text-right font-extrabold ${row.includedInSummary ? 'text-slate-900' : 'text-amber-700'}`}>{money(row.amount, row.currency)}</td>
       </tr>
     );
   }
@@ -264,7 +263,7 @@ const CommitmentRow: React.FC<{
       <td className="px-2 py-2.5"><p className="font-bold text-slate-800">{row.purchaseOrderNumber} · {row.purchaseOrderPosition ?? '—'}</p><p className="mt-0.5 text-[8px] text-slate-400">{row.outstandingQty.toLocaleString('es-PE')} pendientes</p></td>
       <td className="px-2 py-2.5"><p className="font-semibold text-slate-700">{row.supplierName ?? row.supplierCode ?? 'Sin proveedor'}</p><p className="mt-0.5 text-[8px] text-slate-400">{row.materialCode} · {row.materialTitle}</p></td>
       <td className="whitespace-nowrap px-2 py-2.5">{shortDate(row.expectedDate)}</td>
-      <td className={`whitespace-nowrap px-2 py-2.5 text-right font-extrabold ${row.includedInSummary ? 'text-slate-900' : 'text-amber-700'}`}>{money(row.amount)}</td>
+      <td className={`whitespace-nowrap px-2 py-2.5 text-right font-extrabold ${row.includedInSummary ? 'text-slate-900' : 'text-amber-700'}`}>{money(row.amount, row.currency)}</td>
     </tr>
   );
 };
