@@ -4,9 +4,12 @@ import { z } from 'zod';
 import { authenticate, resolveActor } from '../auth.js';
 import { canAccessWorkspace } from '../authorization.js';
 import { calculateBudgetLineForecastV2, calculateProjectCostSummaryV2 } from '../domain/cost-engine-v2.js';
+import { forecastTask, summarizeForecast } from '../domain/forecast.js';
+import { buildProjectRiskForecastV1g7 } from '../domain/project-risk-forecast-v1g7.js';
 import { buildSapFinancialForecastV1g6 } from '../domain/sap-financial-forecast-v1g6.js';
+import { calendarFromMetadata } from '../domain/work-calendar.js';
 import { withTenant } from '../tenant-transaction.js';
-import { tenantCurrency, validProject } from './cost-engine-v2-utils.js';
+import { metadataProjectId, tenantCurrency, validProject } from './cost-engine-v2-utils.js';
 
 const projectParams = z.object({ projectId: z.string().uuid() });
 
@@ -311,6 +314,58 @@ export async function costOverviewV2Routes(app: FastifyInstance): Promise<void> 
           })),
         });
 
+        const now = new Date();
+        const asOfDate = new Date(Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate(),
+        ));
+        const calendar = calendarFromMetadata(project.metadata);
+
+        const scheduleObjects = await tx.nexusObject.findMany({
+          where: {
+            tenantId: actor.tenantId,
+            workspaceId: project.workspaceId,
+            deletedAt: null,
+            objectTypeKey: { in: ['TASK', 'DELIVERABLE', 'MILESTONE'] },
+          },
+          select: {
+            id: true,
+            objectTypeKey: true,
+            title: true,
+            status: true,
+            progress: true,
+            startDate: true,
+            dueDate: true,
+            metadata: true,
+          },
+        });
+
+        const scheduleTasks = scheduleObjects
+          .filter((object) => metadataProjectId(object.metadata) === project.id)
+          .map((object) => forecastTask({
+            id: object.id,
+            title: object.title,
+            objectTypeKey: object.objectTypeKey,
+            status: object.status,
+            progress: object.progress,
+            startDate: object.startDate,
+            dueDate: object.dueDate,
+          }, asOfDate, calendar));
+
+        const scheduleSummary = summarizeForecast(scheduleTasks, calendar);
+
+        const projectRiskForecastV1g7 = buildProjectRiskForecastV1g7({
+          financial: {
+            health: summary.health,
+            controlBudget: summary.controlBudget,
+            estimateAtCompletion: summary.estimateAtCompletion,
+            varianceAtCompletion: summary.varianceAtCompletion,
+            forecastVariancePercent: summary.forecastVariancePercent,
+          },
+          schedule: scheduleSummary,
+        });
+
         const workItemMap = new Map<string, { workItemId: string; budget: number; actual: number; commitment: number; eac: number }>();
         for (const line of lineResults) {
           if (!line.workItemId) continue;
@@ -331,6 +386,7 @@ export async function costOverviewV2Routes(app: FastifyInstance): Promise<void> 
             actualAuthority: sapDataPepAuthority ? 'SAP_DATA_PEP' : 'BRIDATA_MIXED',
             summary,
             sapFinancialForecastV1g6,
+            projectRiskForecastV1g7,
             lines: lineResults,
             unallocated: {
               actual: Math.round(unallocatedActual * 10_000) / 10_000,
