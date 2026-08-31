@@ -1,12 +1,20 @@
 import React from 'react';
 import { LandingPage } from './components/public/LandingPage';
 import { LoginPage } from './components/public/LoginPage';
+import { hasBridataMicrosoftAccount } from './auth/msalBridata';
+import { runtimeConfig } from './config/runtime';
 
 const InternalWorkOs = React.lazy(() => import('./components/app/InternalWorkOs'));
 
 function normalizePath(pathname: string): string {
   if (!pathname || pathname === '/') return '/';
   return pathname.endsWith('/') && pathname !== '/' ? pathname.slice(0, -1) : pathname;
+}
+
+function requiresEntraSession(path: string): boolean {
+  if (!(path === '/app' || path.startsWith('/app/'))) return false;
+  if (runtimeConfig.dataMode !== 'api' || runtimeConfig.authMode !== 'entra') return false;
+  return !hasBridataMicrosoftAccount();
 }
 
 const AppFallback: React.FC = () => (
@@ -42,6 +50,13 @@ export function App() {
   if (path === '/login') return <LoginPage onNavigate={navigate} />;
 
   if (path === '/app' || path.startsWith('/app/')) {
+    if (requiresEntraSession(path)) {
+      // Keep the requested /app URL so MSAL can return the user to the protected
+      // destination after the interactive sign-in completes. Crucially, the
+      // internal Work OS never mounts before an Entra account is available.
+      return <LoginPage onNavigate={navigate} />;
+    }
+
     return (
       <React.Suspense fallback={<AppFallback />}>
         <InternalWorkOs />
