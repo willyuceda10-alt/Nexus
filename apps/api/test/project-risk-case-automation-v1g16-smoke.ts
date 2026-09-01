@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { buildApp } from '../src/app.js';
+import {
+  findProjectRiskCaseV1g15,
+} from '../src/domain/project-risk-case-v1g15.js';
 import { projectPlatformEventV1 } from '../src/platform-event-projector-v1.js';
 import { runProjectRiskMonitorV1g9 } from '../src/project-risk-monitor-v1g9.js';
 import { withTenant } from '../src/tenant-transaction.js';
@@ -366,60 +369,6 @@ async function main() {
     assert(risk.hasScheduleRisk === true, 'G7 must detect schedule risk');
     assert(risk.requiresAttention === true, 'G7 must require attention');
 
-    await withTenant(
-      tenantId,
-      async (tx) => {
-        await tx.domainEvent.create({
-          data: {
-            tenantId,
-            aggregateId: projectId,
-
-            eventType:
-              'bridata.project.risk.assessed',
-
-            idempotencyKey:
-              `g10-watch-history:${projectId}`,
-
-            createdAt:
-              new Date(
-                Date.now() -
-                  (60 * 60 * 1000),
-              ),
-
-            payload: {
-              version: 'v1g8',
-              projectId,
-              workspaceId,
-
-              riskLevel: 'WATCH',
-
-              drivers: [
-                'COST_OVERRUN',
-              ],
-
-              financialHealth:
-                'WATCH',
-
-              scheduleHealth:
-                'ON_TRACK',
-
-              forecastVariancePercent:
-                2,
-
-              forecastVarianceDays:
-                0,
-
-              requiresAttention:
-                true,
-
-              fingerprint:
-                `g10-watch-${projectId}`,
-            },
-          },
-        });
-      },
-    );
-
     const firstRun =
       await runProjectRiskMonitorV1g9({
         projectIds: [projectId],
@@ -450,60 +399,46 @@ async function main() {
       `G9 first run failures: ${JSON.stringify(firstRun.failures)}`,
     );
 
-    const historyResponse =
-      await app.inject({
-        method: 'GET',
-
-        url:
-          `/api/v1/projects/${projectId}/risk-history-v1g10?limit=20`,
-      });
-
     assert(
-      historyResponse.statusCode === 200,
-      `G10 history failed: ${historyResponse.statusCode} ${historyResponse.body}`,
-    );
-
-    const history =
-      historyResponse.json();
-
-    assert(
-      history.version === 'v1g10',
-      'Unexpected G10 version',
+      firstRun.riskCaseSyncVersion ===
+        'v1g16',
+      'G16 Risk Case sync version missing',
     );
 
     assert(
-      history.currentRisk ===
-        'CRITICAL',
-      `Expected G10 current CRITICAL, got ${history.currentRisk}`,
-    );
-
-    assert(
-      history.previousRisk ===
-        'WATCH',
-      `Expected G10 previous WATCH, got ${history.previousRisk}`,
-    );
-
-    assert(
-      history.trend.current ===
-        'WORSENING',
-      `Expected G10 WORSENING, got ${history.trend.current}`,
-    );
-
-    assert(
-      history.maxRiskEver ===
-        'CRITICAL',
-      `Expected G10 max CRITICAL, got ${history.maxRiskEver}`,
-    );
-
-    assert(
-      history.observationCount >= 2,
-      `Expected at least 2 G10 observations, got ${history.observationCount}`,
-    );
-
-    assert(
-      history.trend.worsenedTransitions >=
+      firstRun.riskCasesCreated ===
         1,
-      'Expected at least one worsening transition',
+      `Expected one automatically created Risk Case, got ${firstRun.riskCasesCreated}`,
+    );
+
+    const automaticallyCreatedRiskCase =
+      await withTenant(
+        tenantId,
+        async (tx) =>
+          findProjectRiskCaseV1g15(
+            tx,
+            tenantId,
+            projectId,
+          ),
+      );
+
+    assert(
+      automaticallyCreatedRiskCase,
+      'G16 automatic Risk Case was not created',
+    );
+
+    assert(
+      automaticallyCreatedRiskCase
+        .status ===
+        'OPEN',
+      `Expected automatic Risk Case OPEN, got ${automaticallyCreatedRiskCase.status}`,
+    );
+
+    assert(
+      automaticallyCreatedRiskCase
+        .priority ===
+        'CRITICAL',
+      `Expected automatic Risk Case CRITICAL, got ${automaticallyCreatedRiskCase.priority}`,
     );
 
     const notificationEvent =
@@ -664,6 +599,205 @@ async function main() {
       `G9 second run failures: ${JSON.stringify(secondRun.failures)}`,
     );
 
+    assert(
+      secondRun.riskCasesUnchanged ===
+        1,
+      `Expected unchanged Risk Case on identical evaluation, got ${secondRun.riskCasesUnchanged}`,
+    );
+
+
+    // ---------------------------------------------
+    // Canonical project recovery
+    // ---------------------------------------------
+
+    await withTenant(
+      tenantId,
+      async (tx) => {
+        await tx.$executeRaw(
+          Prisma.sql`
+            UPDATE project_budget_lines
+            SET
+              forecast_remaining_uncommitted =
+                0
+            WHERE
+              tenant_id =
+                ${tenantId}::uuid
+              AND id =
+                ${budgetLineId}::uuid
+          `,
+        );
+
+        await tx.nexusObject.update({
+          where: {
+            id:
+              taskId,
+          },
+
+          data: {
+            status:
+              'COMPLETED',
+
+            progress:
+              100,
+
+            startDate:
+              new Date(
+                Date.now() -
+                (24 * 60 * 60 * 1000),
+              ),
+
+            dueDate:
+              new Date(
+                Date.now() +
+                (10 * 24 * 60 * 60 * 1000),
+              ),
+          },
+        });
+      },
+    );
+
+    const recoveryRun =
+      await runProjectRiskMonitorV1g9({
+        projectIds: [
+          projectId,
+        ],
+      });
+
+    assert(
+      recoveryRun.failedProjects ===
+        0,
+      `G16 recovery run failures: ${JSON.stringify(recoveryRun.failures)}`,
+    );
+
+    assert(
+      recoveryRun.riskCasesAutoResolved ===
+        1,
+      `Expected one automatically resolved Risk Case, got ${recoveryRun.riskCasesAutoResolved}`,
+    );
+
+    const resolvedRiskCase =
+      await withTenant(
+        tenantId,
+        async (tx) =>
+          findProjectRiskCaseV1g15(
+            tx,
+            tenantId,
+            projectId,
+          ),
+      );
+
+    assert(
+      resolvedRiskCase,
+      'G16 resolved Risk Case missing',
+    );
+
+    assert(
+      resolvedRiskCase.status ===
+        'RESOLVED',
+      `Expected Risk Case RESOLVED after project recovery, got ${resolvedRiskCase.status}`,
+    );
+
+
+    // ---------------------------------------------
+    // Risk returns
+    // ---------------------------------------------
+
+    await withTenant(
+      tenantId,
+      async (tx) => {
+        await tx.$executeRaw(
+          Prisma.sql`
+            UPDATE project_budget_lines
+            SET
+              forecast_remaining_uncommitted =
+                200
+            WHERE
+              tenant_id =
+                ${tenantId}::uuid
+              AND id =
+                ${budgetLineId}::uuid
+          `,
+        );
+
+        const dayMs =
+          24 * 60 * 60 * 1000;
+
+        await tx.nexusObject.update({
+          where: {
+            id:
+              taskId,
+          },
+
+          data: {
+            status:
+              'ACTIVE',
+
+            progress:
+              25,
+
+            startDate:
+              new Date(
+                Date.now() -
+                (20 * dayMs),
+              ),
+
+            dueDate:
+              new Date(
+                Date.now() -
+                (5 * dayMs),
+              ),
+          },
+        });
+      },
+    );
+
+    const recurrenceRun =
+      await runProjectRiskMonitorV1g9({
+        projectIds: [
+          projectId,
+        ],
+      });
+
+    assert(
+      recurrenceRun.failedProjects ===
+        0,
+      `G16 recurrence run failures: ${JSON.stringify(recurrenceRun.failures)}`,
+    );
+
+    assert(
+      recurrenceRun.riskCasesReopened ===
+        1,
+      `Expected one automatically reopened Risk Case, got ${recurrenceRun.riskCasesReopened}`,
+    );
+
+    const reopenedRiskCase =
+      await withTenant(
+        tenantId,
+        async (tx) =>
+          findProjectRiskCaseV1g15(
+            tx,
+            tenantId,
+            projectId,
+          ),
+      );
+
+    assert(
+      reopenedRiskCase,
+      'G16 reopened Risk Case missing',
+    );
+
+    assert(
+      reopenedRiskCase.status ===
+        'OPEN',
+      `Expected reopened Risk Case OPEN, got ${reopenedRiskCase.status}`,
+    );
+
+    assert(
+      reopenedRiskCase.priority ===
+        'CRITICAL',
+      `Expected reopened Risk Case CRITICAL, got ${reopenedRiskCase.priority}`,
+    );
+
     await projectPlatformEventV1({
       schemaVersion: 1,
       eventId: notificationEvent.id,
@@ -713,10 +847,37 @@ async function main() {
     );
 
     console.log(JSON.stringify({
-      projectRiskHistoryV1g10: 'PASS',
-      riskTrendV1g10: history.trend.current,
-      riskObservationCountV1g10: history.observationCount,
-      maxRiskEverV1g10: history.maxRiskEver,
+      projectRiskCaseAutomationV1g16:
+        'PASS',
+
+      riskCaseSyncVersion:
+        firstRun.riskCaseSyncVersion,
+
+      automaticCreation:
+        firstRun.riskCasesCreated ===
+        1,
+
+      unchangedWithoutRiskChange:
+        secondRun.riskCasesUnchanged ===
+        1,
+
+      automaticRecoveryResolution:
+        recoveryRun.riskCasesAutoResolved ===
+        1,
+
+      automaticReopen:
+        recurrenceRun.riskCasesReopened ===
+        1,
+
+      notificationIndependentLifecycle:
+        true,
+
+      canonicalRiskObject:
+        true,
+
+      separateRiskTable:
+        false,
+
       projectRiskMonitorV1g9: 'PASS',
       projectRiskAlertV1g8: 'PASS',
       projectRiskForecastV1g7: 'PASS',

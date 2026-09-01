@@ -6,6 +6,10 @@ import {
   evaluateProjectRiskAlertAutomaticV1g13,
 } from './project-risk-evaluation-service.js';
 
+import {
+  syncProjectRiskCaseV1g15,
+} from './domain/project-risk-case-v1g15.js';
+
 import { withTenant } from './tenant-transaction.js';
 
 type TenantPartitionRow = {
@@ -33,6 +37,16 @@ export type ProjectRiskMonitorV1g9Summary = {
 
   notificationPolicyVersion:
     'v1g13';
+
+  riskCaseSyncVersion:
+    'v1g16';
+
+  riskCasesCreated: number;
+  riskCasesUpdated: number;
+  riskCasesReopened: number;
+  riskCasesAutoResolved: number;
+  riskCasesUnchanged: number;
+  riskCasesNotRequired: number;
 
   projectsWithoutAlert: number;
   terminalProjectsSkipped: number;
@@ -262,9 +276,62 @@ async function evaluateProjectV1g9(
           },
         );
 
+      const riskCaseSync =
+        await syncProjectRiskCaseV1g15(
+          tx,
+          {
+            tenantId,
+
+            project: {
+              id:
+                project.id,
+
+              title:
+                project.title,
+
+              workspaceId:
+                project.workspaceId,
+
+              ownerId:
+                project.ownerId,
+            },
+
+            snapshot: {
+              riskLevel:
+                evaluation.current.risk
+                  .riskLevel,
+
+              drivers:
+                evaluation.current.risk
+                  .drivers,
+
+              fingerprint:
+                evaluation.alert
+                  .fingerprint,
+
+              financialHealth:
+                evaluation.current.risk
+                  .financial
+                  .health,
+
+              scheduleHealth:
+                evaluation.current.risk
+                  .schedule
+                  .health,
+            },
+          },
+        );
+
+      const riskCaseChanged =
+        riskCaseSync.action !==
+          'NONE' &&
+        riskCaseSync.action !==
+          'UNCHANGED';
+
       if (
         evaluation.assessment.created ||
-        evaluation.notification?.created
+        evaluation.notification?.created ||
+        riskCaseChanged
       ) {
         await tx.auditLog.create({
           data: {
@@ -323,6 +390,22 @@ async function evaluateProjectV1g9(
                 evaluation.policy
                   .cooldownRemainingMinutes,
 
+              riskCaseSyncVersion:
+                'v1g16',
+
+              riskCaseSyncAction:
+                riskCaseSync.action,
+
+              riskCaseId:
+                riskCaseSync.riskCase
+                  ?.id ??
+                null,
+
+              riskCaseStatus:
+                riskCaseSync.riskCase
+                  ?.status ??
+                null,
+
               mode:
                 'AUTOMATIC_MONITOR',
             },
@@ -332,7 +415,10 @@ async function evaluateProjectV1g9(
 
       return {
         kind: 'evaluated' as const,
+
         evaluation,
+
+        riskCaseSync,
       };
     },
   );
@@ -376,6 +462,27 @@ export async function runProjectRiskMonitorV1g9(
 
       notificationPolicyVersion:
         'v1g13',
+
+      riskCaseSyncVersion:
+        'v1g16',
+
+      riskCasesCreated:
+        0,
+
+      riskCasesUpdated:
+        0,
+
+      riskCasesReopened:
+        0,
+
+      riskCasesAutoResolved:
+        0,
+
+      riskCasesUnchanged:
+        0,
+
+      riskCasesNotRequired:
+        0,
 
       projectsWithoutAlert: 0,
       terminalProjectsSkipped: 0,
@@ -444,6 +551,41 @@ export async function runProjectRiskMonitorV1g9(
           notification,
           policy,
         } = result.evaluation;
+
+        switch (
+          result.riskCaseSync
+            .action
+        ) {
+          case 'CREATED':
+            summary.riskCasesCreated +=
+              1;
+            break;
+
+          case 'UPDATED':
+            summary.riskCasesUpdated +=
+              1;
+            break;
+
+          case 'REOPENED':
+            summary.riskCasesReopened +=
+              1;
+            break;
+
+          case 'AUTO_RESOLVED':
+            summary.riskCasesAutoResolved +=
+              1;
+            break;
+
+          case 'UNCHANGED':
+            summary.riskCasesUnchanged +=
+              1;
+            break;
+
+          case 'NONE':
+            summary.riskCasesNotRequired +=
+              1;
+            break;
+        }
 
         if (!alert.shouldNotify) {
           summary.projectsWithoutAlert += 1;

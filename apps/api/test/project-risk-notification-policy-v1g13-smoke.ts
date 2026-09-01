@@ -812,6 +812,18 @@ async function main() {
       await tx.$executeRaw(Prisma.sql`DELETE FROM material_masters WHERE id = ${materialId}::uuid`);
       await tx.nexusObject.deleteMany({ where: { id: taskId, tenantId } });
       await tx.nexusObject.deleteMany({ where: { id: materialObjectId, tenantId } });
+      await tx.$executeRaw(Prisma.sql`
+        DELETE FROM nexus_objects
+        WHERE tenant_id =
+          ${tenantId}::uuid
+          AND object_type_key =
+            'RISK'
+          AND metadata->>'source' =
+            'PROJECT_RISK_FORECAST_V1G15'
+          AND metadata->>'projectId' =
+            ${projectId}
+      `);
+
       await tx.nexusObject.deleteMany({ where: { id: projectId, tenantId } });
       await tx.integrationConnection.deleteMany({ where: { id: connectionId, tenantId } });
     });
