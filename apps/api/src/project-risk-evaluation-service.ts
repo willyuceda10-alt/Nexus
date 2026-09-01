@@ -25,6 +25,10 @@ import {
 } from './domain/project-risk-notification-policy-v1g13.js';
 
 import {
+  loadProjectRiskNotificationPreferencesV1g14,
+} from './domain/project-risk-notification-preferences-v1g14.js';
+
+import {
   buildProjectRiskForecastV1g7,
 } from './domain/project-risk-forecast-v1g7.js';
 
@@ -928,6 +932,7 @@ evaluateProjectRiskAlertAutomaticV1g13(
   const [
     previousAssessment,
     lastNotification,
+    preferences,
   ] =
     await Promise.all([
       loadPreviousRiskAssessmentV1g13(
@@ -940,6 +945,12 @@ evaluateProjectRiskAlertAutomaticV1g13(
         tx,
         input.tenantId,
         input.project.id,
+        input.targetUserId,
+      ),
+
+      loadProjectRiskNotificationPreferencesV1g14(
+        tx,
+        input.tenantId,
         input.targetUserId,
       ),
     ]);
@@ -959,6 +970,30 @@ evaluateProjectRiskAlertAutomaticV1g13(
 
       previousAssessment,
       lastNotification,
+
+      enabled:
+        preferences.enabled,
+
+      minimumRiskLevel:
+        preferences.minimumRiskLevel,
+
+      highCooldownHours:
+        preferences.highCooldownHours,
+
+      criticalCooldownHours:
+        preferences.criticalCooldownHours,
+
+      notifyOnEscalation:
+        preferences.notifyOnEscalation,
+
+      notifyOnDriverChange:
+        preferences.notifyOnDriverChange,
+
+      notifyOnReentry:
+        preferences.notifyOnReentry,
+
+      notifyOnCooldownReminder:
+        preferences.notifyOnCooldownReminder,
 
       ...(input.now
         ? {
@@ -1092,5 +1127,8 @@ evaluateProjectRiskAlertAutomaticV1g13(
     assessment,
     notification,
     policy,
+
+    preferences:
+      preferences,
   };
 }

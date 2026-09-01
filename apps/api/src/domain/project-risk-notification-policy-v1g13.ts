@@ -12,7 +12,13 @@ export type ProjectRiskAutoNotificationReasonV1g13 =
   | 'ESCALATED'
   | 'DRIVERS_CHANGED'
   | 'COOLDOWN_EXPIRED'
-  | 'COOLDOWN_ACTIVE';
+  | 'COOLDOWN_ACTIVE'
+  | 'USER_DISABLED'
+  | 'BELOW_USER_THRESHOLD'
+  | 'REENTRY_DISABLED'
+  | 'ESCALATION_DISABLED'
+  | 'DRIVER_CHANGE_DISABLED'
+  | 'COOLDOWN_REMINDER_DISABLED';
 
 export type ProjectRiskNotificationKeyModeV1g13 =
   | 'BASE'
@@ -63,6 +69,12 @@ const notificationReasonSchema =
     'DRIVERS_CHANGED',
     'COOLDOWN_EXPIRED',
     'COOLDOWN_ACTIVE',
+    'USER_DISABLED',
+    'BELOW_USER_THRESHOLD',
+    'REENTRY_DISABLED',
+    'ESCALATION_DISABLED',
+    'DRIVER_CHANGE_DISABLED',
+    'COOLDOWN_REMINDER_DISABLED',
   ]);
 
 export const projectRiskAutomaticNotificationDetailsSchemaV1g13 =
@@ -165,13 +177,48 @@ export function buildProjectRiskAutomaticNotificationPolicyV1g13(
 
     now?: Date;
 
+    enabled?: boolean;
+
+    minimumRiskLevel?:
+      'HIGH' |
+      'CRITICAL';
+
     highCooldownHours?: number;
     criticalCooldownHours?: number;
+
+    notifyOnEscalation?: boolean;
+    notifyOnDriverChange?: boolean;
+    notifyOnReentry?: boolean;
+    notifyOnCooldownReminder?: boolean;
   },
 ) {
   const now =
     input.now ??
     new Date();
+
+  const enabled =
+    input.enabled ??
+    true;
+
+  const minimumRiskLevel =
+    input.minimumRiskLevel ??
+    'HIGH';
+
+  const notifyOnEscalation =
+    input.notifyOnEscalation ??
+    true;
+
+  const notifyOnDriverChange =
+    input.notifyOnDriverChange ??
+    true;
+
+  const notifyOnReentry =
+    input.notifyOnReentry ??
+    true;
+
+  const notifyOnCooldownReminder =
+    input.notifyOnCooldownReminder ??
+    true;
 
   const highCooldownHours =
     input.highCooldownHours ??
@@ -227,6 +274,31 @@ export function buildProjectRiskAutomaticNotificationPolicyV1g13(
     );
   }
 
+  if (!enabled) {
+    return result(
+      false,
+      'USER_DISABLED',
+      'BASE',
+      null,
+    );
+  }
+
+  if (
+    severity[
+      input.current.riskLevel
+    ] <
+    severity[
+      minimumRiskLevel
+    ]
+  ) {
+    return result(
+      false,
+      'BELOW_USER_THRESHOLD',
+      'BASE',
+      null,
+    );
+  }
+
   if (
     input.previousAssessment &&
     severity[
@@ -235,6 +307,15 @@ export function buildProjectRiskAutomaticNotificationPolicyV1g13(
     ] <
       severity.HIGH
   ) {
+    if (!notifyOnReentry) {
+      return result(
+        false,
+        'REENTRY_DISABLED',
+        'BASE',
+        null,
+      );
+    }
+
     return result(
       true,
       'ENTERED_HIGH_RISK',
@@ -261,6 +342,15 @@ export function buildProjectRiskAutomaticNotificationPolicyV1g13(
         .riskLevel
     ]
   ) {
+    if (!notifyOnEscalation) {
+      return result(
+        false,
+        'ESCALATION_DISABLED',
+        'BASE',
+        null,
+      );
+    }
+
     return result(
       true,
       'ESCALATED',
@@ -276,6 +366,15 @@ export function buildProjectRiskAutomaticNotificationPolicyV1g13(
         .drivers,
     )
   ) {
+    if (!notifyOnDriverChange) {
+      return result(
+        false,
+        'DRIVER_CHANGE_DISABLED',
+        'BASE',
+        null,
+      );
+    }
+
     return result(
       true,
       'DRIVERS_CHANGED',
@@ -303,6 +402,15 @@ export function buildProjectRiskAutomaticNotificationPolicyV1g13(
     elapsedMs >=
     cooldownMs
   ) {
+    if (!notifyOnCooldownReminder) {
+      return result(
+        false,
+        'COOLDOWN_REMINDER_DISABLED',
+        'BASE',
+        null,
+      );
+    }
+
     return result(
       true,
       'COOLDOWN_EXPIRED',

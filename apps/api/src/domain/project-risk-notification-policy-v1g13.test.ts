@@ -403,5 +403,184 @@ describe(
           .toContain(':g13:cooldown:');
       },
     );
+    it(
+      'G14 suppresses HIGH when user minimum is CRITICAL',
+      () => {
+        const result =
+          buildProjectRiskAutomaticNotificationPolicyV1g13({
+            current: {
+              riskLevel:
+                'HIGH',
+
+              drivers:
+                ['COST_OVERRUN'],
+
+              fingerprint:
+                'g14-high',
+            },
+
+            previousAssessment:
+              null,
+
+            lastNotification:
+              null,
+
+            minimumRiskLevel:
+              'CRITICAL',
+
+            now,
+          });
+
+        expect(
+          result.shouldNotify,
+        ).toBe(false);
+
+        expect(
+          result.reason,
+        ).toBe(
+          'BELOW_USER_THRESHOLD',
+        );
+      },
+    );
+
+    it(
+      'G14 can disable automatic risk notifications',
+      () => {
+        const result =
+          buildProjectRiskAutomaticNotificationPolicyV1g13({
+            current: {
+              riskLevel:
+                'CRITICAL',
+
+              drivers:
+                ['COST_OVERRUN'],
+
+              fingerprint:
+                'g14-disabled',
+            },
+
+            previousAssessment:
+              null,
+
+            lastNotification:
+              null,
+
+            enabled:
+              false,
+
+            now,
+          });
+
+        expect(
+          result.shouldNotify,
+        ).toBe(false);
+
+        expect(
+          result.reason,
+        ).toBe(
+          'USER_DISABLED',
+        );
+      },
+    );
+
+    it(
+      'G14 uses custom critical cooldown',
+      () => {
+        const result =
+          buildProjectRiskAutomaticNotificationPolicyV1g13({
+            current: {
+              riskLevel:
+                'CRITICAL',
+
+              drivers:
+                ['COST_OVERRUN'],
+
+              fingerprint:
+                'g14-critical',
+            },
+
+            previousAssessment: {
+              ...highAssessment,
+
+              riskLevel:
+                'CRITICAL',
+            },
+
+            lastNotification:
+              notification({
+                riskLevel:
+                  'CRITICAL',
+
+                notifiedAt:
+                  new Date(
+                    '2026-09-01T04:00:00.000Z',
+                  ),
+              }),
+
+            criticalCooldownHours:
+              12,
+
+            now,
+          });
+
+        expect(
+          result.shouldNotify,
+        ).toBe(false);
+
+        expect(
+          result.reason,
+        ).toBe(
+          'COOLDOWN_ACTIVE',
+        );
+
+        expect(
+          result.cooldownHours,
+        ).toBe(12);
+      },
+    );
+
+    it(
+      'G14 can disable driver-change notifications',
+      () => {
+        const result =
+          buildProjectRiskAutomaticNotificationPolicyV1g13({
+            current: {
+              riskLevel:
+                'HIGH',
+
+              drivers: [
+                'COST_OVERRUN',
+                'SCHEDULE_DELAY',
+              ],
+
+              fingerprint:
+                'g14-driver',
+            },
+
+            previousAssessment:
+              highAssessment,
+
+            lastNotification:
+              notification(),
+
+            notifyOnDriverChange:
+              false,
+
+            now,
+          });
+
+        expect(
+          result.shouldNotify,
+        ).toBe(false);
+
+        expect(
+          result.reason,
+        ).toBe(
+          'DRIVER_CHANGE_DISABLED',
+        );
+      },
+    );
+
+
   },
 );

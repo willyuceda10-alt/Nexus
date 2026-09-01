@@ -3,6 +3,11 @@ import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { authenticate, resolveActor } from '../auth.js';
 import { defaultExternalNotificationPreferencesV1 } from '../domain/notification-preferences-v1.js';
+import {
+  defaultProjectRiskNotificationPreferencesV1g14,
+  serializeProjectRiskNotificationPreferencesV1g14,
+  type ProjectRiskNotificationPreferenceRowV1g14,
+} from '../domain/project-risk-notification-preferences-v1g14.js';
 import { withTenant } from '../tenant-transaction.js';
 
 const preferenceSchema = z.object({
@@ -14,9 +19,48 @@ const preferenceSchema = z.object({
   timezone: z.string().trim().min(1).max(100),
 });
 
+const projectRiskPreferenceSchema = z.object({
+  enabled:
+    z.boolean(),
+
+  minimumRiskLevel:
+    z.enum([
+      'HIGH',
+      'CRITICAL',
+    ]),
+
+  highCooldownHours:
+    z.number()
+      .int()
+      .min(1)
+      .max(168),
+
+  criticalCooldownHours:
+    z.number()
+      .int()
+      .min(1)
+      .max(168),
+
+  notifyOnEscalation:
+    z.boolean(),
+
+  notifyOnDriverChange:
+    z.boolean(),
+
+  notifyOnReentry:
+    z.boolean(),
+
+  notifyOnCooldownReminder:
+    z.boolean(),
+});
+
 const updateSchema = z.object({
   outlookEmail: preferenceSchema,
   teamsActivity: preferenceSchema,
+
+  projectRisk:
+    projectRiskPreferenceSchema
+      .optional(),
 });
 
 type PreferenceRow = {
@@ -66,7 +110,40 @@ export async function notificationPreferencesV1Routes(app: FastifyInstance): Pro
         AND channel IN ('OUTLOOK_EMAIL'::"NotificationChannelV1", 'TEAMS_ACTIVITY'::"NotificationChannelV1")
     `));
 
+    const riskRows =
+      await withTenant(
+        actor.tenantId,
+        (tx) =>
+          tx.$queryRaw<
+            ProjectRiskNotificationPreferenceRowV1g14[]
+          >(Prisma.sql`
+            SELECT
+              enabled,
+              minimum_risk_level,
+              high_cooldown_hours,
+              critical_cooldown_hours,
+              notify_on_escalation,
+              notify_on_driver_change,
+              notify_on_reentry,
+              notify_on_cooldown_reminder
+            FROM
+              project_risk_notification_preferences_v1g14
+            WHERE
+              tenant_id =
+                ${actor.tenantId}::uuid
+              AND user_id =
+                ${actor.userId}::uuid
+            LIMIT 1
+          `),
+      );
+
     const defaults = defaultExternalNotificationPreferencesV1('UTC');
+
+    const projectRisk =
+      serializeProjectRiskNotificationPreferencesV1g14(
+        riskRows[0],
+      );
+
     const outlook = rows.find((row) => row.channel === 'OUTLOOK_EMAIL');
     const teams = rows.find((row) => row.channel === 'TEAMS_ACTIVITY');
     const defaultOutlook = defaults.find((item) => item.channel === 'OUTLOOK_EMAIL')!;
@@ -75,6 +152,9 @@ export async function notificationPreferencesV1Routes(app: FastifyInstance): Pro
     return {
       version: 1,
       internal: { enabled: true, canonical: true },
+
+      projectRisk,
+
       outlookEmail: outlook ? serializeExternal(outlook) : {
         enabled: defaultOutlook.enabled,
         minimumPriority: defaultOutlook.minimumPriority,
@@ -136,6 +216,70 @@ export async function notificationPreferencesV1Routes(app: FastifyInstance): Pro
         `);
       }
 
+      if (body.data.projectRisk) {
+        const risk =
+          body.data.projectRisk;
+
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO
+            project_risk_notification_preferences_v1g14
+          (
+            tenant_id,
+            user_id,
+            enabled,
+            minimum_risk_level,
+            high_cooldown_hours,
+            critical_cooldown_hours,
+            notify_on_escalation,
+            notify_on_driver_change,
+            notify_on_reentry,
+            notify_on_cooldown_reminder
+          )
+          VALUES
+          (
+            ${actor.tenantId}::uuid,
+            ${actor.userId}::uuid,
+            ${risk.enabled},
+            ${risk.minimumRiskLevel},
+            ${risk.highCooldownHours},
+            ${risk.criticalCooldownHours},
+            ${risk.notifyOnEscalation},
+            ${risk.notifyOnDriverChange},
+            ${risk.notifyOnReentry},
+            ${risk.notifyOnCooldownReminder}
+          )
+          ON CONFLICT
+            (tenant_id, user_id)
+          DO UPDATE SET
+            enabled =
+              EXCLUDED.enabled,
+
+            minimum_risk_level =
+              EXCLUDED.minimum_risk_level,
+
+            high_cooldown_hours =
+              EXCLUDED.high_cooldown_hours,
+
+            critical_cooldown_hours =
+              EXCLUDED.critical_cooldown_hours,
+
+            notify_on_escalation =
+              EXCLUDED.notify_on_escalation,
+
+            notify_on_driver_change =
+              EXCLUDED.notify_on_driver_change,
+
+            notify_on_reentry =
+              EXCLUDED.notify_on_reentry,
+
+            notify_on_cooldown_reminder =
+              EXCLUDED.notify_on_cooldown_reminder,
+
+            updated_at =
+              CURRENT_TIMESTAMP
+        `);
+      }
+
       await Promise.all([
         tx.auditLog.create({
           data: {
@@ -149,6 +293,10 @@ export async function notificationPreferencesV1Routes(app: FastifyInstance): Pro
             details: {
               outlookEmail: body.data.outlookEmail.enabled,
               teamsActivity: body.data.teamsActivity.enabled,
+
+              projectRisk:
+                body.data.projectRisk ??
+                null,
             },
           },
         }),
@@ -162,6 +310,10 @@ export async function notificationPreferencesV1Routes(app: FastifyInstance): Pro
               userId: actor.userId,
               outlookEmailEnabled: body.data.outlookEmail.enabled,
               teamsActivityEnabled: body.data.teamsActivity.enabled,
+
+              projectRisk:
+                body.data.projectRisk ??
+                null,
             },
           },
         }),
