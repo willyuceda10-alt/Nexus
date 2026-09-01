@@ -36,7 +36,8 @@
     "test:risk:g11": "tsx apps/api/test/hierarchy-risk-overview-v1g11-smoke.ts",
     "test:risk:g12": "tsx apps/api/test/hierarchy-financial-risk-v1g12-smoke.ts",
     "test:risk:g13": "tsx apps/api/test/project-risk-notification-policy-v1g13-smoke.ts",
-    "test:risk:g14": "tsx apps/api/test/project-risk-notification-preferences-v1g14-smoke.ts"
+    "test:risk:g14": "tsx apps/api/test/project-risk-notification-preferences-v1g14-smoke.ts",
+    "test:risk:g15": "tsx apps/api/test/project-risk-case-v1g15-smoke.ts"
   },
   "dependencies": {
     "lucide-react": "^0.546.0",
