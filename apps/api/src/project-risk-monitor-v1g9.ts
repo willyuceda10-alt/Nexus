@@ -10,6 +10,10 @@ import {
   syncProjectRiskCaseV1g15,
 } from './domain/project-risk-case-v1g15.js';
 
+import {
+  escalateProjectRiskHierarchyV1g17,
+} from './project-risk-hierarchy-escalation-v1g17.js';
+
 import { withTenant } from './tenant-transaction.js';
 
 type TenantPartitionRow = {
@@ -47,6 +51,17 @@ export type ProjectRiskMonitorV1g9Summary = {
   riskCasesAutoResolved: number;
   riskCasesUnchanged: number;
   riskCasesNotRequired: number;
+
+  hierarchyEscalationVersion:
+    'v1g17';
+
+  hierarchyRecipientsConsidered: number;
+  hierarchyNotificationsQueued: number;
+  hierarchyNotificationsDeduplicated: number;
+  hierarchyNotificationsSuppressedByPolicy: number;
+  hierarchyInvalidOwnersSkipped: number;
+  hierarchyInvalidScopesSkipped: number;
+  hierarchyProjectOwnerRecipientsSkipped: number;
 
   projectsWithoutAlert: number;
   terminalProjectsSkipped: number;
@@ -322,6 +337,34 @@ async function evaluateProjectV1g9(
           },
         );
 
+      const hierarchyEscalation =
+        await escalateProjectRiskHierarchyV1g17(
+          tx,
+          {
+            tenantId,
+
+            project: {
+              id:
+                project.id,
+
+              title:
+                project.title,
+
+              workspaceId:
+                project.workspaceId,
+
+              ownerId:
+                project.ownerId,
+
+              metadata:
+                project.metadata,
+            },
+
+            risk:
+              evaluation.current.risk,
+          },
+        );
+
       const riskCaseChanged =
         riskCaseSync.action !==
           'NONE' &&
@@ -331,7 +374,8 @@ async function evaluateProjectV1g9(
       if (
         evaluation.assessment.created ||
         evaluation.notification?.created ||
-        riskCaseChanged
+        riskCaseChanged ||
+        hierarchyEscalation.notificationsQueued > 0
       ) {
         await tx.auditLog.create({
           data: {
@@ -406,6 +450,33 @@ async function evaluateProjectV1g9(
                   ?.status ??
                 null,
 
+              hierarchyEscalationVersion:
+                'v1g17',
+
+              hierarchyRecipientsConsidered:
+                hierarchyEscalation
+                  .recipientsConsidered,
+
+              hierarchyNotificationsQueued:
+                hierarchyEscalation
+                  .notificationsQueued,
+
+              hierarchyNotificationsDeduplicated:
+                hierarchyEscalation
+                  .notificationsDeduplicated,
+
+              hierarchyNotificationsSuppressedByPolicy:
+                hierarchyEscalation
+                  .notificationsSuppressedByPolicy,
+
+              hierarchyInvalidOwnersSkipped:
+                hierarchyEscalation
+                  .invalidOwnersSkipped,
+
+              hierarchyInvalidScopesSkipped:
+                hierarchyEscalation
+                  .invalidScopesSkipped,
+
               mode:
                 'AUTOMATIC_MONITOR',
             },
@@ -419,6 +490,8 @@ async function evaluateProjectV1g9(
         evaluation,
 
         riskCaseSync,
+
+        hierarchyEscalation,
       };
     },
   );
@@ -482,6 +555,30 @@ export async function runProjectRiskMonitorV1g9(
         0,
 
       riskCasesNotRequired:
+        0,
+
+      hierarchyEscalationVersion:
+        'v1g17',
+
+      hierarchyRecipientsConsidered:
+        0,
+
+      hierarchyNotificationsQueued:
+        0,
+
+      hierarchyNotificationsDeduplicated:
+        0,
+
+      hierarchyNotificationsSuppressedByPolicy:
+        0,
+
+      hierarchyInvalidOwnersSkipped:
+        0,
+
+      hierarchyInvalidScopesSkipped:
+        0,
+
+      hierarchyProjectOwnerRecipientsSkipped:
         0,
 
       projectsWithoutAlert: 0,
@@ -586,6 +683,34 @@ export async function runProjectRiskMonitorV1g9(
               1;
             break;
         }
+
+        summary.hierarchyRecipientsConsidered +=
+          result.hierarchyEscalation
+            .recipientsConsidered;
+
+        summary.hierarchyNotificationsQueued +=
+          result.hierarchyEscalation
+            .notificationsQueued;
+
+        summary.hierarchyNotificationsDeduplicated +=
+          result.hierarchyEscalation
+            .notificationsDeduplicated;
+
+        summary.hierarchyNotificationsSuppressedByPolicy +=
+          result.hierarchyEscalation
+            .notificationsSuppressedByPolicy;
+
+        summary.hierarchyInvalidOwnersSkipped +=
+          result.hierarchyEscalation
+            .invalidOwnersSkipped;
+
+        summary.hierarchyInvalidScopesSkipped +=
+          result.hierarchyEscalation
+            .invalidScopesSkipped;
+
+        summary.hierarchyProjectOwnerRecipientsSkipped +=
+          result.hierarchyEscalation
+            .projectOwnerRecipientsSkipped;
 
         if (!alert.shouldNotify) {
           summary.projectsWithoutAlert += 1;
