@@ -3,6 +3,10 @@ import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { config } from './config.js';
+import {
+  ApiRateLimiterV1g20,
+  isApiRateLimitExemptPathV1g20,
+} from './api-rate-limit-v1g20.js';
 import { registerRequestContext } from './auth.js';
 import {
   createConfiguredDocumentBinaryStoreV1,
@@ -104,7 +108,33 @@ const meetingSchedulingV2Path = /^\/api\/v1\/meetings-v2\/schedule(?:\?|$)/;
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const documentBinaryStore = options.documentBinaryStore ?? createConfiguredDocumentBinaryStoreV1();
   const integrationBinaryStore = options.integrationBinaryStore ?? createConfiguredIntegrationBinaryStoreV1();
+
+  const apiRateLimiter =
+    config.API_RATE_LIMIT_ENABLED
+      ? new ApiRateLimiterV1g20({
+          limit:
+            config.API_RATE_LIMIT_MAX_REQUESTS,
+
+          windowMs:
+            config.API_RATE_LIMIT_WINDOW_SECONDS *
+            1000,
+
+          maxKeys:
+            config.API_RATE_LIMIT_MAX_KEYS,
+        })
+      : null;
+
   const app = Fastify({
+    trustProxy:
+      config.API_TRUST_PROXY_HOPS > 0
+        ? (
+            _address: string,
+            hop: number,
+          ) =>
+            hop <
+            config.API_TRUST_PROXY_HOPS
+        : false,
+
     logger: {
       level: config.LOG_LEVEL,
       redact: {
@@ -143,6 +173,73 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     'application/octet-stream',
     { parseAs: 'buffer', bodyLimit: Math.max(config.DOCUMENT_MAX_FILE_BYTES, config.INTEGRATION_MAX_FILE_BYTES) },
     (_request, body, done) => done(null, body),
+  );
+
+  app.addHook(
+    'onRequest',
+    async (
+      request,
+      reply,
+    ) => {
+      if (
+        apiRateLimiter &&
+        !isApiRateLimitExemptPathV1g20(
+          request.raw.url ??
+          request.url,
+        )
+      ) {
+        const decision =
+          apiRateLimiter.consume(
+            request.ip,
+          );
+
+        reply.header(
+          'x-ratelimit-limit',
+          String(
+            decision.limit,
+          ),
+        );
+
+        reply.header(
+          'x-ratelimit-remaining',
+          String(
+            decision.remaining,
+          ),
+        );
+
+        reply.header(
+          'x-ratelimit-reset',
+          String(
+            Math.ceil(
+              decision.resetAtMs /
+              1000,
+            ),
+          ),
+        );
+
+        if (!decision.allowed) {
+          reply.header(
+            'retry-after',
+            String(
+              decision.retryAfterSeconds,
+            ),
+          );
+
+          return reply
+            .code(429)
+            .send({
+              error:
+                'rate_limit_exceeded',
+
+              message:
+                'Too many requests. Retry later.',
+
+              correlationId:
+                request.id,
+            });
+        }
+      }
+    },
   );
 
   app.addHook('onRequest', async (request, reply) => {

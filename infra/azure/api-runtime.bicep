@@ -107,6 +107,11 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
             { name: 'ENTRA_API_CLIENT_ID', value: entraApiClientId }
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }
             { name: 'ENTRA_REQUIRED_SCOPE', value: 'access_as_user' }
+            { name: 'API_RATE_LIMIT_ENABLED', value: 'true' }
+            { name: 'API_RATE_LIMIT_MAX_REQUESTS', value: environment == 'prod' ? '300' : '600' }
+            { name: 'API_RATE_LIMIT_WINDOW_SECONDS', value: '60' }
+            { name: 'API_RATE_LIMIT_MAX_KEYS', value: '20000' }
+            { name: 'API_TRUST_PROXY_HOPS', value: '1' }
             { name: 'PROJECT_RISK_MONITOR_EXPECTED', value: string(deployProjectRiskMonitorJob) }
             { name: 'PROJECT_RISK_MONITOR_STALE_MINUTES', value: string(projectRiskMonitorStaleMinutes) }
             { name: 'NOTIFICATION_WORKER_AVAILABLE', value: string(deployNotificationWorker) }

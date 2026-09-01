@@ -41,7 +41,9 @@
     "test:risk:g16": "tsx apps/api/test/project-risk-case-automation-v1g16-smoke.ts",
     "test:risk:g17": "tsx apps/api/test/project-risk-hierarchy-escalation-v1g17-smoke.ts",
     "test:risk:g18": "tsx apps/api/test/project-risk-monitor-reliability-v1g18-smoke.ts",
-    "test:risk:g19": "tsx apps/api/test/project-risk-monitor-watchdog-v1g19-smoke.ts"
+    "test:risk:g19": "tsx apps/api/test/project-risk-monitor-watchdog-v1g19-smoke.ts",
+    "test:security:g20": "tsx apps/api/test/api-rate-limit-v1g20-smoke.ts",
+    "test:backend:g20": "tsx apps/api/test/backend-production-gate-v1g20-smoke.ts"
   },
   "dependencies": {
     "lucide-react": "^0.546.0",
