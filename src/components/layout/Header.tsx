@@ -8,12 +8,19 @@ import {
   Command,
   Plus,
   Search,
+  Menu,
   ShieldCheck,
 } from 'lucide-react';
 import { ApiStatusBadge } from '../system/ApiStatusBadge';
 import { useNexus } from '../../context/NexusContext';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  onOpenNavigation: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({
+  onOpenNavigation,
+}) => {
   const {
     tenant,
     workspaces,
@@ -63,7 +70,39 @@ export const Header: React.FC = () => {
 
   return (
     <header className="relative z-30 flex h-[68px] flex-none items-center justify-between border-b border-slate-200 bg-white px-5 lg:px-6">
-      <div className="flex min-w-0 items-center gap-4">
+      <div className="flex min-w-0 items-center gap-3 lg:gap-4">
+        <button
+          type="button"
+          onClick={onOpenNavigation}
+          className="
+            grid
+            h-10
+            w-10
+            flex-none
+            place-items-center
+            rounded-xl
+            border
+            border-slate-200
+            bg-white
+            text-slate-600
+            transition
+            hover:bg-slate-50
+            hover:text-slate-950
+            focus-visible:outline-none
+            focus-visible:ring-2
+            focus-visible:ring-green-600
+            focus-visible:ring-offset-2
+            lg:hidden
+          "
+          aria-label="Abrir navegación"
+          aria-controls="bridata-primary-navigation"
+        >
+          <Menu
+            className="h-4 w-4"
+            aria-hidden="true"
+          />
+        </button>
+
         <div className="hidden min-w-0 items-center gap-1.5 text-[10px] font-semibold text-slate-400 md:flex">
           <span className="max-w-[130px] truncate">{tenant.name}</span>
           <ChevronRight className="h-3 w-3 flex-none" />

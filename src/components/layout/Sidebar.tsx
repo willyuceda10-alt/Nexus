@@ -20,6 +20,7 @@ import {
   UsersRound,
   Warehouse,
   Workflow,
+  X,
 } from 'lucide-react';
 import { BRAND } from '../../config/brand';
 import { useNexus } from '../../context/NexusContext';
@@ -32,7 +33,15 @@ interface NavigationItem {
   badge?: number;
 }
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+  mobileOpen: boolean;
+  onNavigate: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  mobileOpen,
+  onNavigate,
+}) => {
   const {
     activeTab,
     setActiveTab,
@@ -50,6 +59,11 @@ export const Sidebar: React.FC = () => {
   const projects = scopedObjects.filter((object) => object.type === 'PROJECT');
   const activeProjects = projects.filter((project) => !['COMPLETED', 'CANCELLED'].includes(project.status));
   const personalWorkCount = scopedObjects.filter((object) => isOpenPersonalWork(object, currentUser.id)).length;
+
+  const navigateTo = (tab: string) => {
+    setActiveTab(tab);
+    onNavigate();
+  };
 
   const overviewItems: NavigationItem[] = [
     { id: 'home', label: 'Centro de mando', icon: Gauge },
@@ -92,7 +106,7 @@ export const Sidebar: React.FC = () => {
         return (
           <button
             key={item.id}
-            onClick={() => setActiveTab(item.id)}
+            onClick={() => navigateTo(item.id)}
             className={`group flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-[12px] transition ${
               isActive
                 ? 'bg-green-50 font-bold text-green-900 ring-1 ring-green-100'
@@ -113,7 +127,72 @@ export const Sidebar: React.FC = () => {
   );
 
   return (
-    <aside className="flex h-full w-[268px] flex-none flex-col border-r border-slate-200 bg-white">
+    <aside
+      id="bridata-primary-navigation"
+      aria-label="Navegación principal"
+      className={`
+        fixed
+        inset-y-0
+        left-0
+        z-50
+        flex
+        h-full
+        w-[min(86vw,288px)]
+        flex-none
+        flex-col
+        border-r
+        border-slate-200
+        bg-white
+        shadow-[0_24px_70px_rgba(15,23,42,0.18)]
+        transition-transform
+        duration-200
+        ease-out
+        lg:static
+        lg:z-auto
+        lg:w-[268px]
+        lg:translate-x-0
+        lg:shadow-none
+        ${
+          mobileOpen
+            ? 'translate-x-0'
+            : '-translate-x-full'
+        }
+      `}
+    >
+      <button
+        type="button"
+        onClick={onNavigate}
+        className="
+          absolute
+          right-3
+          top-3
+          z-10
+          grid
+          h-10
+          w-10
+          place-items-center
+          rounded-xl
+          border
+          border-slate-200
+          bg-white
+          text-slate-500
+          shadow-sm
+          transition
+          hover:bg-slate-50
+          hover:text-slate-900
+          focus-visible:outline-none
+          focus-visible:ring-2
+          focus-visible:ring-green-600
+          focus-visible:ring-offset-2
+          lg:hidden
+        "
+        aria-label="Cerrar navegación"
+      >
+        <X
+          className="h-4 w-4"
+          aria-hidden="true"
+        />
+      </button>
       <div className="border-b border-slate-100 px-4 py-4">
         <div className="flex items-center gap-3 px-1">
           <div className="grid h-10 w-10 flex-none place-items-center rounded-[14px] bg-green-700 shadow-[0_8px_20px_rgba(21,128,61,0.22)]">
@@ -177,6 +256,7 @@ export const Sidebar: React.FC = () => {
                     setSelectedProjectId(project.id);
                     setProjectActiveSubTab('summary');
                     setActiveTab('project');
+                    onNavigate();
                   }}
                   className={`group w-full rounded-xl px-3 py-2.5 text-left transition ${selected ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
                 >
@@ -199,7 +279,7 @@ export const Sidebar: React.FC = () => {
 
       <div className="border-t border-slate-100 p-3">
         <button
-          onClick={() => setActiveTab('settings')}
+          onClick={() => navigateTo('settings')}
           className={`mb-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[11px] font-semibold transition ${activeTab === 'settings' ? 'bg-green-50 text-green-800' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
         >
           <Settings2 className="h-4 w-4" /> Configuración
