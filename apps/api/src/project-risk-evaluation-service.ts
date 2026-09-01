@@ -15,6 +15,16 @@ import {
 } from './domain/project-risk-alert-v1g8.js';
 
 import {
+  projectRiskAssessmentPayloadSchemaV1,
+} from './domain/project-risk-assessment-event-v1.js';
+
+import {
+  automaticRiskNotificationIdempotencyKeyV1g13,
+  buildProjectRiskAutomaticNotificationPolicyV1g13,
+  projectRiskAutomaticNotificationDetailsSchemaV1g13,
+} from './domain/project-risk-notification-policy-v1g13.js';
+
+import {
   buildProjectRiskForecastV1g7,
 } from './domain/project-risk-forecast-v1g7.js';
 
@@ -709,5 +719,378 @@ export async function evaluateProjectRiskAlert(
     alert,
     assessment,
     notification,
+  };
+}
+
+type PreviousRiskAssessmentRowV1g13 = {
+  id: string;
+  payload: Prisma.JsonValue;
+  createdAt: Date;
+};
+
+async function
+loadPreviousRiskAssessmentV1g13(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  projectId: string,
+) {
+  const rows =
+    await tx.domainEvent.findMany({
+      where: {
+        tenantId,
+        aggregateId:
+          projectId,
+
+        eventType:
+          'bridata.project.risk.assessed',
+      },
+
+      orderBy: [
+        {
+          createdAt:
+            'desc',
+        },
+        {
+          id:
+            'desc',
+        },
+      ],
+
+      take: 50,
+
+      select: {
+        id: true,
+        payload: true,
+        createdAt: true,
+      },
+    });
+
+  for (const row of rows) {
+    const parsed =
+      projectRiskAssessmentPayloadSchemaV1
+        .safeParse(
+          row.payload,
+        );
+
+    if (
+      !parsed.success ||
+      parsed.data.projectId !==
+        projectId
+    ) {
+      continue;
+    }
+
+    return {
+      id:
+        row.id,
+
+      riskLevel:
+        parsed.data.riskLevel,
+
+      drivers:
+        parsed.data.drivers,
+
+      observedAt:
+        row.createdAt,
+    };
+  }
+
+  return null;
+}
+
+async function
+loadLastAutomaticRiskNotificationV1g13(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  projectId: string,
+  targetUserId: string,
+) {
+  const rows =
+    await tx.auditLog.findMany({
+      where: {
+        tenantId,
+
+        resource:
+          'PROJECT',
+
+        resourceId:
+          projectId,
+
+        action:
+          'PROJECT_RISK_AUTO_NOTIFICATION_V1G13',
+      },
+
+      orderBy: [
+        {
+          createdAt:
+            'desc',
+        },
+        {
+          id:
+            'desc',
+        },
+      ],
+
+      take: 50,
+
+      select: {
+        id: true,
+        details: true,
+        createdAt: true,
+      },
+    });
+
+  for (const row of rows) {
+    const parsed =
+      projectRiskAutomaticNotificationDetailsSchemaV1g13
+        .safeParse(
+          row.details,
+        );
+
+    if (
+      !parsed.success ||
+      parsed.data.targetUserId !==
+        targetUserId
+    ) {
+      continue;
+    }
+
+    return {
+      id:
+        row.id,
+
+      riskLevel:
+        parsed.data.riskLevel,
+
+      drivers:
+        parsed.data.drivers,
+
+      fingerprint:
+        parsed.data.fingerprint,
+
+      notifiedAt:
+        row.createdAt,
+    };
+  }
+
+  return null;
+}
+
+export async function
+evaluateProjectRiskAlertAutomaticV1g13(
+  tx: Prisma.TransactionClient,
+
+  input: {
+    tenantId: string;
+
+    project: {
+      id: string;
+      title: string;
+      workspaceId: string;
+      metadata:
+        Prisma.JsonValue |
+        null;
+    };
+
+    targetUserId: string;
+
+    now?: Date;
+  },
+) {
+  const current =
+    await calculateCurrentRisk(
+      tx,
+      input.tenantId,
+      input.project,
+    );
+
+  const alert =
+    buildProjectRiskAlertV1g8({
+      tenantId:
+        input.tenantId,
+
+      projectId:
+        input.project.id,
+
+      projectTitle:
+        input.project.title,
+
+      workspaceId:
+        input.project.workspaceId,
+
+      targetUserId:
+        input.targetUserId,
+
+      risk:
+        current.risk,
+    });
+
+  const [
+    previousAssessment,
+    lastNotification,
+  ] =
+    await Promise.all([
+      loadPreviousRiskAssessmentV1g13(
+        tx,
+        input.tenantId,
+        input.project.id,
+      ),
+
+      loadLastAutomaticRiskNotificationV1g13(
+        tx,
+        input.tenantId,
+        input.project.id,
+        input.targetUserId,
+      ),
+    ]);
+
+  const policy =
+    buildProjectRiskAutomaticNotificationPolicyV1g13({
+      current: {
+        riskLevel:
+          current.risk.riskLevel,
+
+        drivers:
+          current.risk.drivers,
+
+        fingerprint:
+          alert.fingerprint,
+      },
+
+      previousAssessment,
+      lastNotification,
+
+      ...(input.now
+        ? {
+            now:
+              input.now,
+          }
+        : {}),
+    });
+
+  const assessment =
+    await persistDomainEvent(
+      tx,
+      {
+        tenantId:
+          input.tenantId,
+
+        aggregateId:
+          alert.assessmentEvent
+            .aggregateId,
+
+        eventType:
+          alert.assessmentEvent
+            .eventType,
+
+        payload:
+          alert.assessmentEvent
+            .payload,
+
+        idempotencyKey:
+          alert.assessmentEvent
+            .idempotencyKey,
+      },
+    );
+
+  let notification:
+    | PersistedEvent
+    | null = null;
+
+  if (
+    alert.notificationEvent &&
+    policy.shouldNotify
+  ) {
+    const notificationKey =
+      automaticRiskNotificationIdempotencyKeyV1g13({
+        baseKey:
+          alert.notificationEvent
+            .idempotencyKey,
+
+        decision:
+          policy,
+      });
+
+    notification =
+      await persistDomainEvent(
+        tx,
+        {
+          tenantId:
+            input.tenantId,
+
+          aggregateId:
+            alert.notificationEvent
+              .aggregateId,
+
+          eventType:
+            alert.notificationEvent
+              .eventType,
+
+          payload:
+            alert.notificationEvent
+              .payload,
+
+          idempotencyKey:
+            notificationKey,
+        },
+      );
+
+    await tx.auditLog.create({
+      data: {
+        tenantId:
+          input.tenantId,
+
+        userId:
+          null,
+
+        action:
+          'PROJECT_RISK_AUTO_NOTIFICATION_V1G13',
+
+        resource:
+          'PROJECT',
+
+        resourceId:
+          input.project.id,
+
+        details: {
+          version:
+            'v1g13',
+
+          targetUserId:
+            input.targetUserId,
+
+          riskLevel:
+            current.risk
+              .riskLevel,
+
+          drivers:
+            current.risk
+              .drivers,
+
+          fingerprint:
+            alert.fingerprint,
+
+          reason:
+            policy.reason,
+
+          cooldownHours:
+            policy.cooldownHours,
+
+          notificationEventId:
+            notification.id,
+
+          notificationCreated:
+            notification.created,
+        },
+      },
+    });
+  }
+
+  return {
+    current,
+    alert,
+    assessment,
+    notification,
+    policy,
   };
 }

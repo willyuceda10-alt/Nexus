@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from './db.js';
 
 import {
-  evaluateProjectRiskAlert,
+  evaluateProjectRiskAlertAutomaticV1g13,
 } from './project-risk-evaluation-service.js';
 
 import { withTenant } from './tenant-transaction.js';
@@ -28,6 +28,11 @@ export type ProjectRiskMonitorV1g9Summary = {
 
   alertsQueued: number;
   alertsDeduplicated: number;
+
+  alertsSuppressedByPolicy: number;
+
+  notificationPolicyVersion:
+    'v1g13';
 
   projectsWithoutAlert: number;
   terminalProjectsSkipped: number;
@@ -238,7 +243,7 @@ async function evaluateProjectV1g9(
       }
 
       const evaluation =
-        await evaluateProjectRiskAlert(
+        await evaluateProjectRiskAlertAutomaticV1g13(
           tx,
           {
             tenantId,
@@ -300,6 +305,24 @@ async function evaluateProjectV1g9(
                 evaluation.notification
                   ?.created ?? false,
 
+              notificationPolicyVersion:
+                'v1g13',
+
+              notificationPolicyReason:
+                evaluation.policy.reason,
+
+              notificationPolicyShouldNotify:
+                evaluation.policy
+                  .shouldNotify,
+
+              notificationPolicyCooldownHours:
+                evaluation.policy
+                  .cooldownHours,
+
+              notificationPolicyCooldownRemainingMinutes:
+                evaluation.policy
+                  .cooldownRemainingMinutes,
+
               mode:
                 'AUTOMATIC_MONITOR',
             },
@@ -347,6 +370,12 @@ export async function runProjectRiskMonitorV1g9(
 
       alertsQueued: 0,
       alertsDeduplicated: 0,
+
+      alertsSuppressedByPolicy:
+        0,
+
+      notificationPolicyVersion:
+        'v1g13',
 
       projectsWithoutAlert: 0,
       terminalProjectsSkipped: 0,
@@ -413,10 +442,24 @@ export async function runProjectRiskMonitorV1g9(
         const {
           alert,
           notification,
+          policy,
         } = result.evaluation;
 
         if (!alert.shouldNotify) {
           summary.projectsWithoutAlert += 1;
+          continue;
+        }
+
+        if (!policy.shouldNotify) {
+          summary.alertsSuppressedByPolicy +=
+            1;
+
+          // Preserve the historical G9
+          // deduplication counter for
+          // backwards-compatible metrics.
+          summary.alertsDeduplicated +=
+            1;
+
           continue;
         }
 

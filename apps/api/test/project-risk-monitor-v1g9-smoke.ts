@@ -669,6 +669,7 @@ async function main() {
             in: [
               'PROJECT_RISK_ALERT_EVALUATED',
               'PROJECT_RISK_MONITOR_EVALUATED_V1G9',
+              'PROJECT_RISK_AUTO_NOTIFICATION_V1G13',
             ],
           },
         },

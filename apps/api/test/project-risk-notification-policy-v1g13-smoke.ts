@@ -366,60 +366,6 @@ async function main() {
     assert(risk.hasScheduleRisk === true, 'G7 must detect schedule risk');
     assert(risk.requiresAttention === true, 'G7 must require attention');
 
-    await withTenant(
-      tenantId,
-      async (tx) => {
-        await tx.domainEvent.create({
-          data: {
-            tenantId,
-            aggregateId: projectId,
-
-            eventType:
-              'bridata.project.risk.assessed',
-
-            idempotencyKey:
-              `g10-watch-history:${projectId}`,
-
-            createdAt:
-              new Date(
-                Date.now() -
-                  (60 * 60 * 1000),
-              ),
-
-            payload: {
-              version: 'v1g8',
-              projectId,
-              workspaceId,
-
-              riskLevel: 'WATCH',
-
-              drivers: [
-                'COST_OVERRUN',
-              ],
-
-              financialHealth:
-                'WATCH',
-
-              scheduleHealth:
-                'ON_TRACK',
-
-              forecastVariancePercent:
-                2,
-
-              forecastVarianceDays:
-                0,
-
-              requiresAttention:
-                true,
-
-              fingerprint:
-                `g10-watch-${projectId}`,
-            },
-          },
-        });
-      },
-    );
-
     const firstRun =
       await runProjectRiskMonitorV1g9({
         projectIds: [projectId],
@@ -448,62 +394,6 @@ async function main() {
     assert(
       firstRun.failedProjects === 0,
       `G9 first run failures: ${JSON.stringify(firstRun.failures)}`,
-    );
-
-    const historyResponse =
-      await app.inject({
-        method: 'GET',
-
-        url:
-          `/api/v1/projects/${projectId}/risk-history-v1g10?limit=20`,
-      });
-
-    assert(
-      historyResponse.statusCode === 200,
-      `G10 history failed: ${historyResponse.statusCode} ${historyResponse.body}`,
-    );
-
-    const history =
-      historyResponse.json();
-
-    assert(
-      history.version === 'v1g10',
-      'Unexpected G10 version',
-    );
-
-    assert(
-      history.currentRisk ===
-        'CRITICAL',
-      `Expected G10 current CRITICAL, got ${history.currentRisk}`,
-    );
-
-    assert(
-      history.previousRisk ===
-        'WATCH',
-      `Expected G10 previous WATCH, got ${history.previousRisk}`,
-    );
-
-    assert(
-      history.trend.current ===
-        'WORSENING',
-      `Expected G10 WORSENING, got ${history.trend.current}`,
-    );
-
-    assert(
-      history.maxRiskEver ===
-        'CRITICAL',
-      `Expected G10 max CRITICAL, got ${history.maxRiskEver}`,
-    );
-
-    assert(
-      history.observationCount >= 2,
-      `Expected at least 2 G10 observations, got ${history.observationCount}`,
-    );
-
-    assert(
-      history.trend.worsenedTransitions >=
-        1,
-      'Expected at least one worsening transition',
     );
 
     const notificationEvent =
@@ -644,6 +534,22 @@ async function main() {
       'G9 Inbox must start unread',
     );
 
+    await withTenant(
+      tenantId,
+      async (tx) => {
+        await tx.$executeRaw(
+          Prisma.sql`
+            UPDATE project_actual_costs
+            SET amount = 101
+            WHERE tenant_id =
+              ${tenantId}::uuid
+              AND id =
+                ${actualId}::uuid
+          `,
+        );
+      },
+    );
+
     const secondRun =
       await runProjectRiskMonitorV1g9({
         projectIds: [projectId],
@@ -662,6 +568,106 @@ async function main() {
     assert(
       secondRun.failedProjects === 0,
       `G9 second run failures: ${JSON.stringify(secondRun.failures)}`,
+    );
+
+    assert(
+      secondRun.alertsSuppressedByPolicy ===
+        1,
+
+      `Expected G13 cooldown suppression=1, got ${secondRun.alertsSuppressedByPolicy}`,
+    );
+
+    const firstPolicyMarker =
+      await withTenant(
+        tenantId,
+        async (tx) =>
+          tx.auditLog.findFirst({
+            where: {
+              tenantId,
+
+              resource:
+                'PROJECT',
+
+              resourceId:
+                projectId,
+
+              action:
+                'PROJECT_RISK_AUTO_NOTIFICATION_V1G13',
+            },
+
+            orderBy: {
+              createdAt:
+                'desc',
+            },
+
+            select: {
+              id: true,
+              createdAt: true,
+            },
+          }),
+      );
+
+    assert(
+      firstPolicyMarker,
+      'G13 automatic notification marker missing',
+    );
+
+    await withTenant(
+      tenantId,
+      async (tx) => {
+        await tx.auditLog.update({
+          where: {
+            id:
+              firstPolicyMarker.id,
+          },
+
+          data: {
+            createdAt:
+              new Date(
+                Date.now() -
+                  (
+                    7 *
+                    60 *
+                    60 *
+                    1000
+                  ),
+              ),
+          },
+        });
+
+        await tx.$executeRaw(
+          Prisma.sql`
+            UPDATE project_actual_costs
+            SET amount = 102
+            WHERE tenant_id =
+              ${tenantId}::uuid
+              AND id =
+                ${actualId}::uuid
+          `,
+        );
+      },
+    );
+
+    const thirdRun =
+      await runProjectRiskMonitorV1g9({
+        projectIds: [projectId],
+      });
+
+    assert(
+      thirdRun.alertsQueued === 1,
+      `Expected G13 cooldown reminder queued=1, got ${thirdRun.alertsQueued}`,
+    );
+
+    assert(
+      thirdRun.alertsSuppressedByPolicy ===
+        0,
+
+      `Expected no G13 suppression after cooldown, got ${thirdRun.alertsSuppressedByPolicy}`,
+    );
+
+    assert(
+      thirdRun.failedProjects === 0,
+      `G13 third run failures: ${JSON.stringify(thirdRun.failures)}`,
     );
 
     await projectPlatformEventV1({
@@ -713,10 +719,10 @@ async function main() {
     );
 
     console.log(JSON.stringify({
-      projectRiskHistoryV1g10: 'PASS',
-      riskTrendV1g10: history.trend.current,
-      riskObservationCountV1g10: history.observationCount,
-      maxRiskEverV1g10: history.maxRiskEver,
+      projectRiskNotificationPolicyV1g13: 'PASS',
+      notificationPolicyVersion: firstRun.notificationPolicyVersion,
+      cooldownSuppressed: secondRun.alertsSuppressedByPolicy === 1,
+      cooldownReminderQueued: thirdRun.alertsQueued === 1,
       projectRiskMonitorV1g9: 'PASS',
       projectRiskAlertV1g8: 'PASS',
       projectRiskForecastV1g7: 'PASS',
