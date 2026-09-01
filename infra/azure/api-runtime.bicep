@@ -33,6 +33,11 @@ param deployProjectRiskMonitorJob bool = false
 @description('UTC cron expression used by Project Risk Monitor V1G9.')
 param projectRiskMonitorCron string = '*/15 * * * *'
 
+@minValue(15)
+@maxValue(1440)
+@description('Maximum accepted age in minutes of the last Project Risk Monitor completion.')
+param projectRiskMonitorStaleMinutes int = 45
+
 param serviceBusNamespaceFqdn string = ''
 param serviceBusTopicName string = 'bridata-domain-events'
 param serviceBusAutomationSubscriptionName string = 'automation-v1'
@@ -102,6 +107,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
             { name: 'ENTRA_API_CLIENT_ID', value: entraApiClientId }
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }
             { name: 'ENTRA_REQUIRED_SCOPE', value: 'access_as_user' }
+            { name: 'PROJECT_RISK_MONITOR_EXPECTED', value: string(deployProjectRiskMonitorJob) }
+            { name: 'PROJECT_RISK_MONITOR_STALE_MINUTES', value: string(projectRiskMonitorStaleMinutes) }
             { name: 'NOTIFICATION_WORKER_AVAILABLE', value: string(deployNotificationWorker) }
             { name: 'M365_GRAPH_DELIVERY_ENABLED', value: string(m365GraphDeliveryEnabled) }
             { name: 'M365_AVAILABILITY_ENABLED', value: string(m365AvailabilityEnabled) }

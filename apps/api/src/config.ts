@@ -29,6 +29,8 @@ const envSchema = z
     DEV_AUTH_ENABLED: booleanFromEnv.default('false'),
     DEV_USER_ID: z.string().uuid().optional(),
     DEV_TENANT_ID: z.string().uuid().optional(),
+    PROJECT_RISK_MONITOR_EXPECTED: booleanFromEnv.default('false'),
+    PROJECT_RISK_MONITOR_STALE_MINUTES: z.coerce.number().int().min(15).max(1440).default(45),
     OUTBOX_WORKER_ENABLED: booleanFromEnv.default('false'),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(50),
     OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(50).default(8),

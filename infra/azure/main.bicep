@@ -63,6 +63,11 @@ param deployProjectRiskMonitorJob bool = false
 @description('UTC cron expression for Project Risk Monitor V1G9. Default: every 15 minutes.')
 param projectRiskMonitorCron string = '*/15 * * * *'
 
+@minValue(15)
+@maxValue(1440)
+@description('Maximum accepted age in minutes of the last Project Risk Monitor completion.')
+param projectRiskMonitorStaleMinutes int = 45
+
 @description('Service Bus topic that receives versioned Bridata domain event envelopes.')
 param domainEventsTopicName string = 'bridata-domain-events'
 
@@ -484,6 +489,7 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     deployNotificationWorker: deployNotificationWorker && deployAsyncMessaging
     deployProjectRiskMonitorJob: deployProjectRiskMonitorJob
     projectRiskMonitorCron: projectRiskMonitorCron
+    projectRiskMonitorStaleMinutes: projectRiskMonitorStaleMinutes
     serviceBusNamespaceFqdn: asyncMessaging.?outputs.namespaceFqdn ?? ''
     serviceBusTopicName: domainEventsTopicName
     serviceBusAutomationSubscriptionName: automationSubscriptionName
