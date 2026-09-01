@@ -14,6 +14,10 @@ import {
 } from '../authorization.js';
 
 import {
+  projectRiskHistoryPointFromAssessmentEventV1,
+} from '../domain/project-risk-assessment-event-v1.js';
+
+import {
   buildProjectRiskHistoryV1g10,
   type ProjectRiskHistoryPointV1g10,
 } from '../domain/project-risk-history-v1g10.js';
@@ -40,59 +44,6 @@ const querySchema = z.object({
       .max(100)
       .default(50),
 });
-
-const payloadSchema = z.object({
-  projectId:
-    z.string().uuid(),
-
-  riskLevel:
-    z.enum([
-      'INSUFFICIENT_DATA',
-      'ON_TRACK',
-      'WATCH',
-      'HIGH',
-      'CRITICAL',
-    ]),
-
-  drivers:
-    z.array(
-      z.enum([
-        'COST_OVERRUN',
-        'SCHEDULE_DELAY',
-        'LOW_SCHEDULE_CONFIDENCE',
-        'NO_CONTROL_BUDGET',
-      ]),
-    ),
-
-  financialHealth:
-    z.enum([
-      'NO_BUDGET',
-      'ON_TRACK',
-      'WATCH',
-      'HIGH',
-      'CRITICAL',
-    ]),
-
-  scheduleHealth:
-    z.enum([
-      'ON_TRACK',
-      'WATCH',
-      'HIGH',
-      'CRITICAL',
-    ]).nullable(),
-
-  forecastVariancePercent:
-    z.number().nullable(),
-
-  forecastVarianceDays:
-    z.number().nullable(),
-
-  requiresAttention:
-    z.boolean(),
-
-  fingerprint:
-    z.string().min(1),
-}).passthrough();
 
 export async function
 projectRiskHistoryV1g10Routes(
@@ -208,64 +159,20 @@ projectRiskHistoryV1g10Routes(
               const event
               of events
             ) {
-              const parsed =
-                payloadSchema
-                  .safeParse(
-                    event.payload,
-                  );
+              const point =
+                projectRiskHistoryPointFromAssessmentEventV1(
+                  event,
+                  project.id,
+                );
 
-              if (
-                !parsed.success ||
-                parsed.data
-                  .projectId !==
-                  project.id
-              ) {
+              if (!point) {
                 invalidEventsSkipped +=
                   1;
 
                 continue;
               }
 
-              points.push({
-                id:
-                  event.id,
-
-                observedAt:
-                  event.createdAt
-                    .toISOString(),
-
-                riskLevel:
-                  parsed.data
-                    .riskLevel,
-
-                drivers:
-                  parsed.data
-                    .drivers,
-
-                financialHealth:
-                  parsed.data
-                    .financialHealth,
-
-                scheduleHealth:
-                  parsed.data
-                    .scheduleHealth,
-
-                forecastVariancePercent:
-                  parsed.data
-                    .forecastVariancePercent,
-
-                forecastVarianceDays:
-                  parsed.data
-                    .forecastVarianceDays,
-
-                requiresAttention:
-                  parsed.data
-                    .requiresAttention,
-
-                fingerprint:
-                  parsed.data
-                    .fingerprint,
-              });
+              points.push(point);
             }
 
             return {

@@ -32,7 +32,8 @@
     "test:risk:g7": "tsx apps/api/test/project-risk-forecast-v1g7-smoke.ts",
     "test:risk:g8": "tsx apps/api/test/project-risk-alert-v1g8-smoke.ts",
     "test:risk:g9": "tsx apps/api/test/project-risk-monitor-v1g9-smoke.ts",
-    "test:risk:g10": "tsx apps/api/test/project-risk-history-v1g10-smoke.ts"
+    "test:risk:g10": "tsx apps/api/test/project-risk-history-v1g10-smoke.ts",
+    "test:risk:g11": "tsx apps/api/test/hierarchy-risk-overview-v1g11-smoke.ts"
   },
   "dependencies": {
     "lucide-react": "^0.546.0",
