@@ -29,7 +29,8 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed:dev": "tsx prisma/seed.ts && tsx prisma/seed-resource-capacity.ts && tsx prisma/seed-materials.ts",
-    "test:risk:g7": "tsx apps/api/test/project-risk-forecast-v1g7-smoke.ts"
+    "test:risk:g7": "tsx apps/api/test/project-risk-forecast-v1g7-smoke.ts",
+    "test:risk:g8": "tsx apps/api/test/project-risk-alert-v1g8-smoke.ts"
   },
   "dependencies": {
     "lucide-react": "^0.546.0",
