@@ -57,6 +57,12 @@ param deployAutomationWorker bool = false
 @description('Creates the standalone Microsoft 365 notification worker. Requires deployApiRuntime and deployAsyncMessaging.')
 param deployNotificationWorker bool = false
 
+@description('Creates the scheduled Project Risk Monitor V1G9 job. Requires deployApiRuntime.')
+param deployProjectRiskMonitorJob bool = false
+
+@description('UTC cron expression for Project Risk Monitor V1G9. Default: every 15 minutes.')
+param projectRiskMonitorCron string = '*/15 * * * *'
+
 @description('Service Bus topic that receives versioned Bridata domain event envelopes.')
 param domainEventsTopicName string = 'bridata-domain-events'
 
@@ -476,6 +482,8 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     deployOutboxWorker: deployOutboxWorker && deployAsyncMessaging
     deployAutomationWorker: deployAutomationWorker && deployAsyncMessaging
     deployNotificationWorker: deployNotificationWorker && deployAsyncMessaging
+    deployProjectRiskMonitorJob: deployProjectRiskMonitorJob
+    projectRiskMonitorCron: projectRiskMonitorCron
     serviceBusNamespaceFqdn: asyncMessaging.?outputs.namespaceFqdn ?? ''
     serviceBusTopicName: domainEventsTopicName
     serviceBusAutomationSubscriptionName: automationSubscriptionName
@@ -534,3 +542,5 @@ output apiRuntimeDeployed bool = deployApiRuntime
 output outboxWorkerDeployed bool = deployApiRuntime && deployOutboxWorker && deployAsyncMessaging
 output automationWorkerDeployed bool = deployApiRuntime && deployAutomationWorker && deployAsyncMessaging
 output notificationWorkerDeployed bool = deployApiRuntime && deployNotificationWorker && deployAsyncMessaging
+output projectRiskMonitorJobDeployed bool = deployApiRuntime && deployProjectRiskMonitorJob
+output projectRiskMonitorJobName string = apiRuntime.?outputs.projectRiskMonitorJobName ?? ''

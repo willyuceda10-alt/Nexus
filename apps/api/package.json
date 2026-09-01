@@ -17,7 +17,9 @@
     "start:automation": "node dist/automation-worker.js",
     "start:notifications": "node dist/notification-worker.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev:risk-monitor": "tsx src/project-risk-monitor-job-v1g9.ts",
+    "start:risk-monitor": "node dist/project-risk-monitor-job-v1g9.js"
   },
   "dependencies": {
     "@azure/identity": "^4.0.0",

@@ -26,6 +26,13 @@ param deployMigrationJob bool = true
 param deployOutboxWorker bool = false
 param deployAutomationWorker bool = false
 param deployNotificationWorker bool = false
+
+@description('Creates the scheduled Bridata Project Risk Monitor V1G9 job.')
+param deployProjectRiskMonitorJob bool = false
+
+@description('UTC cron expression used by Project Risk Monitor V1G9.')
+param projectRiskMonitorCron string = '*/15 * * * *'
+
 param serviceBusNamespaceFqdn string = ''
 param serviceBusTopicName string = 'bridata-domain-events'
 param serviceBusAutomationSubscriptionName string = 'automation-v1'
@@ -282,6 +289,92 @@ resource notificationWorker 'Microsoft.App/containerApps@2024-03-01' = if (deplo
   }
 }
 
+
+resource projectRiskMonitorJob 'Microsoft.App/jobs@2024-03-01' = if (deployProjectRiskMonitorJob) {
+  name: '${baseName}-risk-monitor'
+  location: location
+  tags: tags
+
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${automationIdentityResourceId}': {}
+    }
+  }
+
+  properties: {
+    environmentId: managedEnvironmentId
+
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 900
+      replicaRetryLimit: 1
+
+      scheduleTriggerConfig: {
+        cronExpression: projectRiskMonitorCron
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+
+      registries: [
+        {
+          server: registryServer
+          identity: automationIdentityResourceId
+        }
+      ]
+
+      secrets: [
+        {
+          name: 'runtime-database-url'
+          keyVaultUrl: runtimeDatabaseSecretUri
+          identity: automationIdentityResourceId
+        }
+      ]
+    }
+
+    template: {
+      containers: [
+        {
+          name: 'risk-monitor'
+          image: apiImage
+
+          command: [
+            'node'
+          ]
+
+          args: [
+            'apps/api/dist/project-risk-monitor-job-v1g9.js'
+          ]
+
+          env: [
+            {
+              name: 'NODE_ENV'
+              value: 'production'
+            }
+            {
+              name: 'LOG_LEVEL'
+              value: environment == 'prod' ? 'info' : 'debug'
+            }
+            {
+              name: 'DATABASE_URL'
+              secretRef: 'runtime-database-url'
+            }
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: automationIdentityClientId
+            }
+          ]
+
+          resources: {
+            cpu: json('0.25')
+            memory: '0.5Gi'
+          }
+        }
+      ]
+    }
+  }
+}
+
 resource migrations 'Microsoft.App/jobs@2024-03-01' = if (deployMigrationJob) {
   name: '${baseName}-migrate'
   location: location
@@ -325,4 +418,5 @@ output apiFqdn string = deployApi ? api!.properties.configuration.ingress.fqdn :
 output outboxWorkerName string = deployOutboxWorker ? outboxWorker.name : ''
 output automationWorkerName string = deployAutomationWorker ? automationWorker.name : ''
 output notificationWorkerName string = deployNotificationWorker ? notificationWorker.name : ''
+output projectRiskMonitorJobName string = deployProjectRiskMonitorJob ? projectRiskMonitorJob.name : ''
 output migrationJobName string = deployMigrationJob ? migrations.name : ''
