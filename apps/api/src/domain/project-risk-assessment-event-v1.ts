@@ -37,6 +37,15 @@ export const projectRiskAssessmentPayloadSchemaV1 =
         'CRITICAL',
       ]),
 
+    controlBudget:
+      z.number().optional(),
+
+    estimateAtCompletion:
+      z.number().optional(),
+
+    varianceAtCompletion:
+      z.number().optional(),
+
     scheduleHealth:
       z.enum([
         'ON_TRACK',
@@ -50,6 +59,12 @@ export const projectRiskAssessmentPayloadSchemaV1 =
 
     forecastVarianceDays:
       z.number().nullable(),
+
+    plannedFinish:
+      z.string().nullable().optional(),
+
+    forecastFinish:
+      z.string().nullable().optional(),
 
     requiresAttention:
       z.boolean(),

@@ -147,7 +147,24 @@ export function buildProjectRiskAlertV1g8(
       riskLevel: input.risk.riskLevel,
       drivers: input.risk.drivers,
       financialHealth: input.risk.financial.health,
+
+      controlBudget:
+        input.risk.financial.controlBudget,
+
+      estimateAtCompletion:
+        input.risk.financial.estimateAtCompletion,
+
+      varianceAtCompletion:
+        input.risk.financial.varianceAtCompletion,
+
       scheduleHealth: input.risk.schedule.health,
+
+      plannedFinish:
+        input.risk.schedule.plannedFinish,
+
+      forecastFinish:
+        input.risk.schedule.forecastFinish,
+
       forecastVariancePercent:
         input.risk.financial.forecastVariancePercent,
       forecastVarianceDays:

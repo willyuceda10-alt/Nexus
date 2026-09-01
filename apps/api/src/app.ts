@@ -53,6 +53,7 @@ import { projectEngineV2BackfillRoutes } from './routes/project-engine-v2-backfi
 import { projectRiskAlertsV1g8Routes } from './routes/project-risk-alerts-v1g8.js';
 import { projectRiskHistoryV1g10Routes } from './routes/project-risk-history-v1g10.js';
 import { hierarchyRiskOverviewV1g11Routes } from './routes/hierarchy-risk-overview-v1g11.js';
+import { hierarchyFinancialRiskV1g12Routes } from './routes/hierarchy-financial-risk-v1g12.js';
 import { projectScheduleV2Routes } from './routes/project-schedule-v2.js';
 import { resourceCapacityRoutes } from './routes/resource-capacity.js';
 import { scheduleAnalysisRoutes } from './routes/schedule-analysis.js';
@@ -251,6 +252,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(projectRiskAlertsV1g8Routes);
   await app.register(projectRiskHistoryV1g10Routes);
   await app.register(hierarchyRiskOverviewV1g11Routes);
+  await app.register(hierarchyFinancialRiskV1g12Routes);
   await app.register(wbsV2Routes);
   await app.register(materialMasterV2Routes);
   await app.register(materialOperationsV2Routes);

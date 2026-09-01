@@ -45,6 +45,18 @@ describe('buildProjectRiskAlertV1g8', () => {
     expect(result.assessmentEvent.eventType)
       .toBe('bridata.project.risk.assessed');
 
+    expect(
+      result.assessmentEvent.payload.controlBudget,
+    ).toBe(350);
+
+    expect(
+      result.assessmentEvent.payload.estimateAtCompletion,
+    ).toBe(370);
+
+    expect(
+      result.assessmentEvent.payload.varianceAtCompletion,
+    ).toBe(-20);
+
     expect(result.notificationEvent?.eventType)
       .toBe('bridata.notification.requested');
 
