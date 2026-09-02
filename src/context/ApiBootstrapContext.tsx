@@ -22,6 +22,8 @@ import {
   type DataMode,
 } from '../config/runtime';
 import {
+  beginEntraLogin,
+  clearEntraSession,
   getEntraAccessToken,
 } from '../auth/entraPkce';
 
@@ -104,6 +106,13 @@ export function ApiBootstrapProvider({
             ? getEntraAccessToken
             : null,
         getTenantId: () => tenantRef.current,
+        onUnauthorized:
+          runtimeConfig.authMode === 'entra'
+            ? async () => {
+                clearEntraSession();
+                await beginEntraLogin();
+              }
+            : null,
       });
     }, []);
 
@@ -133,6 +142,7 @@ export function ApiBootstrapProvider({
         configureApiSession({
           getAccessToken: null,
           getTenantId: null,
+          onUnauthorized: null,
         });
         tenantRef.current = null;
         setStatus('mock');
