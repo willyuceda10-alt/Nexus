@@ -63,9 +63,9 @@ resource meetingSubscription 'Microsoft.ServiceBus/namespaces/topics/subscriptio
 
 resource meetingReceiverRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployMeetingCalendarWorker) {
   scope: meetingSubscription
-  name: guid(meetingSubscription.id, meetingIdentity.properties.principalId, serviceBusDataReceiverRoleId)
+  name: guid(meetingSubscription.id, meetingIdentity.id, serviceBusDataReceiverRoleId)
   properties: {
-    principalId: meetingIdentity.properties.principalId
+    principalId: meetingIdentity!.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: serviceBusDataReceiverRoleId
   }
@@ -73,9 +73,9 @@ resource meetingReceiverRole 'Microsoft.Authorization/roleAssignments@2022-04-01
 
 resource meetingAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployMeetingCalendarWorker) {
   scope: registry
-  name: guid(registry.id, meetingIdentity.properties.principalId, acrPullRoleId)
+  name: guid(registry.id, meetingIdentity.id, acrPullRoleId)
   properties: {
-    principalId: meetingIdentity.properties.principalId
+    principalId: meetingIdentity!.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: acrPullRoleId
   }
@@ -83,9 +83,9 @@ resource meetingAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01'
 
 resource meetingKeyVaultRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployMeetingCalendarWorker) {
   scope: keyVault
-  name: guid(keyVault.id, meetingIdentity.properties.principalId, keyVaultSecretsUserRoleId)
+  name: guid(keyVault.id, meetingIdentity.id, keyVaultSecretsUserRoleId)
   properties: {
-    principalId: meetingIdentity.properties.principalId
+    principalId: meetingIdentity!.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: keyVaultSecretsUserRoleId
   }
@@ -139,7 +139,7 @@ resource meetingWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployMeet
             { name: 'SERVICE_BUS_TOPIC', value: serviceBusTopicName }
             { name: 'SERVICE_BUS_MEETING_SUBSCRIPTION', value: meetingSubscriptionName }
             { name: 'M365_CALENDAR_SYNC_ENABLED', value: string(m365CalendarSyncEnabled) }
-            { name: 'AZURE_CLIENT_ID', value: meetingIdentity.properties.clientId }
+            { name: 'AZURE_CLIENT_ID', value: meetingIdentity!.properties.clientId }
           ]
           resources: {
             cpu: json('0.25')
@@ -162,7 +162,7 @@ resource meetingWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployMeet
 
 output meetingCalendarWorkerDeployed bool = deployMeetingCalendarWorker
 output meetingManagedIdentityName string = deployMeetingCalendarWorker ? meetingIdentity.name : ''
-output meetingManagedIdentityPrincipalId string = deployMeetingCalendarWorker ? meetingIdentity.properties.principalId : ''
-output meetingManagedIdentityClientId string = deployMeetingCalendarWorker ? meetingIdentity.properties.clientId : ''
+output meetingManagedIdentityPrincipalId string = deployMeetingCalendarWorker ? meetingIdentity!.properties.principalId : ''
+output meetingManagedIdentityClientId string = deployMeetingCalendarWorker ? meetingIdentity!.properties.clientId : ''
 output meetingSubscription string = deployMeetingCalendarWorker ? meetingSubscription.name : ''
 output meetingWorkerName string = deployMeetingCalendarWorker ? meetingWorker.name : ''
