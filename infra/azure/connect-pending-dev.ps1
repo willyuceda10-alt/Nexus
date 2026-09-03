@@ -237,7 +237,7 @@ if ($BuildImages) {
 $apiDigest = AzTsv @('acr','repository','show','-n',$acrName,'--image',"bridata-api:$tag",'--query','digest','-o','tsv')
 $migrateDigest = AzTsv @('acr','repository','show','-n',$acrName,'--image',"bridata-migrate:$tag",'--query','digest','-o','tsv')
 if (($DeployCoreRuntime -or $DeployMeetingWorker) -and (-not $apiDigest -or -not $migrateDigest)) {
-    throw "Image pair '$tag' not found in ACR. Use -BuildImages -Apply first."
+    throw "Image pair '$tag' not found in ACR. Use -BuildImages -Apply when ACR Tasks are available, or run infra/azure/build-push-images-local.ps1 -ImageTag '$tag' -Apply from a machine with Docker."
 }
 $apiImage = if ($apiDigest) { "$loginServer/bridata-api@$apiDigest" } else { '' }
 $migrateImage = if ($migrateDigest) { "$loginServer/bridata-migrate@$migrateDigest" } else { '' }
