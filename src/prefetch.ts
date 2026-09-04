@@ -33,8 +33,13 @@ const registry: Record<string, () => Promise<unknown>> = {
 };
 
 export function prefetchView(tabId: string): void {
-  registry[tabId]?.().catch(() => {
-    // Prefetch failures are silent — the user will see the normal
-    // loading state when they actually navigate to the view.
-  });
+  registry[tabId]?.().catch(() => {});
+}
+
+export function prefetchCommandPalette(): void {
+  import('./components/layout/CommandPalette').catch(() => {});
+}
+
+export function prefetchCreateModal(): void {
+  import('./components/layout/CreateObjectModal').catch(() => {});
 }
