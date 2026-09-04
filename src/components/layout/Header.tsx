@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { ApiStatusBadge } from '../system/ApiStatusBadge';
 import { useNexus } from '../../context/NexusContext';
+import { prefetchCommandPalette, prefetchCreateModal, prefetchView } from '../../prefetch';
 
 interface HeaderProps {
   onOpenNavigation: () => void;
@@ -142,6 +143,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-2">
         <button
           onClick={() => setIsCommandPaletteOpen(true)}
+          onPointerEnter={prefetchCommandPalette}
           className="hidden min-w-[280px] items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-left text-[10px] text-slate-400 transition hover:border-slate-300 hover:bg-white lg:flex"
         >
           <Search className="h-3.5 w-3.5" />
@@ -153,6 +155,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         <button
           onClick={() => setActiveTab('inbox')}
+          onPointerEnter={() => prefetchView('inbox')}
           className={`relative grid h-9 w-9 place-items-center rounded-xl border transition ${activeTab === 'inbox' ? 'border-green-200 bg-green-50 text-green-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
           aria-label="Abrir Mi trabajo"
           title="Mi trabajo"
@@ -162,6 +165,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         <button
           onClick={() => openCreateModal('TASK')}
+          onPointerEnter={prefetchCreateModal}
           className="flex h-9 items-center gap-2 rounded-xl bg-green-700 px-3.5 text-[10px] font-bold text-white shadow-[0_6px_16px_rgba(21,128,61,0.2)] transition hover:bg-green-800 active:scale-[0.98]"
         >
           <Plus className="h-3.5 w-3.5" />

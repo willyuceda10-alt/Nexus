@@ -25,6 +25,10 @@ import {
   WorkspaceHome,
 } from './components/views/WorkspaceHome';
 
+import {
+  prefetchView,
+} from './prefetch';
+
 
 /*
  * F1.1
@@ -329,50 +333,24 @@ const CommandPalette =
 const ViewLoading: React.FC =
   () => (
     <div
-      className="
-        flex
-        min-h-[240px]
-        w-full
-        items-center
-        justify-center
-        px-6
-        py-10
-      "
+      className="w-full animate-pulse px-6 py-6"
       role="status"
       aria-live="polite"
       aria-label="Cargando módulo"
     >
-      <div
-        className="
-          flex
-          items-center
-          gap-3
-          rounded-xl
-          border
-          border-slate-200
-          bg-white/90
-          px-5
-          py-3
-          text-sm
-          font-medium
-          text-slate-600
-          shadow-sm
-        "
-      >
-        <span
-          className="
-            h-4
-            w-4
-            animate-spin
-            rounded-full
-            border-2
-            border-emerald-200
-            border-t-emerald-600
-          "
-          aria-hidden="true"
-        />
-
-        Cargando módulo…
+      <div className="mb-6 flex items-center justify-between">
+        <div className="h-6 w-48 rounded-lg bg-slate-200" />
+        <div className="h-8 w-24 rounded-xl bg-slate-200" />
+      </div>
+      <div className="space-y-3">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex items-center gap-4 rounded-xl border border-slate-100 bg-white px-4 py-3">
+            <div className="h-4 w-4 flex-none rounded bg-slate-200" />
+            <div className="h-3.5 flex-1 rounded bg-slate-200" style={{ width: `${55 + (i * 7) % 30}%` }} />
+            <div className="h-3 w-20 flex-none rounded bg-slate-100" />
+            <div className="h-5 w-14 flex-none rounded-full bg-slate-100" />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -557,6 +535,24 @@ React.FC =
       [
         mobileNavigationOpen,
       ],
+    );
+
+    React.useEffect(
+      () => {
+        const warm = () => {
+          prefetchView('inbox');
+          prefetchView('projects');
+          prefetchView('boards');
+          prefetchView('reports');
+        };
+        if ('requestIdleCallback' in window) {
+          const id = requestIdleCallback(warm, { timeout: 4000 });
+          return () => cancelIdleCallback(id);
+        }
+        const id = setTimeout(warm, 2000);
+        return () => clearTimeout(id);
+      },
+      [],
     );
 
     const {
