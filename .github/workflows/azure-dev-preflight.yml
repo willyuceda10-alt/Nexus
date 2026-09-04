@@ -89,6 +89,8 @@ jobs:
         run: |
           set -euo pipefail
           az bicep build --file infra/azure/main.bicep --stdout > /dev/null
+          az bicep build --file infra/azure/api-runtime.bicep --stdout > /dev/null
+          az bicep build --file infra/azure/web-runtime.bicep --stdout > /dev/null
           az bicep build-params --file infra/azure/dev.bicepparam --stdout > /dev/null
 
       - name: What-if foundation only

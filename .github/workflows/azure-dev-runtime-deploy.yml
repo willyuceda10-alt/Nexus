@@ -4,20 +4,25 @@ on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: 'Type DEPLOY-BRIDATA-RUNTIME-DEV to migrate the DEV database and deploy the Entra-protected API.'
+        description: 'Type DEPLOY-BRIDATA-RUNTIME-DEV to migrate the DEV database and deploy the Entra-protected API and web frontend.'
         required: true
         type: string
       entra_api_client_id:
         description: 'Client ID of the bridata-api-dev Entra application.'
         required: true
         type: string
-      cors_origins:
-        description: 'Comma-separated allowed web origins. A placeholder is safe until the web is connected.'
+      entra_web_client_id:
+        description: 'Client ID of the bridata-web-dev Entra SPA. Leave empty to skip web Container App deployment.'
         required: false
-        default: 'https://not-configured.invalid'
+        default: ''
+        type: string
+      cors_origins:
+        description: 'Extra comma-separated web origins appended to the API CORS allowlist. The web Container App FQDN is added automatically when entra_web_client_id is set.'
+        required: false
+        default: 'http://localhost:3000'
         type: string
       image_tag:
-        description: 'Optional exact published image tag. Empty selects the newest bridata-api tag and requires the same migration tag.'
+        description: 'Optional exact published image tag. Empty selects the newest bridata-api tag and requires matching web and migration tags.'
         required: false
         default: ''
         type: string
@@ -50,6 +55,7 @@ jobs:
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
           ENTRA_API_CLIENT_ID_INPUT: ${{ inputs.entra_api_client_id }}
+          ENTRA_WEB_CLIENT_ID_INPUT: ${{ inputs.entra_web_client_id }}
         run: |
           set -euo pipefail
           if [ "$GITHUB_REF" != "refs/heads/main" ]; then
@@ -61,7 +67,11 @@ jobs:
             exit 1
           fi
           if ! [[ "$ENTRA_API_CLIENT_ID_INPUT" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-            echo "::error title=Invalid Entra client ID::Expected a GUID client/application ID."
+            echo "::error title=Invalid Entra API client ID::Expected a GUID client/application ID."
+            exit 1
+          fi
+          if [ -n "$ENTRA_WEB_CLIENT_ID_INPUT" ] && ! [[ "$ENTRA_WEB_CLIENT_ID_INPUT" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "::error title=Invalid Entra Web client ID::Expected a GUID or leave empty to skip web deployment."
             exit 1
           fi
 
@@ -88,6 +98,8 @@ jobs:
         shell: bash
         env:
           REQUESTED_IMAGE_TAG: ${{ inputs.image_tag }}
+          ENTRA_WEB_CLIENT_ID_INPUT: ${{ inputs.entra_web_client_id }}
+          EXTRA_CORS_ORIGINS: ${{ inputs.cors_origins }}
         run: |
           set -euo pipefail
 
@@ -102,9 +114,12 @@ jobs:
           acr_name="$(az acr list --resource-group "$AZURE_RESOURCE_GROUP" --query '[0].name' --output tsv)"
           key_vault_name="$(az keyvault list --resource-group "$AZURE_RESOURCE_GROUP" --query '[0].name' --output tsv)"
           api_identity_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-api-mi --query id --output tsv)"
+          api_identity_client_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-api-mi --query clientId --output tsv)"
           managed_environment_id="$(az resource list --resource-group "$AZURE_RESOURCE_GROUP" --resource-type Microsoft.App/managedEnvironments --query '[0].id' --output tsv)"
+          cae_name="$(az resource list --resource-group "$AZURE_RESOURCE_GROUP" --resource-type Microsoft.App/managedEnvironments --query '[0].name' --output tsv)"
+          cae_default_domain="$(az containerapp env show --name "$cae_name" --resource-group "$AZURE_RESOURCE_GROUP" --query properties.defaultDomain --output tsv)"
 
-          for value_name in location acr_name key_vault_name api_identity_id managed_environment_id; do
+          for value_name in location acr_name key_vault_name api_identity_id managed_environment_id cae_name cae_default_domain; do
             if [ -z "${!value_name:-}" ]; then
               echo "::error title=DEV foundation incomplete::Could not resolve $value_name."
               exit 1
@@ -128,17 +143,48 @@ jobs:
             exit 1
           fi
 
+          deploy_web='false'
+          web_fqdn=''
+          web_image=''
+          web_identity_id=''
+          cors_origins="$EXTRA_CORS_ORIGINS"
+
+          if [ -n "$ENTRA_WEB_CLIENT_ID_INPUT" ]; then
+            web_digest="$(az acr repository show --name "$acr_name" --image "bridata-web:$image_tag" --query digest --output tsv 2>/dev/null || true)"
+            if [[ "$web_digest" != sha256:* ]]; then
+              echo "::error title=Web image unavailable::bridata-web:$image_tag was not found in ACR. Run Azure DEV Images Publish first."
+              exit 1
+            fi
+            web_identity_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-web-mi --query id --output tsv)"
+            if [ -z "$web_identity_id" ]; then
+              echo "::error title=Web identity missing::nexus-dev-web-mi not found. Deploy the DEV foundation first."
+              exit 1
+            fi
+            web_fqdn="nexus-dev-web.$cae_default_domain"
+            web_image="$login_server/bridata-web@$web_digest"
+            deploy_web='true'
+            cors_origins="$EXTRA_CORS_ORIGINS,https://$web_fqdn"
+            echo "Web Container App will be deployed: $web_fqdn"
+            echo "web_image=$web_image" >> "$GITHUB_OUTPUT"
+            echo "web_identity_id=$web_identity_id" >> "$GITHUB_OUTPUT"
+            echo "web_fqdn=$web_fqdn" >> "$GITHUB_OUTPUT"
+          fi
+
           echo "location=$location" >> "$GITHUB_OUTPUT"
           echo "acr_name=$acr_name" >> "$GITHUB_OUTPUT"
           echo "login_server=$login_server" >> "$GITHUB_OUTPUT"
           echo "key_vault_name=$key_vault_name" >> "$GITHUB_OUTPUT"
           echo "api_identity_id=$api_identity_id" >> "$GITHUB_OUTPUT"
+          echo "api_identity_client_id=$api_identity_client_id" >> "$GITHUB_OUTPUT"
           echo "managed_environment_id=$managed_environment_id" >> "$GITHUB_OUTPUT"
+          echo "cae_name=$cae_name" >> "$GITHUB_OUTPUT"
           echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
           echo "api_image=$login_server/bridata-api@$api_digest" >> "$GITHUB_OUTPUT"
           echo "migration_image=$login_server/bridata-migrate@$migration_digest" >> "$GITHUB_OUTPUT"
           echo "runtime_database_secret_uri=https://$key_vault_name.vault.azure.net/secrets/runtime-database-url" >> "$GITHUB_OUTPUT"
           echo "admin_database_secret_uri=https://$key_vault_name.vault.azure.net/secrets/admin-database-url" >> "$GITHUB_OUTPUT"
+          echo "deploy_web=$deploy_web" >> "$GITHUB_OUTPUT"
+          echo "cors_origins=$cors_origins" >> "$GITHUB_OUTPUT"
 
           echo "Using published image pair: $image_tag"
 
@@ -147,6 +193,7 @@ jobs:
         run: |
           set -euo pipefail
           az bicep build --file infra/azure/api-runtime.bicep --stdout > /dev/null
+          az bicep build --file infra/azure/web-runtime.bicep --stdout > /dev/null
 
       - name: Build non-secret runtime parameter file
         shell: bash
@@ -160,7 +207,7 @@ jobs:
           RUNTIME_DATABASE_SECRET_URI: ${{ steps.runtime.outputs.runtime_database_secret_uri }}
           ADMIN_DATABASE_SECRET_URI: ${{ steps.runtime.outputs.admin_database_secret_uri }}
           ENTRA_API_CLIENT_ID_INPUT: ${{ inputs.entra_api_client_id }}
-          CORS_ORIGINS_INPUT: ${{ inputs.cors_origins }}
+          CORS_ORIGINS: ${{ steps.runtime.outputs.cors_origins }}
         run: |
           set -euo pipefail
           jq -n \
@@ -174,7 +221,7 @@ jobs:
             --arg adminDatabaseSecretUri "$ADMIN_DATABASE_SECRET_URI" \
             --arg entraApiClientId "$ENTRA_API_CLIENT_ID_INPUT" \
             --arg entraTenantId "$AZURE_TENANT_ID" \
-            --arg corsOrigins "$CORS_ORIGINS_INPUT" \
+            --arg corsOrigins "$CORS_ORIGINS" \
             '{
               "$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
               "contentVersion":"1.0.0.0",
@@ -326,6 +373,98 @@ jobs:
 
           echo "api_url=$base_url" >> "$GITHUB_OUTPUT"
 
+      - name: Build web runtime parameter file
+        if: steps.runtime.outputs.deploy_web == 'true'
+        shell: bash
+        env:
+          MANAGED_ENVIRONMENT_ID: ${{ steps.runtime.outputs.managed_environment_id }}
+          LOGIN_SERVER: ${{ steps.runtime.outputs.login_server }}
+          WEB_IDENTITY_ID: ${{ steps.runtime.outputs.web_identity_id }}
+          WEB_IMAGE: ${{ steps.runtime.outputs.web_image }}
+          ENTRA_WEB_CLIENT_ID: ${{ inputs.entra_web_client_id }}
+          ENTRA_API_CLIENT_ID: ${{ inputs.entra_api_client_id }}
+          API_URL: ${{ steps.health.outputs.api_url }}
+        run: |
+          set -euo pipefail
+          entra_api_scope="api://$ENTRA_API_CLIENT_ID/access_as_user"
+          jq -n \
+            --arg managedEnvironmentId "$MANAGED_ENVIRONMENT_ID" \
+            --arg registryServer "$LOGIN_SERVER" \
+            --arg webIdentityResourceId "$WEB_IDENTITY_ID" \
+            --arg webImage "$WEB_IMAGE" \
+            --arg entraWebClientId "$ENTRA_WEB_CLIENT_ID" \
+            --arg entraTenantId "$AZURE_TENANT_ID" \
+            --arg entraApiScope "$entra_api_scope" \
+            --arg apiBaseUrl "$API_URL" \
+            '{
+              "$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+              "contentVersion":"1.0.0.0",
+              "parameters":{
+                "environment":{"value":"dev"},
+                "tags":{"value":{"product":"Bridata Project","technicalPlatform":"Nexus Core","environment":"dev","managedBy":"Bicep"}},
+                "managedEnvironmentId":{"value":$managedEnvironmentId},
+                "registryServer":{"value":$registryServer},
+                "webIdentityResourceId":{"value":$webIdentityResourceId},
+                "webImage":{"value":$webImage},
+                "entraWebClientId":{"value":$entraWebClientId},
+                "entraTenantId":{"value":$entraTenantId},
+                "entraApiScope":{"value":$entraApiScope},
+                "apiBaseUrl":{"value":$apiBaseUrl}
+              }
+            }' > /tmp/bridata-web-params.json
+
+      - name: Review web runtime what-if
+        if: steps.runtime.outputs.deploy_web == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment group what-if \
+            --name "bridata-dev-web-preflight-${GITHUB_RUN_NUMBER}" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/web-runtime.bicep \
+            --parameters @/tmp/bridata-web-params.json \
+            --no-pretty-print
+
+      - name: Deploy Bridata Web Container App
+        if: steps.runtime.outputs.deploy_web == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment group create \
+            --name "bridata-dev-web-${GITHUB_RUN_NUMBER}" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/web-runtime.bicep \
+            --parameters @/tmp/bridata-web-params.json \
+            --output none
+
+      - name: Verify web health endpoint
+        id: web_health
+        if: steps.runtime.outputs.deploy_web == 'true'
+        shell: bash
+        env:
+          WEB_FQDN: ${{ steps.runtime.outputs.web_fqdn }}
+        run: |
+          set -euo pipefail
+          base_url="https://$WEB_FQDN"
+          echo "Waiting for web readiness: $base_url"
+          ready=0
+          for attempt in $(seq 1 30); do
+            status="$(curl --silent --output /dev/null --write-out '%{http_code}' "$base_url/health" || true)"
+            echo "Health attempt $attempt: $status"
+            if [ "$status" = '200' ]; then
+              ready=1
+              break
+            fi
+            sleep 10
+          done
+
+          if [ "$ready" -ne 1 ]; then
+            echo "::error title=Web not ready::Web /health did not return HTTP 200 within 5 minutes."
+            exit 1
+          fi
+
+          echo "web_url=$base_url" >> "$GITHUB_OUTPUT"
+
       - name: Publish runtime summary
         shell: bash
         env:
@@ -334,6 +473,10 @@ jobs:
           API_IMAGE: ${{ steps.runtime.outputs.api_image }}
           MIGRATION_IMAGE: ${{ steps.runtime.outputs.migration_image }}
           MIGRATION_EXECUTION: ${{ steps.migration.outputs.execution_name }}
+          DEPLOY_WEB: ${{ steps.runtime.outputs.deploy_web }}
+          WEB_IMAGE: ${{ steps.runtime.outputs.web_image }}
+          WEB_URL: ${{ steps.web_health.outputs.web_url }}
+          ENTRA_WEB_CLIENT_ID: ${{ inputs.entra_web_client_id }}
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           ## Bridata Project Azure DEV runtime deployed
@@ -348,6 +491,27 @@ jobs:
           - Database readiness: **PASS**
           - Unauthenticated session request: **401 PASS**
           - DEV API scaling: **minReplicas=0 / maxReplicas=2**
-
-          Next phase: provision the first Entra identity, configure Bridata Web PKCE and connect the web to this API endpoint.
           EOF
+
+          if [ "$DEPLOY_WEB" = 'true' ]; then
+            cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+
+          ### Web frontend
+
+          - Web URL: \`$WEB_URL\`
+          - Web image: \`$WEB_IMAGE\`
+          - Entra web client ID: \`$ENTRA_WEB_CLIENT_ID\`
+          - Web health: **PASS**
+          - DEV web scaling: **minReplicas=0 / maxReplicas=2**
+
+          **Post-deploy**: add \`$WEB_URL/\` to the Bridata Web App Registration redirect URIs:
+          \`\`\`
+          ./infra/azure/bootstrap-entra-web-dev.ps1 -ApiClientId <entra_api_client_id> -RedirectUris @('http://localhost:3000/', '$WEB_URL/') -Apply
+          \`\`\`
+          EOF
+          else
+            cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+
+          Next phase: provision the Bridata Web Entra SPA app registration, then re-run this workflow with \`entra_web_client_id\` to deploy the web frontend.
+          EOF
+          fi
