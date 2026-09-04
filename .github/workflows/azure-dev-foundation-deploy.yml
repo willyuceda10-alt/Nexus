@@ -117,6 +117,7 @@ jobs:
           set -euo pipefail
           az bicep build --file infra/azure/main.bicep --stdout > /dev/null
           az bicep build --file infra/azure/api-runtime.bicep --stdout > /dev/null
+          az bicep build --file infra/azure/web-runtime.bicep --stdout > /dev/null
           az bicep build-params --file infra/azure/dev.bicepparam --stdout > /dev/null
 
       - name: Generate ephemeral database credentials
@@ -187,6 +188,7 @@ jobs:
           echo "key_vault_name=$(jq -r '.keyVaultName.value' /tmp/bridata-dev-outputs.json)" >> "$GITHUB_OUTPUT"
           echo "acr_name=$(jq -r '.containerRegistryName.value' /tmp/bridata-dev-outputs.json)" >> "$GITHUB_OUTPUT"
           echo "api_identity_name=$(jq -r '.apiManagedIdentityName.value' /tmp/bridata-dev-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "web_identity_name=$(jq -r '.webManagedIdentityName.value' /tmp/bridata-dev-outputs.json)" >> "$GITHUB_OUTPUT"
           echo "container_environment_name=$(jq -r '.containerAppsEnvironmentName.value' /tmp/bridata-dev-outputs.json)" >> "$GITHUB_OUTPUT"
 
       - name: Verify private PostgreSQL and stored secret resources
@@ -251,6 +253,7 @@ jobs:
           KEY_VAULT_NAME: ${{ steps.deploy.outputs.key_vault_name }}
           ACR_NAME: ${{ steps.deploy.outputs.acr_name }}
           API_IDENTITY_NAME: ${{ steps.deploy.outputs.api_identity_name }}
+          WEB_IDENTITY_NAME: ${{ steps.deploy.outputs.web_identity_name }}
           CONTAINER_ENVIRONMENT_NAME: ${{ steps.deploy.outputs.container_environment_name }}
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<EOF
@@ -263,8 +266,10 @@ jobs:
           - Key Vault: \`$KEY_VAULT_NAME\`
           - ACR: \`$ACR_NAME\`
           - API managed identity: \`$API_IDENTITY_NAME\`
+          - Web managed identity: \`$WEB_IDENTITY_NAME\`
           - Container Apps Environment: \`$CONTAINER_ENVIRONMENT_NAME\`
           - API runtime: **not deployed yet**
+          - Web runtime: **not deployed yet**
 
           Database credentials were generated only in runner memory, masked, and persisted as Key Vault secret resources. They are not written to git, workflow artifacts, outputs, or the summary.
 

@@ -237,7 +237,7 @@ if ($BuildImages) {
 $apiDigest = AzTsv @('acr','repository','show','-n',$acrName,'--image',"bridata-api:$tag",'--query','digest','-o','tsv')
 $migrateDigest = AzTsv @('acr','repository','show','-n',$acrName,'--image',"bridata-migrate:$tag",'--query','digest','-o','tsv')
 if (($DeployCoreRuntime -or $DeployMeetingWorker) -and (-not $apiDigest -or -not $migrateDigest)) {
-    throw "Image pair '$tag' not found in ACR. Use -BuildImages -Apply first."
+    throw "Image pair '$tag' not found in ACR. Use -BuildImages -Apply when ACR Tasks are available, or run infra/azure/build-push-images-local.ps1 -ImageTag '$tag' -Apply from a machine with Docker."
 }
 $apiImage = if ($apiDigest) { "$loginServer/bridata-api@$apiDigest" } else { '' }
 $migrateImage = if ($migrateDigest) { "$loginServer/bridata-migrate@$migrateDigest" } else { '' }
@@ -359,5 +359,12 @@ try {
 Step 'Boundary'
 Write-Host 'Backend path covered: PostgreSQL/Key Vault -> migrations -> API -> Service Bus -> outbox/automation/notification -> meeting worker.'
 Write-Host 'Graph free/busy and calendar writes remain explicit admin-controlled steps.'
-Write-Warning 'Web deployment is intentionally blocked for now: ApiBootstrap calls the Entra-protected API before a browser access-token provider is configured. Finish Entra SPA/PKCE first; then publish the SPA and set API CORS to its exact Azure origin.'
+Write-Host ''
+Write-Host 'Web deployment path (separate controlled step):' -ForegroundColor Cyan
+Write-Host '  1. bootstrap-entra-api-dev.ps1 -Apply                  (one-time)'
+Write-Host '  2. bootstrap-entra-web-dev.ps1 -ApiClientId <id> -Apply (one-time)'
+Write-Host '  3. grant-dev-rbac.ps1                                   (idempotent — adds web AcrPull)'
+Write-Host '  4. build-push-images-local.ps1 -IncludeWeb -Apply       (each release)'
+Write-Host '  5. GitHub workflow: Azure DEV Runtime Deploy             (entra_api_client_id + entra_web_client_id)'
+Write-Host '  6. Re-run bootstrap-entra-web-dev.ps1 with -RedirectUris to add the Container App FQDN.'
 Write-Host "Source commit/image tag: $commit / $tag"

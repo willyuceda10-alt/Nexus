@@ -45,6 +45,9 @@ param postgresRuntimePassword string = ''
 @description('Creates the API Container App and manual migration job. Kept false until images, Entra registrations, Key Vault secrets and RBAC prerequisites exist.')
 param deployApiRuntime bool = false
 
+@description('Creates the Bridata Web Container App. Requires deployApiRuntime so the API FQDN is known.')
+param deployWebRuntime bool = false
+
 @description('Creates Azure Service Bus Standard and the domain-events topic. Defaults to false to avoid accidental Azure spend.')
 param deployAsyncMessaging bool = false
 
@@ -98,6 +101,9 @@ param apiImage string = 'not-configured'
 @description('Immutable migration image reference built from Dockerfile.api target=migrate.')
 param migrationImage string = 'not-configured'
 
+@description('Immutable web frontend image reference built from Dockerfile.web.')
+param webImage string = 'not-configured'
+
 @description('Key Vault secret URI containing the restricted PostgreSQL runtime connection string.')
 param runtimeDatabaseSecretUri string = 'https://not-configured${az.environment().suffixes.keyvaultDns}/secrets/runtime-database-url'
 
@@ -107,10 +113,13 @@ param adminDatabaseSecretUri string = 'https://not-configured${az.environment().
 @description('Microsoft Entra application/client ID of the Bridata Project API resource application.')
 param entraApiClientId string = '00000000-0000-0000-0000-000000000000'
 
+@description('Microsoft Entra application/client ID of the Bridata Web SPA (bridata-web-dev). Output of bootstrap-entra-web-dev.ps1.')
+param entraWebClientId string = '00000000-0000-0000-0000-000000000000'
+
 @description('Microsoft Entra tenant ID used by the Bridata Project API runtime.')
 param entraTenantId string = subscription().tenantId
 
-@description('Comma-separated allowed web origins for API CORS.')
+@description('Comma-separated allowed web origins for API CORS. The web Container App FQDN is appended automatically when deployWebRuntime=true.')
 param apiCorsOrigins string = 'https://not-configured.invalid'
 
 param tags object = {
@@ -122,6 +131,8 @@ param tags object = {
 
 var suffix = uniqueString(resourceGroup().id)
 var baseName = '${namePrefix}-${environment}'
+var webAppName = '${baseName}-web'
+var entraApiScope = 'api://${entraApiClientId}/access_as_user'
 var storageName = toLower('${namePrefix}${environment}${suffix}')
 var acrName = toLower('${namePrefix}${environment}${suffix}')
 var keyVaultName = '${baseName}-${suffix}'
@@ -319,6 +330,22 @@ resource notificationIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@
   tags: tags
 }
 
+resource webIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${baseName}-web-mi'
+  location: location
+  tags: tags
+}
+
+resource webAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: registry
+  name: guid(registry.id, webIdentity.id, acrPullRoleId)
+  properties: {
+    principalId: webIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: acrPullRoleId
+  }
+}
+
 resource automationAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: registry
   name: guid(registry.id, automationIdentity.id, acrPullRoleId)
@@ -462,6 +489,13 @@ module asyncMessaging './async-messaging.bicep' = if (deployAsyncMessaging) {
   }
 }
 
+// When the web Container App is deployed, its FQDN is deterministic from the CA environment
+// default domain. Append it to the API CORS allowlist automatically.
+var webFqdnComputed = '${webAppName}.${containerEnvironment.properties.defaultDomain}'
+var effectiveCorsOrigins = deployWebRuntime
+  ? '${apiCorsOrigins},https://${webFqdnComputed}'
+  : apiCorsOrigins
+
 module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
   name: '${baseName}-api-runtime'
   params: {
@@ -482,7 +516,7 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     adminDatabaseSecretUri: adminDatabaseSecretUri
     entraApiClientId: entraApiClientId
     entraTenantId: entraTenantId
-    corsOrigins: apiCorsOrigins
+    corsOrigins: effectiveCorsOrigins
     integrationContainerName: importsContainer.name
     deployOutboxWorker: deployOutboxWorker && deployAsyncMessaging
     deployAutomationWorker: deployAutomationWorker && deployAsyncMessaging
@@ -508,6 +542,24 @@ module apiRuntime './api-runtime.bicep' = if (deployApiRuntime) {
     notificationAcrPullRole
     notificationKeyVaultSecretsUserRole
   ]
+}
+
+module webRuntime './web-runtime.bicep' = if (deployWebRuntime) {
+  name: '${baseName}-web-runtime'
+  params: {
+    location: location
+    environment: environment
+    tags: tags
+    managedEnvironmentId: containerEnvironment.id
+    registryServer: registry.properties.loginServer
+    webIdentityResourceId: webIdentity.id
+    webImage: webImage
+    apiBaseUrl: 'https://${apiRuntime.?outputs.apiFqdn ?? 'not-configured.invalid'}'
+    entraWebClientId: entraWebClientId
+    entraTenantId: entraTenantId
+    entraApiScope: entraApiScope
+  }
+  dependsOn: [webAcrPullRole]
 }
 
 output resourceGroupName string = resourceGroup().name
@@ -550,3 +602,8 @@ output automationWorkerDeployed bool = deployApiRuntime && deployAutomationWorke
 output notificationWorkerDeployed bool = deployApiRuntime && deployNotificationWorker && deployAsyncMessaging
 output projectRiskMonitorJobDeployed bool = deployApiRuntime && deployProjectRiskMonitorJob
 output projectRiskMonitorJobName string = apiRuntime.?outputs.projectRiskMonitorJobName ?? ''
+output webManagedIdentityName string = webIdentity.name
+output webManagedIdentityPrincipalId string = webIdentity.properties.principalId
+output webRuntimeDeployed bool = deployWebRuntime
+output webFqdn string = webRuntime.?outputs.webFqdn ?? ''
+output webOrigin string = deployWebRuntime ? 'https://${webRuntime!.outputs.webFqdn}' : ''

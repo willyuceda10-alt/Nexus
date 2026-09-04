@@ -85,16 +85,20 @@ import type {
 
 export type AccessTokenProvider = () => Promise<string | null>;
 export type TenantIdProvider = () => string | null;
+export type UnauthorizedHandler = () => Promise<void> | void;
 
 let accessTokenProvider: AccessTokenProvider | null = null;
 let tenantIdProvider: TenantIdProvider | null = null;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
 
 export function configureApiSession(options: {
   getAccessToken?: AccessTokenProvider | null;
   getTenantId?: TenantIdProvider | null;
+  onUnauthorized?: UnauthorizedHandler | null;
 }): void {
   accessTokenProvider = options.getAccessToken ?? null;
   tenantIdProvider = options.getTenantId ?? null;
+  unauthorizedHandler = options.onUnauthorized ?? null;
 }
 
 export class BridataApiError extends Error {
@@ -127,6 +131,10 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 
   const response = await fetch(`${runtimeConfig.apiBaseUrl}${path}`, { ...init, headers });
   if (!response.ok) {
+    if (response.status === 401 && unauthorizedHandler) {
+      await unauthorizedHandler();
+    }
+
     let payload: ApiErrorPayload = {};
     try {
       payload = (await response.json()) as ApiErrorPayload;
