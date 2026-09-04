@@ -3,6 +3,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ApiClientId,
     [string]$ApiScopeValue = 'access_as_user',
+    # Pass the Azure Container Apps FQDN here once the web Container App is deployed:
+    # -RedirectUris @('http://localhost:3000/', 'https://nexus-dev-web.<hash>.<region>.azurecontainerapps.io/')
     [string[]]$RedirectUris = @('http://localhost:3000/'),
     [switch]$Apply
 )

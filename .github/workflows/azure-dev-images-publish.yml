@@ -98,6 +98,32 @@ jobs:
             exit 1
           fi
 
+      - name: Build web frontend image
+        shell: bash
+        env:
+          LOGIN_SERVER: ${{ steps.registry.outputs.login_server }}
+        run: |
+          set -euo pipefail
+          docker build \
+            --file Dockerfile.web \
+            --tag "$LOGIN_SERVER/bridata-web:$GITHUB_SHA" \
+            .
+
+      - name: Verify web image serves health endpoint
+        shell: bash
+        env:
+          LOGIN_SERVER: ${{ steps.registry.outputs.login_server }}
+        run: |
+          set -euo pipefail
+          container_id=$(docker run -d --rm -p 18080:80 "$LOGIN_SERVER/bridata-web:$GITHUB_SHA")
+          sleep 2
+          status=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18080/health || echo 000)
+          docker stop "$container_id" || true
+          if [ "$status" != "200" ]; then
+            echo "::error title=Web health check failed::Got HTTP $status from /health"
+            exit 1
+          fi
+
       - name: Build production API image
         shell: bash
         env:
@@ -146,6 +172,7 @@ jobs:
           LOGIN_SERVER: ${{ steps.registry.outputs.login_server }}
         run: |
           set -euo pipefail
+          docker push "$LOGIN_SERVER/bridata-web:$GITHUB_SHA"
           docker push "$LOGIN_SERVER/bridata-api:$GITHUB_SHA"
           docker push "$LOGIN_SERVER/bridata-migrate:$GITHUB_SHA"
 
@@ -157,20 +184,23 @@ jobs:
           LOGIN_SERVER: ${{ steps.registry.outputs.login_server }}
         run: |
           set -euo pipefail
+          web_digest="$(az acr repository show --name "$ACR_NAME" --image "bridata-web:$GITHUB_SHA" --query digest --output tsv)"
           api_digest="$(az acr repository show --name "$ACR_NAME" --image "bridata-api:$GITHUB_SHA" --query digest --output tsv)"
           migration_digest="$(az acr repository show --name "$ACR_NAME" --image "bridata-migrate:$GITHUB_SHA" --query digest --output tsv)"
 
-          if [[ "$api_digest" != sha256:* ]] || [[ "$migration_digest" != sha256:* ]]; then
+          if [[ "$web_digest" != sha256:* ]] || [[ "$api_digest" != sha256:* ]] || [[ "$migration_digest" != sha256:* ]]; then
             echo "::error title=Image digest unavailable::ACR did not return immutable digests."
             exit 1
           fi
 
+          echo "web_image=$LOGIN_SERVER/bridata-web@$web_digest" >> "$GITHUB_OUTPUT"
           echo "api_image=$LOGIN_SERVER/bridata-api@$api_digest" >> "$GITHUB_OUTPUT"
           echo "migration_image=$LOGIN_SERVER/bridata-migrate@$migration_digest" >> "$GITHUB_OUTPUT"
 
       - name: Publish image summary
         shell: bash
         env:
+          WEB_IMAGE: ${{ steps.images.outputs.web_image }}
           API_IMAGE: ${{ steps.images.outputs.api_image }}
           MIGRATION_IMAGE: ${{ steps.images.outputs.migration_image }}
         run: |
@@ -178,9 +208,10 @@ jobs:
           ## Bridata Project DEV images published
 
           - Source commit: \`$GITHUB_SHA\`
+          - Web frontend: \`$WEB_IMAGE\`
           - API runtime: \`$API_IMAGE\`
           - Migration job: \`$MIGRATION_IMAGE\`
-          - API runtime deployment: **not performed**
+          - Runtime deployment: **not performed** — use azure-dev-runtime-deploy.yml
 
-          Both references are immutable digest references and are ready for the controlled migration/API deployment phase.
+          All references are immutable digest references ready for the controlled deployment phase.
           EOF
