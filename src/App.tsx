@@ -25,6 +25,10 @@ import {
   WorkspaceHome,
 } from './components/views/WorkspaceHome';
 
+import {
+  prefetchView,
+} from './prefetch';
+
 
 /*
  * F1.1
@@ -531,6 +535,24 @@ React.FC =
       [
         mobileNavigationOpen,
       ],
+    );
+
+    React.useEffect(
+      () => {
+        const warm = () => {
+          prefetchView('inbox');
+          prefetchView('projects');
+          prefetchView('boards');
+          prefetchView('reports');
+        };
+        if ('requestIdleCallback' in window) {
+          const id = requestIdleCallback(warm, { timeout: 4000 });
+          return () => cancelIdleCallback(id);
+        }
+        const id = setTimeout(warm, 2000);
+        return () => clearTimeout(id);
+      },
+      [],
     );
 
     const {
