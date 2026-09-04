@@ -554,7 +554,7 @@ module webRuntime './web-runtime.bicep' = if (deployWebRuntime) {
     registryServer: registry.properties.loginServer
     webIdentityResourceId: webIdentity.id
     webImage: webImage
-    apiBaseUrl: deployApiRuntime ? 'https://${apiRuntime.outputs.apiFqdn}' : 'https://not-configured.invalid'
+    apiBaseUrl: 'https://${apiRuntime.?outputs.apiFqdn ?? 'not-configured.invalid'}'
     entraWebClientId: entraWebClientId
     entraTenantId: entraTenantId
     entraApiScope: entraApiScope
