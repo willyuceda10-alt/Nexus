@@ -1,7 +1,8 @@
 param(
     [string]$ResourceGroup = 'rg-nexus-dev',
     [string]$CiAppDisplayName = 'nexus-github-deploy',
-    [string]$ApiIdentityName = 'nexus-dev-api-mi'
+    [string]$ApiIdentityName = 'nexus-dev-api-mi',
+    [string]$WebIdentityName = 'nexus-dev-web-mi'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,6 +55,12 @@ $keyVaultId = Require-Value 'Key Vault resource id' (az keyvault show --resource
 $apiPrincipalId = Require-Value 'API managed identity principal' (az identity show --resource-group $ResourceGroup --name $ApiIdentityName --query principalId --output tsv)
 $ciPrincipalId = Require-Value 'GitHub deploy service principal' (az ad sp list --display-name $CiAppDisplayName --query "[0].id" --output tsv)
 
+$webPrincipalId = az identity show --resource-group $ResourceGroup --name $WebIdentityName --query principalId --output tsv 2>$null
+if ([string]::IsNullOrWhiteSpace($webPrincipalId)) {
+    Write-Warning "Web managed identity '$WebIdentityName' was not found — web AcrPull will be skipped. Run again after deploying the web foundation."
+    $webPrincipalId = $null
+}
+
 Write-Host ""
 Write-Host "Bridata Project DEV RBAC" -ForegroundColor Cyan
 Write-Host "Subscription : $subscriptionId"
@@ -61,18 +68,25 @@ Write-Host "Resource group: $ResourceGroup"
 Write-Host "ACR           : $acrName"
 Write-Host "Key Vault     : $keyVaultName"
 Write-Host "API identity  : $ApiIdentityName"
+Write-Host "Web identity  : $(if ($webPrincipalId) { $WebIdentityName } else { '(not found — skipped)' })"
 Write-Host "CI identity   : $CiAppDisplayName"
 Write-Host ""
 
 # GitHub can push approved images, but receives no Key Vault data-plane access.
 Ensure-RoleAssignment -AssigneeObjectId $ciPrincipalId -Role 'AcrPush' -Scope $acrId
 
-# Runtime identity can only pull images and read secrets required by Container Apps.
+# API runtime identity: pull images + read secrets.
 Ensure-RoleAssignment -AssigneeObjectId $apiPrincipalId -Role 'AcrPull' -Scope $acrId
 Ensure-RoleAssignment -AssigneeObjectId $apiPrincipalId -Role 'Key Vault Secrets User' -Scope $keyVaultId
+
+# Web runtime identity: pull images only (no Key Vault — Entra config arrives via env vars).
+if ($webPrincipalId) {
+    Ensure-RoleAssignment -AssigneeObjectId $webPrincipalId -Role 'AcrPull' -Scope $acrId -PrincipalType 'ServicePrincipal'
+}
 
 Write-Host ""
 Write-Host "RBAC READY" -ForegroundColor Green
 Write-Host "GitHub CI: AcrPush"
 Write-Host "API managed identity: AcrPull + Key Vault Secrets User"
-Write-Host "No PostgreSQL administrator role was granted to the API identity."
+if ($webPrincipalId) { Write-Host "Web managed identity: AcrPull" }
+Write-Host "No PostgreSQL administrator role was granted to either runtime identity."
