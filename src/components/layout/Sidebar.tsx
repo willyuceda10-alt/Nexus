@@ -25,6 +25,7 @@ import {
 import { BRAND } from '../../config/brand';
 import { useNexus } from '../../context/NexusContext';
 import { isOpenPersonalWork } from '../../domain/myWork';
+import { prefetchView } from '../../prefetch';
 
 interface NavigationItem {
   id: string;
@@ -107,6 +108,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             key={item.id}
             onClick={() => navigateTo(item.id)}
+            onMouseEnter={() => prefetchView(item.id)}
             className={`group flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-[12px] transition ${
               isActive
                 ? 'bg-green-50 font-bold text-green-900 ring-1 ring-green-100'
@@ -258,6 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     setActiveTab('project');
                     onNavigate();
                   }}
+                  onMouseEnter={() => prefetchView('project')}
                   className={`group w-full rounded-xl px-3 py-2.5 text-left transition ${selected ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -280,6 +283,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="border-t border-slate-100 p-3">
         <button
           onClick={() => navigateTo('settings')}
+          onMouseEnter={() => prefetchView('settings')}
           className={`mb-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[11px] font-semibold transition ${activeTab === 'settings' ? 'bg-green-50 text-green-800' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
         >
           <Settings2 className="h-4 w-4" /> Configuración
