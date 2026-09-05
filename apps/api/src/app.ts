@@ -36,6 +36,7 @@ import { materialMasterV2Routes } from './routes/material-master-v2.js';
 import { materialOperationsV2Routes } from './routes/material-operations-v2.js';
 import { materialOverviewV2Routes } from './routes/material-overview-v2.js';
 import { meRoutes } from './routes/me.js';
+import { teamMemberRoutes } from './routes/team-members.js';
 import { meetingActionsV1Routes } from './routes/meeting-actions-v1.js';
 import { meetingAvailabilityV1Routes } from './routes/meeting-availability-v1.js';
 import { meetingCalendarProjectionV1Routes } from './routes/meeting-calendar-projection-v1.js';
@@ -295,6 +296,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(healthRoutes);
   await app.register(sessionRoutes);
   await app.register(meRoutes);
+  await app.register(teamMemberRoutes);
   await app.register(authorizationV2Routes);
   await app.register(outboxAdminV2Routes);
   await app.register(automationV1Routes);

@@ -29,6 +29,30 @@ export interface SessionResponse {
   preferredTenantId: string | null;
 }
 
+export type TenantRole = 'OWNER' | 'TENANT_ADMIN' | 'MEMBER' | 'GUEST';
+export type TenantMembershipStatus = 'ACTIVE' | 'INVITED' | 'SUSPENDED';
+
+export interface ApiTeamMember {
+  id: string;
+  role: TenantRole;
+  status: TenantMembershipStatus;
+  createdAt: string;
+  user: { id: string; email: string; fullName: string; avatarUrl: string | null; isActive: boolean };
+}
+
+export interface ApiTeamMembersResponse {
+  members: ApiTeamMember[];
+}
+
+export interface CreateApiTeamInvitationInput {
+  email: string;
+  role: Exclude<TenantRole, 'OWNER'>;
+}
+
+export interface ApiTeamInvitationResponse {
+  invitation: { email: string; role: TenantRole; status: TenantMembershipStatus };
+}
+
 export interface ApiWorkspace {
   id: string;
   name: string;

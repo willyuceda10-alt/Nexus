@@ -10,9 +10,12 @@ import {
   Save,
   ShieldCheck,
   Sparkles,
+  UserPlus,
   UsersRound,
+  X,
 } from 'lucide-react';
 import { bridataApi, BridataApiError } from '../../api/client';
+import type { ApiTeamMember, TenantRole } from '../../api/contracts';
 import type {
   ApiExternalNotificationPreferenceV1,
   ApiNotificationCapabilitiesV1,
@@ -140,10 +143,144 @@ function ChannelCard({
   );
 }
 
+const ROLE_LABELS: Record<TenantRole, string> = {
+  OWNER: 'Owner',
+  TENANT_ADMIN: 'Admin',
+  MEMBER: 'Miembro',
+  GUEST: 'Invitado',
+};
+
+function TeamSection({ apiReady, canManage }: { apiReady: boolean; canManage: boolean }) {
+  const [members, setMembers] = useState<ApiTeamMember[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<Exclude<TenantRole, 'OWNER'>>('MEMBER');
+  const [inviting, setInviting] = useState(false);
+  const [feedback, setFeedback] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
+
+  const load = () => {
+    if (!apiReady) return;
+    setLoading(true);
+    bridataApi
+      .teamMembers()
+      .then((response) => setMembers(response.members))
+      .catch((cause) => setFeedback({ kind: 'error', text: errorText(cause) }))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, [apiReady]);
+
+  const invite = async () => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed.includes('@')) {
+      setFeedback({ kind: 'error', text: 'Ingresa un correo válido.' });
+      return;
+    }
+    setInviting(true);
+    setFeedback(null);
+    try {
+      await bridataApi.inviteTeamMember({ email: trimmed, role });
+      setFeedback({ kind: 'success', text: `Invitación enviada a ${trimmed}. Se unirá a este workspace en su primer inicio de sesión.` });
+      setEmail('');
+      load();
+    } catch (cause) {
+      setFeedback({ kind: 'error', text: errorText(cause) });
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const revoke = async (membershipId: string) => {
+    try {
+      await bridataApi.revokeTeamInvitation(membershipId);
+      load();
+    } catch (cause) {
+      setFeedback({ kind: 'error', text: errorText(cause) });
+    }
+  };
+
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-50 ring-1 ring-slate-100"><UsersRound className="h-5 w-5 text-green-700" /></div>
+        <div><h2 className="text-sm font-extrabold text-slate-950">Equipo</h2><p className="text-xs text-slate-500">Miembros e invitaciones pendientes de este workspace.</p></div>
+      </div>
+
+      {!apiReady ? (
+        <p className="mt-4 text-xs text-slate-400">Disponible en modo API conectado.</p>
+      ) : (
+        <>
+          {canManage && (
+            <div className="mt-4 space-y-2 rounded-2xl bg-slate-50 p-3.5 ring-1 ring-slate-100">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="correo@empresa.com"
+                  className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-green-500"
+                />
+                <select
+                  value={role}
+                  onChange={(event) => setRole(event.target.value as Exclude<TenantRole, 'OWNER'>)}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium"
+                >
+                  <option value="MEMBER">Miembro</option>
+                  <option value="TENANT_ADMIN">Admin</option>
+                  <option value="GUEST">Invitado</option>
+                </select>
+                <button
+                  type="button"
+                  disabled={inviting}
+                  onClick={() => void invite()}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-green-700 px-3.5 py-2 text-xs font-bold text-white hover:bg-green-800 disabled:opacity-50"
+                >
+                  {inviting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />} Invitar
+                </button>
+              </div>
+              {feedback && (
+                <p className={`text-xs ${feedback.kind === 'error' ? 'text-rose-600' : 'text-emerald-700'}`}>{feedback.text}</p>
+              )}
+            </div>
+          )}
+
+          <div className="mt-4 space-y-2">
+            {loading && <p className="text-xs text-slate-400">Cargando…</p>}
+            {!loading && members.length === 0 && <p className="text-xs text-slate-400">Todavía no hay otros miembros.</p>}
+            {members.map((member) => (
+              <div key={member.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3.5 py-2.5 ring-1 ring-slate-100">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-bold text-slate-800">{member.user.fullName || member.user.email}</p>
+                  <p className="truncate text-[11px] text-slate-400">{member.user.email}</p>
+                </div>
+                <div className="flex flex-none items-center gap-2">
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 ring-1 ring-slate-200">{ROLE_LABELS[member.role]}</span>
+                  {member.status === 'INVITED' ? (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 ring-1 ring-amber-200">PENDIENTE</span>
+                  ) : (
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200">ACTIVO</span>
+                  )}
+                  {canManage && member.status === 'INVITED' && (
+                    <button type="button" onClick={() => void revoke(member.id)} title="Revocar invitación" className="rounded-full p-1 text-slate-400 hover:bg-white hover:text-rose-600">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 export const SettingsV2View: React.FC = () => {
   const { tenant, currentWorkspace, currentUser } = useNexus();
   const apiBootstrap = useApiBootstrap();
   const apiReady = apiBootstrap.dataMode === 'api' && apiBootstrap.status === 'ready';
+  const activeRole = apiBootstrap.session?.tenants.find((t) => t.id === apiBootstrap.activeTenantId)?.role;
+  const canManageTeam = activeRole === 'OWNER' || activeRole === 'TENANT_ADMIN';
   const [preferences, setPreferences] = useState<ApiNotificationPreferencesV1>(mockPreferences());
   const [capabilities, setCapabilities] = useState<ApiNotificationCapabilitiesV1>({
     graphDeliveryEnabled: false,
@@ -263,6 +400,8 @@ export const SettingsV2View: React.FC = () => {
               ))}
             </div>
           </section>
+
+          <TeamSection apiReady={apiReady} canManage={canManageTeam} />
         </div>
 
         <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5 shadow-sm">

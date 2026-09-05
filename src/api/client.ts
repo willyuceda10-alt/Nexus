@@ -8,9 +8,12 @@ import type {
   ApiObjectListResponse,
   ApiProjectForecast,
   ApiScheduleAnalysis,
+  ApiTeamInvitationResponse,
+  ApiTeamMembersResponse,
   BootstrapResponse,
   CreateApiDependencyInput,
   CreateApiObjectInput,
+  CreateApiTeamInvitationInput,
   ListObjectsParams,
   SessionResponse,
   UpdateApiDependencyInput,
@@ -430,5 +433,16 @@ export const bridataApi = {
     return request<ApiBaselineSummary>(`/api/v1/projects/${encodeURIComponent(projectId)}/baseline`, {
       method: 'POST', body: JSON.stringify({ overwrite }),
     });
+  },
+  teamMembers(signal?: AbortSignal): Promise<ApiTeamMembersResponse> {
+    return request<ApiTeamMembersResponse>('/api/v1/team/members', { signal });
+  },
+  inviteTeamMember(input: CreateApiTeamInvitationInput): Promise<ApiTeamInvitationResponse> {
+    return request<ApiTeamInvitationResponse>('/api/v1/team/invitations', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+  revokeTeamInvitation(membershipId: string): Promise<void> {
+    return request<void>(`/api/v1/team/invitations/${encodeURIComponent(membershipId)}`, { method: 'DELETE' });
   },
 };
