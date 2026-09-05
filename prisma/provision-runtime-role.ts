@@ -58,7 +58,7 @@ async function main() {
           );
         ELSE
           EXECUTE format(
-            'ALTER ROLE %I WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS',
+            'ALTER ROLE %I WITH LOGIN PASSWORD %L NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS',
             role_name,
             role_password
           );
