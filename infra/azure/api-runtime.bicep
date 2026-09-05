@@ -112,11 +112,11 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
             { name: 'API_RATE_LIMIT_WINDOW_SECONDS', value: '60' }
             { name: 'API_RATE_LIMIT_MAX_KEYS', value: '20000' }
             { name: 'API_TRUST_PROXY_HOPS', value: '1' }
-            { name: 'PROJECT_RISK_MONITOR_EXPECTED', value: string(deployProjectRiskMonitorJob) }
+            { name: 'PROJECT_RISK_MONITOR_EXPECTED', value: deployProjectRiskMonitorJob ? 'true' : 'false' }
             { name: 'PROJECT_RISK_MONITOR_STALE_MINUTES', value: string(projectRiskMonitorStaleMinutes) }
-            { name: 'NOTIFICATION_WORKER_AVAILABLE', value: string(deployNotificationWorker) }
-            { name: 'M365_GRAPH_DELIVERY_ENABLED', value: string(m365GraphDeliveryEnabled) }
-            { name: 'M365_AVAILABILITY_ENABLED', value: string(m365AvailabilityEnabled) }
+            { name: 'NOTIFICATION_WORKER_AVAILABLE', value: deployNotificationWorker ? 'true' : 'false' }
+            { name: 'M365_GRAPH_DELIVERY_ENABLED', value: m365GraphDeliveryEnabled ? 'true' : 'false' }
+            { name: 'M365_AVAILABILITY_ENABLED', value: m365AvailabilityEnabled ? 'true' : 'false' }
             { name: 'M365_OUTLOOK_SENDER_USER', value: m365OutlookSenderUser }
             { name: 'M365_TEAMS_ACTIVITY_TYPE', value: m365TeamsActivityType }
             { name: 'M365_TEAMS_TOPIC_WEB_URL', value: m365TeamsTopicWebUrl }
