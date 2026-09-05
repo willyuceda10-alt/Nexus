@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { prisma } from './db.js';
 import type { AuthPrincipal, AuthenticatedUser } from './auth.js';
@@ -34,18 +35,24 @@ export async function autoProvisionEntraUser(
   const email = principal.email ?? `user-${principal.subject}@unknown`;
   const isPlatformAdmin = PLATFORM_ADMIN_OIDS.has(principal.subject);
 
+  const tenantId = randomUUID();
+
   try {
     return await prisma.$transaction(async (tx) => {
+      // tenants.id has no client-side default (DB-generated gen_random_uuid()), but the
+      // tenant_isolation RLS policy's WITH CHECK requires current_tenant_id to already equal
+      // the row being inserted. Pre-generate the id so the config can be set before the insert.
+      await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
+
       const user = await tx.user.create({
         data: { fullName, email, isActive: true, isPlatformAdmin },
         select: { id: true, email: true, fullName: true, avatarUrl: true, isActive: true },
       });
 
       const tenant = await tx.tenant.create({
-        data: { name: `${fullName}'s Workspace`, slug: deriveSlug(email), plan: 'STARTER', status: 'ACTIVE' },
+        data: { id: tenantId, name: `${fullName}'s Workspace`, slug: deriveSlug(email), plan: 'STARTER', status: 'ACTIVE' },
       });
 
-      await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${tenant.id}, true)`;
       await tx.$executeRaw`SELECT set_config('app.current_user_id', ${user.id}, true)`;
 
       await tx.tenantMembership.create({
