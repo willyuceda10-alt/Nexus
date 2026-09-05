@@ -170,12 +170,31 @@ jobs:
             echo "web_fqdn=$web_fqdn" >> "$GITHUB_OUTPUT"
           fi
 
+          automation_identity_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-automation-mi --query id --output tsv 2>/dev/null || true)"
+          automation_identity_client_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-automation-mi --query clientId --output tsv 2>/dev/null || true)"
+          if [ -z "$automation_identity_id" ]; then
+            az identity create --name nexus-dev-automation-mi --resource-group "$AZURE_RESOURCE_GROUP" --location "$location" --output none
+            automation_identity_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-automation-mi --query id --output tsv)"
+            automation_identity_client_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-automation-mi --query clientId --output tsv)"
+          fi
+          notification_identity_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-notification-mi --query id --output tsv 2>/dev/null || true)"
+          notification_identity_client_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-notification-mi --query clientId --output tsv 2>/dev/null || true)"
+          if [ -z "$notification_identity_id" ]; then
+            az identity create --name nexus-dev-notification-mi --resource-group "$AZURE_RESOURCE_GROUP" --location "$location" --output none
+            notification_identity_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-notification-mi --query id --output tsv)"
+            notification_identity_client_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-notification-mi --query clientId --output tsv)"
+          fi
+
           echo "location=$location" >> "$GITHUB_OUTPUT"
           echo "acr_name=$acr_name" >> "$GITHUB_OUTPUT"
           echo "login_server=$login_server" >> "$GITHUB_OUTPUT"
           echo "key_vault_name=$key_vault_name" >> "$GITHUB_OUTPUT"
           echo "api_identity_id=$api_identity_id" >> "$GITHUB_OUTPUT"
           echo "api_identity_client_id=$api_identity_client_id" >> "$GITHUB_OUTPUT"
+          echo "automation_identity_id=$automation_identity_id" >> "$GITHUB_OUTPUT"
+          echo "automation_identity_client_id=$automation_identity_client_id" >> "$GITHUB_OUTPUT"
+          echo "notification_identity_id=$notification_identity_id" >> "$GITHUB_OUTPUT"
+          echo "notification_identity_client_id=$notification_identity_client_id" >> "$GITHUB_OUTPUT"
           echo "managed_environment_id=$managed_environment_id" >> "$GITHUB_OUTPUT"
           echo "cae_name=$cae_name" >> "$GITHUB_OUTPUT"
           echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
@@ -202,6 +221,11 @@ jobs:
           MANAGED_ENVIRONMENT_ID: ${{ steps.runtime.outputs.managed_environment_id }}
           LOGIN_SERVER: ${{ steps.runtime.outputs.login_server }}
           API_IDENTITY_ID: ${{ steps.runtime.outputs.api_identity_id }}
+          API_IDENTITY_CLIENT_ID: ${{ steps.runtime.outputs.api_identity_client_id }}
+          AUTOMATION_IDENTITY_ID: ${{ steps.runtime.outputs.automation_identity_id }}
+          AUTOMATION_IDENTITY_CLIENT_ID: ${{ steps.runtime.outputs.automation_identity_client_id }}
+          NOTIFICATION_IDENTITY_ID: ${{ steps.runtime.outputs.notification_identity_id }}
+          NOTIFICATION_IDENTITY_CLIENT_ID: ${{ steps.runtime.outputs.notification_identity_client_id }}
           API_IMAGE: ${{ steps.runtime.outputs.api_image }}
           MIGRATION_IMAGE: ${{ steps.runtime.outputs.migration_image }}
           RUNTIME_DATABASE_SECRET_URI: ${{ steps.runtime.outputs.runtime_database_secret_uri }}
@@ -215,6 +239,11 @@ jobs:
             --arg managedEnvironmentId "$MANAGED_ENVIRONMENT_ID" \
             --arg registryServer "$LOGIN_SERVER" \
             --arg apiIdentityResourceId "$API_IDENTITY_ID" \
+            --arg apiIdentityClientId "$API_IDENTITY_CLIENT_ID" \
+            --arg automationIdentityResourceId "$AUTOMATION_IDENTITY_ID" \
+            --arg automationIdentityClientId "$AUTOMATION_IDENTITY_CLIENT_ID" \
+            --arg notificationIdentityResourceId "$NOTIFICATION_IDENTITY_ID" \
+            --arg notificationIdentityClientId "$NOTIFICATION_IDENTITY_CLIENT_ID" \
             --arg apiImage "$API_IMAGE" \
             --arg migrationImage "$MIGRATION_IMAGE" \
             --arg runtimeDatabaseSecretUri "$RUNTIME_DATABASE_SECRET_URI" \
@@ -232,6 +261,11 @@ jobs:
                 "managedEnvironmentId":{"value":$managedEnvironmentId},
                 "registryServer":{"value":$registryServer},
                 "apiIdentityResourceId":{"value":$apiIdentityResourceId},
+                "apiIdentityClientId":{"value":$apiIdentityClientId},
+                "automationIdentityResourceId":{"value":$automationIdentityResourceId},
+                "automationIdentityClientId":{"value":$automationIdentityClientId},
+                "notificationIdentityResourceId":{"value":$notificationIdentityResourceId},
+                "notificationIdentityClientId":{"value":$notificationIdentityClientId},
                 "apiImage":{"value":$apiImage},
                 "migrationImage":{"value":$migrationImage},
                 "runtimeDatabaseSecretUri":{"value":$runtimeDatabaseSecretUri},
