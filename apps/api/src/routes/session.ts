@@ -3,6 +3,7 @@ import {
   authenticate,
   resolveAuthenticatedUser,
 } from '../auth.js';
+import { autoProvisionEntraUser } from '../auto-provision.js';
 import {
   withAuthenticatedUser,
   withTenant,
@@ -14,7 +15,11 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [authenticate] },
     async (request, reply) => {
       const principal = request.authPrincipal!;
-      const user = await resolveAuthenticatedUser(principal);
+      let user = await resolveAuthenticatedUser(principal);
+
+      if (!user && principal.provider === 'ENTRA_ID') {
+        user = await autoProvisionEntraUser(principal);
+      }
 
       if (!user || !user.isActive) {
         return reply.code(403).send({

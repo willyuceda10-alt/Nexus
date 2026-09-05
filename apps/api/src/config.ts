@@ -75,6 +75,7 @@ const envSchema = z
     AZURE_INTEGRATION_CONTAINER: z.string().trim().min(3).max(63).default('bridata-imports'),
     INTEGRATION_MAX_FILE_BYTES: z.coerce.number().int().min(1_048_576).max(209_715_200).default(52_428_800),
     INTEGRATION_PARSE_MAX_FILE_BYTES: z.coerce.number().int().min(1_048_576).max(52_428_800).default(26_214_400),
+    ENTRA_PLATFORM_ADMIN_OIDS: optionalNonEmptyString,
   })
   .superRefine((env, ctx) => {
     if (env.AUTH_MODE === 'entra') {
