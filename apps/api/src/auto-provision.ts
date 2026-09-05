@@ -58,8 +58,8 @@ export async function autoProvisionEntraUser(
           provider: 'ENTRA_ID',
           issuer: principal.issuer,
           subject: principal.subject,
-          providerTenantId: principal.providerTenantId,
-          emailSnapshot: principal.email,
+          providerTenantId: principal.providerTenantId ?? null,
+          emailSnapshot: principal.email ?? null,
         },
       });
 
