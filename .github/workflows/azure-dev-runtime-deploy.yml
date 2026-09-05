@@ -411,6 +411,7 @@ jobs:
         if: steps.runtime.outputs.deploy_web == 'true'
         shell: bash
         env:
+          LOCATION: ${{ steps.runtime.outputs.location }}
           MANAGED_ENVIRONMENT_ID: ${{ steps.runtime.outputs.managed_environment_id }}
           LOGIN_SERVER: ${{ steps.runtime.outputs.login_server }}
           WEB_IDENTITY_ID: ${{ steps.runtime.outputs.web_identity_id }}
@@ -422,6 +423,7 @@ jobs:
           set -euo pipefail
           entra_api_scope="api://$ENTRA_API_CLIENT_ID/access_as_user"
           jq -n \
+            --arg location "$LOCATION" \
             --arg managedEnvironmentId "$MANAGED_ENVIRONMENT_ID" \
             --arg registryServer "$LOGIN_SERVER" \
             --arg webIdentityResourceId "$WEB_IDENTITY_ID" \
@@ -434,6 +436,7 @@ jobs:
               "$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
               "contentVersion":"1.0.0.0",
               "parameters":{
+                "location":{"value":$location},
                 "environment":{"value":"dev"},
                 "tags":{"value":{"product":"Bridata Project","technicalPlatform":"Nexus Core","environment":"dev","managedBy":"Bicep"}},
                 "managedEnvironmentId":{"value":$managedEnvironmentId},
