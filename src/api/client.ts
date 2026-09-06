@@ -94,14 +94,17 @@ let accessTokenProvider: AccessTokenProvider | null = null;
 let tenantIdProvider: TenantIdProvider | null = null;
 let unauthorizedHandler: UnauthorizedHandler | null = null;
 
+// Merges rather than replaces: a caller that passes only one provider must not
+// silently drop the others. Omitting a key leaves it untouched; passing it as
+// null clears it explicitly.
 export function configureApiSession(options: {
   getAccessToken?: AccessTokenProvider | null;
   getTenantId?: TenantIdProvider | null;
   onUnauthorized?: UnauthorizedHandler | null;
 }): void {
-  accessTokenProvider = options.getAccessToken ?? null;
-  tenantIdProvider = options.getTenantId ?? null;
-  unauthorizedHandler = options.onUnauthorized ?? null;
+  if ('getAccessToken' in options) accessTokenProvider = options.getAccessToken ?? null;
+  if ('getTenantId' in options) tenantIdProvider = options.getTenantId ?? null;
+  if ('onUnauthorized' in options) unauthorizedHandler = options.onUnauthorized ?? null;
 }
 
 export class BridataApiError extends Error {
@@ -135,7 +138,9 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   const response = await fetch(`${runtimeConfig.apiBaseUrl}${path}`, { ...init, headers });
   if (!response.ok) {
     if (response.status === 401 && unauthorizedHandler) {
-      await unauthorizedHandler();
+      // Fire-and-forget: the handler starts a login redirect whose promise never settles,
+      // so awaiting it would strand this request and every caller's catch/finally.
+      void unauthorizedHandler();
     }
 
     let payload: ApiErrorPayload = {};

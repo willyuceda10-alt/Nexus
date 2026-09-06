@@ -270,6 +270,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return payload;
   });
 
+  // Maps both native PostgreSQL SQLSTATEs (raised by raw-SQL paths, arriving wrapped
+  // as Prisma P2010) and Prisma's own error codes onto client-facing responses.
+  const CONSTRAINT_ERROR_RESPONSES: Record<string, { status: number; error: string; message: string }> = {
+    '23505': { status: 409, error: 'conflict', message: 'A record with these values already exists.' },
+    P2002: { status: 409, error: 'conflict', message: 'A record with these values already exists.' },
+    '23503': { status: 409, error: 'reference_conflict', message: 'A referenced record is missing or still in use.' },
+    P2003: { status: 409, error: 'reference_conflict', message: 'A referenced record is missing or still in use.' },
+    '23514': { status: 400, error: 'check_violation', message: 'One or more values are outside their allowed range.' },
+    '23502': { status: 400, error: 'missing_required_value', message: 'A required value was not provided.' },
+    '22P02': { status: 400, error: 'invalid_value', message: 'One or more values are not in a valid format.' },
+    P2023: { status: 400, error: 'invalid_value', message: 'One or more values are not in a valid format.' },
+    P2025: { status: 404, error: 'not_found', message: 'The requested record does not exist.' },
+  };
+
   app.setErrorHandler((error: FastifyError, request, reply) => {
     if (error instanceof ProjectScheduleV2ValidationError) {
       request.log.info({ err: error }, 'Project Engine V2 validation rejected request');
@@ -283,6 +297,22 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       void reply.code(409).send({ error: 'domain_integrity_conflict', message: dbError.meta?.message || error.message, correlationId: request.id });
       return;
     }
+
+    // Constraint violations are the caller's problem, not a server fault. Without
+    // this mapping every duplicate key, dangling FK or malformed uuid surfaced as
+    // an opaque 500 across the raw-SQL engines (material, cost) and Prisma models.
+    // Messages stay generic: the constraint name can name internal columns.
+    const constraintResponse = CONSTRAINT_ERROR_RESPONSES[postgresCode ?? ''];
+    if (constraintResponse) {
+      request.log.info({ err: error, postgresCode }, 'Database constraint rejected request');
+      void reply.code(constraintResponse.status).send({
+        error: constraintResponse.error,
+        message: constraintResponse.message,
+        correlationId: request.id,
+      });
+      return;
+    }
+
     request.log.error({ err: error }, 'Unhandled Bridata Project API error');
     const statusCode = error.statusCode && error.statusCode < 500 ? error.statusCode : 500;
     void reply.code(statusCode).send({

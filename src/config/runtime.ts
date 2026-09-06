@@ -36,7 +36,19 @@ function optionalTrimmed(value: string | undefined): string | null {
   return normalized ? normalized : null;
 }
 
-const rc = typeof window !== 'undefined' ? (window.__BRIDATA_CONFIG__ ?? {}) : {};
+const injected = typeof window !== 'undefined' ? window.__BRIDATA_CONFIG__ : undefined;
+
+// In a production build there are no VITE_ fallbacks compiled in (the container build
+// receives none, and .env is excluded from the image), so a missing runtime-config.js
+// would silently resolve to dataMode 'mock' + authMode 'dev' — fabricated data rendered
+// as if it were real, with authentication off. Fail loudly instead of degrading.
+if (import.meta.env.PROD && !injected) {
+  throw new Error(
+    'runtime-config.js did not load. Refusing to start: the app would fall back to mock data with authentication disabled.',
+  );
+}
+
+const rc = injected ?? {};
 
 export const runtimeConfig = Object.freeze({
   dataMode: resolveDataMode(rc.dataMode ?? import.meta.env.VITE_DATA_MODE),

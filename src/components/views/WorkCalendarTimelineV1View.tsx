@@ -71,7 +71,12 @@ export const WorkCalendarTimelineV1View: React.FC = () => {
       setDetail(result);
       const first = result.views.find((view) => view.view_type === 'CALENDAR' || view.view_type === 'TIMELINE') ?? null;
       setSelectedViewId((current) => current && result.views.some((view) => view.id === current) ? current : first?.id ?? null);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo cargar el Board.'); }
+    } catch (cause) {
+      // Drop any previously seeded mock detail so a failure never renders as live data.
+      setDetail(null);
+      setTemporal(null);
+      setError(cause instanceof Error ? cause.message : 'No se pudo cargar el Board.');
+    }
     finally { setLoading(false); }
   };
 
@@ -83,7 +88,10 @@ export const WorkCalendarTimelineV1View: React.FC = () => {
       const from = new Date(Date.UTC(now.getUTCFullYear() - 1, 0, 1)).toISOString();
       const to = new Date(Date.UTC(now.getUTCFullYear() + 2, 11, 31, 23, 59, 59)).toISOString();
       setTemporal(await workOsTemporalV1Api.data(tenant.id, boardId, view.id, from, to));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo cargar la vista temporal.'); }
+    } catch (cause) {
+      setTemporal(null);
+      setError(cause instanceof Error ? cause.message : 'No se pudo cargar la vista temporal.');
+    }
     finally { setLoading(false); }
   };
 

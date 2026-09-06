@@ -14,4 +14,20 @@ window.__BRIDATA_CONFIG__ = {
 };
 JSEOF
 
+# The API origin is only known at container start, so the CSP that must allow it is
+# generated here and included by nginx.conf. connect-src additionally needs the Entra
+# login host for the PKCE token exchange.
+API_ORIGIN=""
+if [ -n "${BRIDATA_API_BASE_URL:-}" ]; then
+  API_ORIGIN=" ${BRIDATA_API_BASE_URL}"
+fi
+
+cat > /etc/nginx/conf.d/security-headers.conf <<CSPEOF
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "DENY" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'${API_ORIGIN} https://login.microsoftonline.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+CSPEOF
+
 exec "$@"

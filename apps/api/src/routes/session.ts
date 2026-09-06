@@ -3,7 +3,7 @@ import {
   authenticate,
   resolveAuthenticatedUser,
 } from '../auth.js';
-import { resolveOrProvisionEntraUser } from '../auto-provision.js';
+import { activatePendingInvitations, resolveOrProvisionEntraUser } from '../auto-provision.js';
 import {
   withAuthenticatedUser,
   withTenant,
@@ -19,6 +19,11 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
 
       if (!user && principal.provider === 'ENTRA_ID') {
         user = await resolveOrProvisionEntraUser(principal);
+      } else if (user) {
+        // A returning user already has an identity, so they never pass through the
+        // link-on-first-login path. Pending invitations must still be honoured here
+        // or they would stay INVITED forever.
+        await activatePendingInvitations(user.id);
       }
 
       if (!user || !user.isActive) {
@@ -43,35 +48,43 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         }),
       );
 
-      const tenants = (
-        await Promise.all(
-          memberships.map(async (membership) => {
-            const tenant = await withTenant(membership.tenantId, (tx) =>
-              tx.tenant.findFirst({
-                where: {
-                  id: membership.tenantId,
-                  status: 'ACTIVE',
-                },
-                select: {
-                  id: true,
-                  name: true,
-                  slug: true,
-                  plan: true,
-                  status: true,
-                  metadata: true,
-                },
-              }),
-            );
+      // One transaction per membership would open N pooled connections concurrently
+      // and exhaust the pool for anyone in more than a handful of tenants. The
+      // tenant_isolation RLS policy is scoped per tenant id, so read each row under
+      // its own tenant context but sequentially, holding one connection at a time.
+      const tenants: Array<{
+        id: string;
+        name: string;
+        slug: string;
+        plan: string;
+        status: string;
+        metadata: unknown;
+        membershipId: string;
+        role: string;
+      }> = [];
 
-            if (!tenant) return null;
-            return {
-              ...tenant,
-              membershipId: membership.id,
-              role: membership.role,
-            };
+      for (const membership of memberships) {
+        const tenant = await withTenant(membership.tenantId, (tx) =>
+          tx.tenant.findUnique({
+            where: { id: membership.tenantId },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              plan: true,
+              status: true,
+              metadata: true,
+            },
           }),
-        )
-      ).filter((tenant): tenant is NonNullable<typeof tenant> => tenant !== null);
+        );
+
+        if (!tenant || tenant.status !== 'ACTIVE') continue;
+        tenants.push({
+          ...tenant,
+          membershipId: membership.id,
+          role: membership.role,
+        });
+      }
 
       const preferredTenantId =
         principal.provider === 'DEV' &&

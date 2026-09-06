@@ -177,6 +177,10 @@ export const MeetingsDecisionsV2View: React.FC<{ projectId?: string }> = ({ proj
       setCapabilities(capabilityResult);
       setPeople(peopleResult.items);
     } catch (cause) {
+      // Never leave mock rows on screen after a real failure — they are
+      // indistinguishable from live data and hide the outage from the user.
+      setMeetings([]);
+      setPeople([]);
       setError(cause instanceof Error ? cause.message : 'No se pudieron cargar las reuniones.');
     } finally {
       setLoading(false);

@@ -403,6 +403,13 @@ export async function workOsBoardConfigOptionsV1Routes(app: FastifyInstance): Pr
         if (!member) return reply.code(409).send({ error: 'person_not_workspace_member' });
       }
 
+      // Must be rejected before the version bump below: returning a reply from inside
+      // $transaction does not roll it back, so a late rejection would still commit the
+      // increment and permanently desync the client's optimistic-locking token.
+      if (column.source !== 'CUSTOM' && column.field_key !== 'assigneeId') {
+        return reply.code(409).send({ error: 'unsupported_core_person_field' });
+      }
+
       const updated = await tx.nexusObject.updateMany({
         where: { id: source.id, tenantId: actor.tenantId, version: body.data.version, deletedAt: null },
         data: column.source === 'CORE' && column.field_key === 'assigneeId'
@@ -420,8 +427,6 @@ export async function workOsBoardConfigOptionsV1Routes(app: FastifyInstance): Pr
             update: { valueText: body.data.userId, valueNumber: null, valueDate: null, valueBoolean: null, valueJson: Prisma.DbNull },
           });
         }
-      } else if (column.field_key !== 'assigneeId') {
-        return reply.code(409).send({ error: 'unsupported_core_person_field' });
       }
       return { objectId: source.id, version: body.data.version + 1, userId: body.data.userId };
     });

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BadgeDollarSign,
@@ -62,6 +62,8 @@ export const ProjectCostsV2View: React.FC<{ projectId: string; embedded?: boolea
   const [overview, setOverview] = useState<ApiProjectCostOverviewV2 | null>(null);
   const [catalog, setCatalog] = useState<ApiCostCatalogV2 | null>(null);
   const [materialSetup, setMaterialSetup] = useState<ApiMaterialSetupV2 | null>(null);
+  const [materialSetupFailed, setMaterialSetupFailed] = useState(false);
+  const reloadVersion = useRef(0);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,14 +85,24 @@ export const ProjectCostsV2View: React.FC<{ projectId: string; embedded?: boolea
 
   const reload = useCallback(async () => {
     if (!isApiMode || !currentWorkspace) return;
+    // Guards against a slower response for a previous workspace/project landing last
+    // and rendering another workspace's cost data under this header.
+    const version = ++reloadVersion.current;
     setLoading(true);
     setError(null);
+    setMaterialSetupFailed(false);
     try {
       const [overviewResult, catalogResult, materialResult] = await Promise.all([
         bridataApi.projectCostOverviewV2(projectId),
         bridataApi.costCatalogV2(currentWorkspace.id),
-        bridataApi.materialSetupV2(currentWorkspace.id).catch(() => null),
+        // Materials are optional context here, so a failure degrades instead of
+        // failing the whole view — but it must still be visible to the user.
+        bridataApi.materialSetupV2(currentWorkspace.id).catch(() => {
+          if (version === reloadVersion.current) setMaterialSetupFailed(true);
+          return null;
+        }),
       ]);
+      if (version !== reloadVersion.current) return;
       setOverview(overviewResult);
       setCatalog(catalogResult);
       setMaterialSetup(materialResult);
@@ -102,9 +114,12 @@ export const ProjectCostsV2View: React.FC<{ projectId: string; embedded?: boolea
         overviewResult.lines.map((line) => [line.id, line.forecastRemainingUncommitted.toString()]),
       ));
     } catch (cause) {
+      if (version !== reloadVersion.current) return;
+      setOverview(null);
+      setCatalog(null);
       setError(messageOf(cause));
     } finally {
-      setLoading(false);
+      if (version === reloadVersion.current) setLoading(false);
     }
   }, [currentWorkspace, isApiMode, projectId, tenant.currency]);
 
@@ -205,11 +220,12 @@ export const ProjectCostsV2View: React.FC<{ projectId: string; embedded?: boolea
         </div>
       </section>
 
-      {(feedback || unallocated > 0 || overview.currencyIssues.length > 0 || !overview.profile) && (
+      {(feedback || materialSetupFailed || unallocated > 0 || overview.currencyIssues.length > 0 || !overview.profile) && (
         <section className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-1">
               {feedback && <p className="text-[9px] font-semibold text-slate-600">{feedback}</p>}
+              {materialSetupFailed && <p className="text-[9px] font-bold text-amber-700">No se pudo cargar el catálogo de materiales; los selectores de material aparecerán vacíos.</p>}
               {!overview.profile && <p className="text-[9px] font-bold text-amber-700">El proyecto todavía no tiene perfil monetario V2.</p>}
               {unallocated > 0 && <p className="text-[9px] font-bold text-amber-700">{money(unallocated)} de reales/compromisos no pudieron asignarse de forma unívoca a una línea presupuestal.</p>}
               {overview.currencyIssues.length > 0 && <p className="text-[9px] font-bold text-rose-700">{overview.currencyIssues.length} movimiento(s) están en otra moneda o sin moneda y no se incluyen en los totales.</p>}

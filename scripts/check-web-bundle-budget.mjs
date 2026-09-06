@@ -10,6 +10,10 @@ import {
   join,
 } from 'node:path';
 
+// URL.pathname yields "/C:/..." on Windows, which join() turns into "C:\C:\...".
+// fileURLToPath is the only correct file-URL -> path conversion on both platforms.
+import { fileURLToPath } from 'node:url';
+
 const distDir =
   new URL(
     '../dist/',
@@ -120,7 +124,9 @@ else {
             (name) => {
               const file =
                 join(
-                  assetsDir.pathname,
+                  fileURLToPath(
+                    assetsDir,
+                  ),
                   name,
                 );
 
@@ -151,7 +157,9 @@ else {
           (item) =>
             item.name !==
               basename(
-                entryPath.pathname,
+                fileURLToPath(
+                  entryPath,
+                ),
               ) &&
             !item.name.startsWith(
               'vendor-react-',
@@ -173,7 +181,9 @@ else {
 
             entryFile:
               basename(
-                entryPath.pathname,
+                fileURLToPath(
+                  entryPath,
+                ),
               ),
 
             entryKb:

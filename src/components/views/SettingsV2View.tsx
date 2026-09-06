@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
   Building2,
@@ -57,7 +57,7 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : 'No se pudo completar la operación.';
 }
 
-function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
+function Toggle({ checked, onChange, disabled = false, label }: { checked: boolean; onChange: (value: boolean) => void; disabled?: boolean; label: string }) {
   return (
     <button
       type="button"
@@ -65,6 +65,7 @@ function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onC
       onClick={() => onChange(!checked)}
       className={`relative h-6 w-11 rounded-full transition ${checked ? 'bg-green-700' : 'bg-slate-200'} disabled:cursor-not-allowed disabled:opacity-50`}
       aria-pressed={checked}
+      aria-label={label}
     >
       <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${checked ? 'left-[22px]' : 'left-0.5'}`} />
     </button>
@@ -101,7 +102,7 @@ function ChannelCard({
             <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
           </div>
         </div>
-        <Toggle checked={preference.enabled} onChange={(enabled) => onChange({ ...preference, enabled })} />
+        <Toggle checked={preference.enabled} onChange={(enabled) => onChange({ ...preference, enabled })} label={`Activar ${title}`} />
       </div>
 
       <div className="mt-5 grid gap-4 border-t border-slate-100 pt-4 md:grid-cols-2">
@@ -121,7 +122,7 @@ function ChannelCard({
             <span className="block text-xs font-bold text-slate-700">Solo si requiere acción</span>
             <span className="mt-0.5 block text-[10px] text-slate-400">Reduce avisos informativos.</span>
           </span>
-          <Toggle checked={preference.onlyRequiresAction} onChange={(onlyRequiresAction) => onChange({ ...preference, onlyRequiresAction })} />
+          <Toggle checked={preference.onlyRequiresAction} onChange={(onlyRequiresAction) => onChange({ ...preference, onlyRequiresAction })} label={`${title}: notificar solo si requiere acción`} />
         </label>
       </div>
 
@@ -158,17 +159,33 @@ function TeamSection({ apiReady, canManage }: { apiReady: boolean; canManage: bo
   const [inviting, setInviting] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
 
-  const load = () => {
+  // Bumped on every reload so a slow in-flight response can never overwrite a newer one.
+  const loadVersion = useRef(0);
+
+  const load = useCallback((signal?: AbortSignal) => {
     if (!apiReady) return;
+    const version = ++loadVersion.current;
     setLoading(true);
     bridataApi
-      .teamMembers()
-      .then((response) => setMembers(response.members))
-      .catch((cause) => setFeedback({ kind: 'error', text: errorText(cause) }))
-      .finally(() => setLoading(false));
-  };
+      .teamMembers(signal)
+      .then((response) => {
+        if (version === loadVersion.current) setMembers(response.members);
+      })
+      .catch((cause) => {
+        if (!signal?.aborted && version === loadVersion.current) {
+          setFeedback({ kind: 'error', text: errorText(cause) });
+        }
+      })
+      .finally(() => {
+        if (!signal?.aborted && version === loadVersion.current) setLoading(false);
+      });
+  }, [apiReady]);
 
-  useEffect(load, [apiReady]);
+  useEffect(() => {
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
 
   const invite = async () => {
     const trimmed = email.trim().toLowerCase();
@@ -211,18 +228,26 @@ function TeamSection({ apiReady, canManage }: { apiReady: boolean; canManage: bo
       ) : (
         <>
           {canManage && (
-            <div className="mt-4 space-y-2 rounded-2xl bg-slate-50 p-3.5 ring-1 ring-slate-100">
+            <form
+              className="mt-4 rounded-2xl bg-slate-50 p-3.5 ring-1 ring-slate-100"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void invite();
+              }}
+            >
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="correo@empresa.com"
+                  aria-label="Correo de la persona a invitar"
                   className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-green-500"
                 />
                 <select
                   value={role}
                   onChange={(event) => setRole(event.target.value as Exclude<TenantRole, 'OWNER'>)}
+                  aria-label="Rol de la invitación"
                   className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium"
                 >
                   <option value="MEMBER">Miembro</option>
@@ -230,21 +255,27 @@ function TeamSection({ apiReady, canManage }: { apiReady: boolean; canManage: bo
                   <option value="GUEST">Invitado</option>
                 </select>
                 <button
-                  type="button"
+                  type="submit"
                   disabled={inviting}
-                  onClick={() => void invite()}
                   className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-green-700 px-3.5 py-2 text-xs font-bold text-white hover:bg-green-800 disabled:opacity-50"
                 >
                   {inviting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />} Invitar
                 </button>
               </div>
-              {feedback && (
-                <p className={`text-xs ${feedback.kind === 'error' ? 'text-rose-600' : 'text-emerald-700'}`}>{feedback.text}</p>
-              )}
-            </div>
+            </form>
           )}
 
-          <div className="mt-4 space-y-2">
+          {feedback && (
+            <p
+              role="status"
+              aria-live="polite"
+              className={`mt-3 text-xs ${feedback.kind === 'error' ? 'text-rose-600' : 'text-emerald-700'}`}
+            >
+              {feedback.text}
+            </p>
+          )}
+
+          <div className="mt-4 space-y-2" aria-busy={loading}>
             {loading && <p className="text-xs text-slate-400">Cargando…</p>}
             {!loading && members.length === 0 && <p className="text-xs text-slate-400">Todavía no hay otros miembros.</p>}
             {members.map((member) => (
@@ -261,7 +292,7 @@ function TeamSection({ apiReady, canManage }: { apiReady: boolean; canManage: bo
                     <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200">ACTIVO</span>
                   )}
                   {canManage && member.status === 'INVITED' && (
-                    <button type="button" onClick={() => void revoke(member.id)} title="Revocar invitación" className="rounded-full p-1 text-slate-400 hover:bg-white hover:text-rose-600">
+                    <button type="button" onClick={() => void revoke(member.id)} aria-label={`Revocar invitación de ${member.user.email}`} title="Revocar invitación" className="rounded-full p-1 text-slate-400 hover:bg-white hover:text-rose-600">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   )}

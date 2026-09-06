@@ -33,7 +33,7 @@ import {
 } from '../data/mockData';
 import { calculateProjectHealth } from '../domain/projectHealth';
 import { useApiBootstrap } from './ApiBootstrapContext';
-import { configureApiSession, BridataApiError, bridataApi } from '../api/client';
+import { BridataApiError, bridataApi } from '../api/client';
 import { collaborationV1Api } from '../api/collaborationV1Client';
 import { objectRelationsV1Api } from '../api/objectRelationsV1Client';
 import { mapApiObjectCommentV1, mapObjectCollaborationV1 } from '../domain/collaborationV1';
@@ -219,10 +219,9 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       return bootstrap.workspaces[0]?.id ?? null;
     });
-
-    configureApiSession({
-      getTenantId: () => bootstrap.tenant.id,
-    });
+    // No configureApiSession here: ApiBootstrapContext owns the session providers and
+    // already registers a getTenantId that tracks the active tenant. Re-registering a
+    // tenant id captured from this bootstrap would go stale on the next tenant switch.
   }, [apiReady, apiBootstrap.bootstrap]);
 
   const currentUser = useMemo<User>(() => {

@@ -72,6 +72,9 @@ enum TenantStatus {
 
 model User {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // Uniqueness is enforced in the database by the case-insensitive functional index
+  // users_email_lower_key (migration 20260905220000_users_email_unique). Prisma cannot
+  // model a functional index, so it is intentionally absent from this schema.
   email           String    @db.VarChar(255)
   fullName        String    @map("full_name") @db.VarChar(255)
   avatarUrl       String?   @map("avatar_url") @db.Text
