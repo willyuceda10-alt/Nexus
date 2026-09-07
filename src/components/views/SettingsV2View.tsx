@@ -157,7 +157,7 @@ function TeamSection({ apiReady, canManage }: { apiReady: boolean; canManage: bo
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Exclude<TenantRole, 'OWNER'>>('MEMBER');
   const [inviting, setInviting] = useState(false);
-  const [feedback, setFeedback] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ kind: 'error' | 'success' | 'warning'; text: string } | null>(null);
 
   // Bumped on every reload so a slow in-flight response can never overwrite a newer one.
   const loadVersion = useRef(0);
@@ -196,8 +196,13 @@ function TeamSection({ apiReady, canManage }: { apiReady: boolean; canManage: bo
     setInviting(true);
     setFeedback(null);
     try {
-      await bridataApi.inviteTeamMember({ email: trimmed, role });
-      setFeedback({ kind: 'success', text: `Invitación enviada a ${trimmed}. Se unirá a este workspace en su primer inicio de sesión.` });
+      const { invitation } = await bridataApi.inviteTeamMember({ email: trimmed, role });
+      setFeedback({
+        kind: invitation.emailSent ? 'success' : 'warning',
+        text: invitation.emailSent
+          ? `Invitación enviada por correo a ${trimmed}. Se unirá a este workspace en su primer inicio de sesión.`
+          : `${trimmed} ya tiene acceso y entrará en su primer inicio de sesión, pero no se pudo enviar el correo automático. Avísale tú directamente.`,
+      });
       setEmail('');
       load();
     } catch (cause) {
@@ -269,7 +274,13 @@ function TeamSection({ apiReady, canManage }: { apiReady: boolean; canManage: bo
             <p
               role="status"
               aria-live="polite"
-              className={`mt-3 text-xs ${feedback.kind === 'error' ? 'text-rose-600' : 'text-emerald-700'}`}
+              className={`mt-3 text-xs ${
+                feedback.kind === 'error'
+                  ? 'text-rose-600'
+                  : feedback.kind === 'warning'
+                    ? 'text-amber-700'
+                    : 'text-emerald-700'
+              }`}
             >
               {feedback.text}
             </p>

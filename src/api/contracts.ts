@@ -50,7 +50,15 @@ export interface CreateApiTeamInvitationInput {
 }
 
 export interface ApiTeamInvitationResponse {
-  invitation: { email: string; role: TenantRole; status: TenantMembershipStatus };
+  invitation: {
+    id: string;
+    email: string;
+    role: TenantRole;
+    status: TenantMembershipStatus;
+    /** False when automatic email delivery is unconfigured or failed — the invitation is still valid. */
+    emailSent: boolean;
+    emailFailureReason: string | null;
+  };
 }
 
 export interface ApiWorkspace {

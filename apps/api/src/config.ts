@@ -76,6 +76,8 @@ const envSchema = z
     INTEGRATION_MAX_FILE_BYTES: z.coerce.number().int().min(1_048_576).max(209_715_200).default(52_428_800),
     INTEGRATION_PARSE_MAX_FILE_BYTES: z.coerce.number().int().min(1_048_576).max(52_428_800).default(26_214_400),
     ENTRA_PLATFORM_ADMIN_OIDS: optionalNonEmptyString,
+    // Public URL of the web app, used to tell an invited person where to sign in.
+    WEB_APP_BASE_URL: optionalUrlString,
   })
   .superRefine((env, ctx) => {
     if (env.AUTH_MODE === 'entra') {

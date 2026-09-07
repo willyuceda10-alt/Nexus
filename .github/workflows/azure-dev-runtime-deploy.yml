@@ -243,6 +243,7 @@ jobs:
           ADMIN_DATABASE_SECRET_URI: ${{ steps.runtime.outputs.admin_database_secret_uri }}
           ENTRA_API_CLIENT_ID_INPUT: ${{ inputs.entra_api_client_id }}
           CORS_ORIGINS: ${{ steps.runtime.outputs.cors_origins }}
+          WEB_APP_BASE_URL: ${{ steps.runtime.outputs.web_fqdn && format('https://{0}', steps.runtime.outputs.web_fqdn) || '' }}
         run: |
           set -euo pipefail
           jq -n \
@@ -263,6 +264,7 @@ jobs:
             --arg entraApiClientId "$ENTRA_API_CLIENT_ID_INPUT" \
             --arg entraTenantId "$AZURE_TENANT_ID" \
             --arg corsOrigins "$CORS_ORIGINS" \
+            --arg webAppBaseUrl "$WEB_APP_BASE_URL" \
             '{
               "$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
               "contentVersion":"1.0.0.0",
@@ -285,7 +287,8 @@ jobs:
                 "adminDatabaseSecretUri":{"value":$adminDatabaseSecretUri},
                 "entraApiClientId":{"value":$entraApiClientId},
                 "entraTenantId":{"value":$entraTenantId},
-                "corsOrigins":{"value":$corsOrigins}
+                "corsOrigins":{"value":$corsOrigins},
+                "webAppBaseUrl":{"value":$webAppBaseUrl}
               }
             }' > /tmp/bridata-runtime-params.json
 

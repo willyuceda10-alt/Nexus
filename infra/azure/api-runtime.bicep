@@ -21,6 +21,9 @@ param adminDatabaseSecretUri string
 param entraApiClientId string
 param entraTenantId string
 param corsOrigins string
+
+@description('Public URL of the web app, used in invitation emails to tell the recipient where to sign in.')
+param webAppBaseUrl string = ''
 param documentStorageAccountName string = toLower('nexus${environment}${uniqueString(resourceGroup().id)}')
 param documentContainerName string = 'bridata-documents'
 param integrationContainerName string = 'bridata-imports'
@@ -106,6 +109,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApi) {
             { name: 'LOG_LEVEL', value: environment == 'prod' ? 'info' : 'debug' }
             { name: 'DATABASE_URL', secretRef: 'runtime-database-url' }
             { name: 'CORS_ORIGINS', value: corsOrigins }
+            { name: 'WEB_APP_BASE_URL', value: webAppBaseUrl }
             { name: 'AUTH_MODE', value: 'entra' }
             { name: 'ENTRA_API_CLIENT_ID', value: entraApiClientId }
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }

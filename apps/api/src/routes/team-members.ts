@@ -1,7 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authenticate, resolveActor, requireTenantRoles } from '../auth.js';
+import { config } from '../config.js';
 import { withTenant } from '../tenant-transaction.js';
+import { buildTeamInvitationMessageV1 } from '../domain/team-invitation-notification-v1.js';
+import { MicrosoftGraphNotificationClient } from '../microsoft-graph-notification-client.js';
 
 const inviteSchema = z.object({
   email: z
@@ -58,6 +61,11 @@ export async function teamMemberRoutes(app: FastifyInstance): Promise<void> {
       // leave behind an orphan User row that no tenant can see or clean up. `users`
       // is not RLS-protected, so it is reachable from inside the tenant context.
       const outcome = await withTenant(actor.tenantId, async (tx) => {
+        const tenant = await tx.tenant.findUnique({
+          where: { id: actor.tenantId },
+          select: { name: true },
+        });
+
         const existingUser = await tx.user.findFirst({
           where: { email: { equals: email, mode: 'insensitive' } },
           orderBy: { createdAt: 'asc' },
@@ -87,7 +95,7 @@ export async function teamMemberRoutes(app: FastifyInstance): Promise<void> {
               data: { tenantId: actor.tenantId, userId: invitee.id, role, status: 'INVITED' },
             });
 
-        return { conflict: false as const, membership };
+        return { conflict: false as const, membership, tenantName: tenant?.name ?? 'Bridata Project' };
       });
 
       if (outcome.conflict) {
@@ -97,12 +105,38 @@ export async function teamMemberRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // Best effort, and deliberately outside the transaction: the invitation is already
+      // valid without an email (access activates on the invitee's first sign-in), so a
+      // delivery failure must not roll it back. The caller is told whether it went out so
+      // the UI can ask the admin to notify the person by other means.
+      let emailSent = false;
+      let emailFailureReason: string | null = null;
+      try {
+        const message = buildTeamInvitationMessageV1({
+          tenantName: outcome.tenantName,
+          inviterName: actor.name,
+          role,
+          signInUrl: config.WEB_APP_BASE_URL ?? null,
+        });
+        await new MicrosoftGraphNotificationClient().sendOutlookEmail({
+          recipientEmail: email,
+          subject: message.subject,
+          body: message.body,
+        });
+        emailSent = true;
+      } catch (cause) {
+        emailFailureReason = cause instanceof Error ? cause.message : 'unknown_delivery_error';
+        request.log.warn({ err: cause, email }, 'Team invitation email could not be delivered');
+      }
+
       return reply.code(201).send({
         invitation: {
           id: outcome.membership.id,
           email,
           role: outcome.membership.role,
           status: outcome.membership.status,
+          emailSent,
+          emailFailureReason,
         },
       });
     },
