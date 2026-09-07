@@ -16,6 +16,18 @@
   --bridata-muted: #64748b;
   --bridata-radius-card: 20px;
   --bridata-shadow-card: 0 6px 26px rgba(15, 23, 42, 0.035);
+
+  /*
+   * Escala tipográfica. La interfaz se compuso originalmente entre 8px y 12px,
+   * sin un tamaño de cuerpo: el 62% del texto quedaba en 10px o menos. Estos son
+   * los únicos tamaños permitidos de aquí en adelante.
+   */
+  --bridata-text-micro: 11px;   /* etiquetas en mayúscula con tracking */
+  --bridata-text-meta: 12px;    /* metadatos, texto secundario */
+  --bridata-text-body: 13px;    /* cuerpo por defecto */
+  --bridata-text-strong: 15px;  /* títulos de tarjeta */
+  --bridata-text-title: 20px;   /* título de sección */
+  --bridata-text-display: 26px; /* título de página */
 }
 
 @layer base {
@@ -98,6 +110,39 @@
   border-right: 3px solid var(--bridata-green-700);
   background: linear-gradient(90deg, rgba(21, 128, 61, 0.09) 0%, rgba(21, 128, 61, 0) 100%);
 }
+
+/*
+ * PISO TIPOGRÁFICO
+ *
+ * Los ~70 módulos de vista fijan tamaños con valores arbitrarios de Tailwind
+ * (text-[8px], text-[9px]...), que no pasan por el tema y no se pueden corregir
+ * desde la configuración. Reasignarlos aquí sube el piso de legibilidad en toda
+ * la aplicación de una sola vez, mientras cada módulo migra a la escala.
+ *
+ * Al migrar un módulo, sustituye el valor arbitrario por la clase semántica
+ * (.text-micro / .text-meta / .text-body) y esta capa deja de aplicarle.
+ */
+.text-\[8px\],
+.text-\[9px\] { font-size: var(--bridata-text-micro); }
+.text-\[10px\] { font-size: var(--bridata-text-meta); }
+
+.text-micro { font-size: var(--bridata-text-micro); }
+.text-meta { font-size: var(--bridata-text-meta); }
+.text-body { font-size: var(--bridata-text-body); }
+.text-strong { font-size: var(--bridata-text-strong); }
+.text-title { font-size: var(--bridata-text-title); }
+.text-display { font-size: var(--bridata-text-display); }
+
+/*
+ * CONTRASTE
+ *
+ * slate-400 (#94a3b8) sobre blanco da 2.6:1 y se usaba para metadatos, fechas y
+ * porcentajes — muy por debajo del mínimo AA de 4.5:1. Se reasigna a un tono algo
+ * más oscuro que slate-500: éste da 4.8:1 sobre blanco puro, pero cae por debajo
+ * de 4.5 sobre los fondos teñidos (slate-50, green-50/30) que usan las tarjetas.
+ * Los bordes e iconos conservan su tono porque no pasan por esta utilidad.
+ */
+.text-slate-400 { color: #566476; }
 
 /*
  * Compatibilidad temporal para módulos que todavía conservan utilidades

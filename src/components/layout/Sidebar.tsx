@@ -120,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="truncate">{item.label}</span>
             </span>
             {item.badge !== undefined && item.badge > 0 && (
-              <span className="ml-2 min-w-5 rounded-full bg-amber-50 px-1.5 py-0.5 text-center text-[9px] font-black text-amber-700 ring-1 ring-amber-200">{item.badge}</span>
+              <span className="ml-2 min-w-5 rounded-full bg-amber-50 px-1.5 py-0.5 text-center text-micro font-black text-amber-800 ring-1 ring-amber-200">{item.badge}</span>
             )}
           </button>
         );
@@ -246,7 +246,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <section className="mt-6 border-t border-slate-100 pt-5">
           <div className="mb-2 flex items-center justify-between px-3">
             <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Proyectos en marcha</p>
-            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-black text-slate-500">{activeProjects.length}</span>
+            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-micro font-black text-slate-600">{activeProjects.length}</span>
           </div>
           <div className="space-y-1">
             {activeProjects.slice(0, 5).map((project) => {
