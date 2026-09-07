@@ -1,6 +1,7 @@
 import React from 'react';
 import { Clock, ShieldAlert, Calendar, FileCheck, CheckCircle2, User, ArrowRight } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
+import { objectStatusLabel, objectTypeLabel } from '../../domain/objectLabels';
 
 export const TimelineView: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const { activityLogs, objects, openObjectDrawer } = useNexus();
@@ -50,8 +51,8 @@ export const TimelineView: React.FC<{ projectId?: string }> = ({ projectId }) =>
                     </div>
 
                     {targetObj && (
-                      <span className="rounded bg-indigo-50 px-2 py-0.5 font-mono text-[10px] font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                        {targetObj.type}
+                      <span className="rounded bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                        {objectTypeLabel(targetObj.type)}
                       </span>
                     )}
                   </div>
@@ -67,7 +68,7 @@ export const TimelineView: React.FC<{ projectId?: string }> = ({ projectId }) =>
                     >
                       <div>
                         <div className="font-bold text-slate-800 dark:text-slate-200">{targetObj.title}</div>
-                        <div className="text-[11px] text-slate-400">ID: #{targetObj.id} | Estado: {targetObj.status}</div>
+                        <div className="text-[11px] text-slate-400">ID: #{targetObj.id} · {objectStatusLabel(targetObj.status)}</div>
                       </div>
                       <ArrowRight className="h-4 w-4 text-slate-400" />
                     </div>

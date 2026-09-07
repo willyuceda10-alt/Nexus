@@ -2,7 +2,6 @@ import React from 'react';
 import {
   BarChart3,
   BellRing,
-  CalendarClock,
   CalendarDays,
   CheckSquare2,
   ChevronRight,
@@ -69,12 +68,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'inbox', label: 'Mi trabajo', icon: CheckSquare2, badge: personalWorkCount },
   ];
 
+  // "Plan maestro" salía de aquí, pero renderizaba TimelineView — un log de auditoría,
+  // no un plan. Vive ahora como pestaña dentro de Riesgos, que es donde corresponde.
   const planningItems: NavigationItem[] = [
     { id: 'projects', label: 'Proyectos', icon: FolderKanban },
     { id: 'boards', label: 'Tableros', icon: Columns3 },
-    { id: 'calendar', label: 'Calendario y Timeline', icon: CalendarDays },
+    { id: 'calendar', label: 'Calendario', icon: CalendarDays },
     { id: 'portfolios', label: 'Portafolios', icon: Layers3 },
-    { id: 'timeline', label: 'Plan maestro', icon: CalendarClock },
   ];
 
   // Compras e Inventario eran entradas propias, pero operan sobre el mismo dominio
@@ -83,12 +83,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // siguen existiendo para no romper enlaces guardados.
   const operationsItems: NavigationItem[] = [
     { id: 'resources', label: 'Recursos', icon: UsersRound },
-    { id: 'materials', label: 'Materiales y abastecimiento', icon: PackageSearch },
+    { id: 'materials', label: 'Materiales', icon: PackageSearch },
     { id: 'costs', label: 'Costos', icon: CircleDollarSign },
   ];
 
   const controlItems: NavigationItem[] = [
-    { id: 'governance', label: 'Riesgos y cambios', icon: ShieldAlert },
+    { id: 'governance', label: 'Riesgos', icon: ShieldAlert },
     { id: 'integrations', label: 'Integraciones', icon: PlugZap },
     { id: 'automations', label: 'Automatizaciones', icon: Workflow },
   ];

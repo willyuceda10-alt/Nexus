@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ShieldAlert, AlertTriangle, Plus, FileCheck2, ArrowUpRight, CheckCircle2, XCircle } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
+import { TimelineView } from './TimelineView';
 
 export const GovernanceRiskView: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const { objects, openObjectDrawer, openCreateModal, updateNexusObject, decideApproval, approvals } = useNexus();
+  const [tab, setTab] = useState<'risks' | 'audit'>('risks');
 
   const risks = objects.filter((o) => o.type === 'RISK' && (!projectId || o.projectId === projectId));
   const changeRequests = objects.filter((o) => o.type === 'CHANGE_REQUEST' && (!projectId || o.projectId === projectId));
@@ -46,9 +48,9 @@ export const GovernanceRiskView: React.FC<{ projectId?: string }> = ({ projectId
             <ShieldAlert className="h-4 w-4" />
             <span>Centro de Gobernanza, Riesgos & Control de Cambios</span>
           </div>
-          <h1 className="mt-1 text-xl font-extrabold">Matriz de Control de Riesgos & Solicitudes de Cambio</h1>
+          <h1 className="mt-1 text-xl font-extrabold">Riesgos y solicitudes de cambio</h1>
           <p className="mt-1 text-xs text-amber-100/80">
-            {risks.length} Riesgos Identificados • {changeRequests.length} Solicitudes de Cambio Activas
+            {risks.length} riesgos identificados • {changeRequests.length} solicitudes de cambio activas
           </p>
         </div>
 
@@ -70,6 +72,19 @@ export const GovernanceRiskView: React.FC<{ projectId?: string }> = ({ projectId
         </div>
       </div>
 
+      {/*
+        La auditoría era un módulo aparte etiquetado "Plan maestro" bajo PLANIFICAR,
+        pero renderiza TimelineView — un registro cronológico inmutable, no un plan.
+        Es control, no planificación, y el mismo componente ya era pestaña dentro de
+        cada proyecto; aquí vive la vista global.
+      */}
+      <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 w-fit">
+        <button onClick={() => setTab('risks')} className={`rounded-lg px-3 py-2 text-meta font-bold ${tab === 'risks' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}>Riesgos y cambios</button>
+        <button onClick={() => setTab('audit')} className={`rounded-lg px-3 py-2 text-meta font-bold ${tab === 'audit' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}>Auditoría</button>
+      </div>
+
+      {tab === 'audit' ? <TimelineView /> : (
+      <>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 5x5 Heatmap Matrix */}
         <div className="lg:col-span-1 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
@@ -202,6 +217,8 @@ export const GovernanceRiskView: React.FC<{ projectId?: string }> = ({ projectId
           })}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 };
