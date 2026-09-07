@@ -11,6 +11,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
+import { objectStatusLabel } from '../../domain/objectLabels';
 import { buildPortfolioHierarchy } from '../../domain/portfolioHierarchy';
 import type { NexusObject } from '../../types/nexus';
 
@@ -41,7 +42,12 @@ function budgetOf(projects: NexusObject[]) {
   );
 }
 
-export const PortfoliosView: React.FC = () => {
+interface PortfoliosViewProps {
+  /** Se renderiza como vista dentro de Proyectos: sin cabecera ni lienzo propios. */
+  embedded?: boolean;
+}
+
+export const PortfoliosView: React.FC<PortfoliosViewProps> = ({ embedded = false }) => {
   const {
     portfolios: legacyPortfolios,
     objects,
@@ -93,17 +99,21 @@ export const PortfoliosView: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1500px] space-y-6 px-6 py-6 lg:px-8">
+    <div className={embedded ? 'space-y-6' : 'mx-auto w-full max-w-[1500px] space-y-6 px-6 py-6 lg:px-8'}>
       <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="mb-2 flex items-center gap-2">
-            <span className="rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-green-800 ring-1 ring-green-100">
-              Gobierno de portafolio
-            </span>
-            <span className="text-[11px] font-medium text-slate-400">Object Engine persistente</span>
-          </div>
-          <h1 className="text-[27px] font-extrabold tracking-[-0.03em] text-slate-950">Portafolios y programas</h1>
-          <p className="mt-1 max-w-3xl text-[12px] leading-5 text-slate-500">
+          {!embedded && (
+            <>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-green-800 ring-1 ring-green-100">
+                  Gobierno de portafolio
+                </span>
+                <span className="text-[11px] font-medium text-slate-400">Object Engine persistente</span>
+              </div>
+              <h1 className="text-[27px] font-extrabold tracking-[-0.03em] text-slate-950">Portafolios y programas</h1>
+            </>
+          )}
+          <p className={`max-w-3xl text-[12px] leading-5 text-slate-500 ${embedded ? '' : 'mt-1'}`}>
             Jerarquía Portafolio → Programa → Proyecto con inversión, avance y salud calculados desde los proyectos vinculados.
           </p>
         </div>
@@ -338,7 +348,7 @@ export const PortfoliosView: React.FC = () => {
                                   <button onClick={() => openProject(project)} className="block w-full truncate text-left text-[10px] font-bold text-slate-900 transition hover:text-green-800">
                                     {project.title}
                                   </button>
-                                  <p className="mt-0.5 truncate text-[8px] text-slate-400">{project.status.replaceAll('_', ' ')}</p>
+                                  <p className="mt-0.5 truncate text-micro text-slate-500">{objectStatusLabel(project.status)}</p>
                                 </td>
                                 <td className="px-4 py-3 text-[9px] font-medium text-slate-500">{programName || 'Directo al portafolio'}</td>
                                 <td className="px-4 py-3">

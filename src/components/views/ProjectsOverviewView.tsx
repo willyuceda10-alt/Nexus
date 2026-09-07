@@ -9,6 +9,8 @@ import {
   Search,
 } from 'lucide-react';
 import { useNexus } from '../../context/NexusContext';
+import { PortfoliosView } from './PortfoliosView';
+import { ExecutiveDashboard } from './ExecutiveDashboard';
 
 function formatDate(value?: string): string {
   if (!value) return 'Sin fecha';
@@ -24,6 +26,7 @@ function healthTone(score: number) {
 }
 
 export const ProjectsOverviewView: React.FC = () => {
+  const [view, setView] = useState<'list' | 'portfolios' | 'analytics'>('list');
   const {
     tenant,
     currentWorkspace,
@@ -71,6 +74,21 @@ export const ProjectsOverviewView: React.FC = () => {
         <button onClick={() => openCreateModal('PROJECT')} className="flex h-10 items-center gap-2 self-start rounded-xl bg-green-700 px-4 text-[11px] font-bold text-white shadow-[0_8px_20px_rgba(21,128,61,0.18)] hover:bg-green-800 lg:self-auto"><Plus className="h-3.5 w-3.5" /> Nuevo proyecto</button>
       </section>
 
+      {/*
+        Portafolios y Analítica eran módulos propios, pero los tres leían exactamente
+        las mismas fuentes (objects.filter + getProjectHealth) sin datos propios: eran
+        tres renderizados del mismo conjunto de proyectos — lista, jerarquía y
+        consolidado. Se eligen aquí como vistas, no desde el menú.
+      */}
+      <div className="flex w-fit items-center gap-1 rounded-xl bg-slate-100 p-1">
+        <button onClick={() => setView('list')} className={`rounded-lg px-3 py-2 text-meta font-bold ${view === 'list' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}>Lista</button>
+        <button onClick={() => setView('portfolios')} className={`rounded-lg px-3 py-2 text-meta font-bold ${view === 'portfolios' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}>Portafolios</button>
+        <button onClick={() => setView('analytics')} className={`rounded-lg px-3 py-2 text-meta font-bold ${view === 'analytics' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}>Analítica</button>
+      </div>
+
+      {view === 'portfolios' ? <PortfoliosView embedded /> : view === 'analytics' ? <ExecutiveDashboard embedded /> : (
+      <>
+
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-[18px] border border-slate-200 bg-white p-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-xl bg-green-50 text-green-700"><BriefcaseBusiness className="h-4 w-4" /></div><div><p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Activos</p><p className="mt-0.5 text-xl font-extrabold text-slate-950">{activeCount}</p></div></div></div>
         <div className="rounded-[18px] border border-slate-200 bg-white p-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-slate-700"><CheckCircle2 className="h-4 w-4" /></div><div><p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Avance promedio</p><p className="mt-0.5 text-xl font-extrabold text-slate-950">{averageProgress}%</p></div></div></div>
@@ -102,6 +120,8 @@ export const ProjectsOverviewView: React.FC = () => {
           {projects.length === 0 && <div className="p-12 text-center"><p className="text-[12px] font-bold text-slate-700">No encontramos proyectos</p><p className="mt-1 text-[10px] text-slate-400">Ajusta la búsqueda o crea un nuevo proyecto.</p></div>}
         </div>
       </section>
+      </>
+      )}
     </div>
   );
 };

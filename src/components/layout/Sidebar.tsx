@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  BarChart3,
   BellRing,
   CalendarDays,
   CheckSquare2,
@@ -10,9 +9,7 @@ import {
   FileText,
   FolderKanban,
   Gauge,
-  Layers3,
   PackageSearch,
-  PlugZap,
   Settings2,
   ShieldAlert,
   UsersRound,
@@ -70,11 +67,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // "Plan maestro" salía de aquí, pero renderizaba TimelineView — un log de auditoría,
   // no un plan. Vive ahora como pestaña dentro de Riesgos, que es donde corresponde.
+  // Portafolios y Analítica salían de aquí y de COLABORAR, pero los tres leían las
+  // mismas fuentes sin datos propios. Son vistas dentro de Proyectos, no módulos.
   const planningItems: NavigationItem[] = [
     { id: 'projects', label: 'Proyectos', icon: FolderKanban },
     { id: 'boards', label: 'Tableros', icon: Columns3 },
     { id: 'calendar', label: 'Calendario', icon: CalendarDays },
-    { id: 'portfolios', label: 'Portafolios', icon: Layers3 },
   ];
 
   // Compras e Inventario eran entradas propias, pero operan sobre el mismo dominio
@@ -87,16 +85,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'costs', label: 'Costos', icon: CircleDollarSign },
   ];
 
+  // Integraciones pasó a ser pestaña de Configuración: conectar una fuente de datos
+  // es configurar la instalación, no una zona donde se ejecuta trabajo.
   const controlItems: NavigationItem[] = [
     { id: 'governance', label: 'Riesgos', icon: ShieldAlert },
-    { id: 'integrations', label: 'Integraciones', icon: PlugZap },
     { id: 'automations', label: 'Automatizaciones', icon: Workflow },
   ];
 
   const collaborationItems: NavigationItem[] = [
     { id: 'meetings', label: 'Reuniones', icon: CalendarDays },
     { id: 'documents', label: 'Documentos', icon: FileText },
-    { id: 'reports', label: 'Analítica', icon: BarChart3 },
   ];
 
   const renderItems = (items: NavigationItem[]) => (

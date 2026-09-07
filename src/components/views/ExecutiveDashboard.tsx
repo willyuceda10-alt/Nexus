@@ -3,7 +3,12 @@ import { BarChart3, CircleDollarSign, Layers3, Network, ShieldAlert, TrendingUp 
 import { useNexus } from '../../context/NexusContext';
 import { buildPortfolioHierarchy } from '../../domain/portfolioHierarchy';
 
-export const ExecutiveDashboard: React.FC = () => {
+interface ExecutiveDashboardProps {
+  /** Se renderiza como vista dentro de Proyectos: sin cabecera ni lienzo propios. */
+  embedded?: boolean;
+}
+
+export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = false }) => {
   const { objects, portfolios: legacyPortfolios, getProjectHealth, tenant } = useNexus();
   const hierarchy = useMemo(
     () => buildPortfolioHierarchy(objects, legacyPortfolios),
@@ -31,15 +36,17 @@ export const ExecutiveDashboard: React.FC = () => {
   }).format(value);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 p-4 lg:p-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center gap-2 text-green-700">
-          <BarChart3 className="h-4 w-4" />
-          <span className="text-[10px] font-bold uppercase tracking-[0.12em]">Tablero ejecutivo</span>
-        </div>
-        <h1 className="mt-2 text-[24px] font-extrabold tracking-[-0.03em] text-slate-950">Portafolio, inversión y salud</h1>
-        <p className="mt-1 text-[11px] text-slate-500">Consolidado calculado desde NexusObject; no mantiene totales duplicados en Portafolio o Programa.</p>
-      </section>
+    <div className={embedded ? 'space-y-5' : 'mx-auto max-w-7xl space-y-5 p-4 lg:p-6'}>
+      {!embedded && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-green-700">
+            <BarChart3 className="h-4 w-4" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.12em]">Tablero ejecutivo</span>
+          </div>
+          <h1 className="mt-2 text-[24px] font-extrabold tracking-[-0.03em] text-slate-950">Portafolio, inversión y salud</h1>
+          <p className="mt-1 text-[11px] text-slate-500">Consolidado calculado desde NexusObject; no mantiene totales duplicados en Portafolio o Programa.</p>
+        </section>
+      )}
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Kpi icon={<CircleDollarSign className="h-4 w-4" />} label="Presupuesto" value={money(totalBudget)} note={`${money(totalSpent)} ejecutado · ${burnPercentage}%`} />

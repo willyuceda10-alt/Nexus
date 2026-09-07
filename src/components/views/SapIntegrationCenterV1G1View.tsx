@@ -180,7 +180,12 @@ const SourceCard: React.FC<{ source: ApiSapSourceHealthV1 }> = ({ source }) => {
   );
 };
 
-export const SapIntegrationCenterV1G1View: React.FC = () => {
+interface SapIntegrationCenterV1G1ViewProps {
+  /** Se renderiza dentro de Configuración: sin cabecera ni lienzo propios. */
+  embedded?: boolean;
+}
+
+export const SapIntegrationCenterV1G1View: React.FC<SapIntegrationCenterV1G1ViewProps> = ({ embedded = false }) => {
   const apiBootstrap = useApiBootstrap();
   const isApiMode = apiBootstrap.dataMode === 'api';
   const apiReady = isApiMode && apiBootstrap.status === 'ready';
@@ -249,15 +254,19 @@ export const SapIntegrationCenterV1G1View: React.FC = () => {
   }
 
   return (
-    <div className="min-h-full bg-[#F8FAFC] px-6 py-6 lg:px-8">
-      <div className="mx-auto max-w-[1660px] space-y-4">
+    <div className={embedded ? '' : 'min-h-full bg-[#F8FAFC] px-6 py-6 lg:px-8'}>
+      <div className={embedded ? 'space-y-4' : 'mx-auto max-w-[1660px] space-y-4'}>
         <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-green-700">
-              <PlugZap className="h-4 w-4" /> Integration Center · SAP
-            </div>
-            <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">Salud, frescura y cargas de SAP</h1>
-            <p className="mt-1 max-w-3xl text-[12px] leading-5 text-slate-500">Visibilidad operacional de las cinco fuentes que alimentan compras, inventario, compromisos y costos reales de Bridata.</p>
+            {!embedded && (
+              <>
+                <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-green-700">
+                  <PlugZap className="h-4 w-4" /> Integration Center · SAP
+                </div>
+                <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">Salud, frescura y cargas de SAP</h1>
+              </>
+            )}
+            <p className={`max-w-3xl text-[12px] leading-5 text-slate-500 ${embedded ? '' : 'mt-1'}`}>Visibilidad operacional de las cinco fuentes que alimentan compras, inventario, compromisos y costos reales de Bridata.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {(data?.connections.length ?? 0) > 1 && (

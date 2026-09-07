@@ -23,6 +23,7 @@ import type {
 } from '../../api/notificationPreferencesV1Contracts';
 import { useApiBootstrap } from '../../context/ApiBootstrapContext';
 import { useNexus } from '../../context/NexusContext';
+import { SapIntegrationCenterV1G1View } from './SapIntegrationCenterV1G1View';
 
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 
@@ -321,6 +322,7 @@ export const SettingsV2View: React.FC = () => {
   const { tenant, currentWorkspace, currentUser } = useNexus();
   const apiBootstrap = useApiBootstrap();
   const apiReady = apiBootstrap.dataMode === 'api' && apiBootstrap.status === 'ready';
+  const [section, setSection] = useState<'general' | 'integrations'>('general');
   const activeRole = apiBootstrap.session?.tenants.find((t) => t.id === apiBootstrap.activeTenantId)?.role;
   const canManageTeam = activeRole === 'OWNER' || activeRole === 'TENANT_ADMIN';
   const [preferences, setPreferences] = useState<ApiNotificationPreferencesV1>(mockPreferences());
@@ -413,6 +415,17 @@ export const SettingsV2View: React.FC = () => {
         </div>
       )}
 
+      {/*
+        Integraciones era una entrada propia del menú, pero conectar una fuente de
+        datos es configurar la instalación, no una zona de trabajo: nadie entra ahí
+        a ejecutar proyectos. Vive como pestaña; su ruta sigue existiendo.
+      */}
+      <div className="flex w-fit items-center gap-1 rounded-xl bg-slate-100 p-1">
+        <button onClick={() => setSection('general')} className={`rounded-lg px-3 py-2 text-meta font-bold ${section === 'general' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}>General</button>
+        <button onClick={() => setSection('integrations')} className={`rounded-lg px-3 py-2 text-meta font-bold ${section === 'integrations' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}>Integraciones</button>
+      </div>
+
+      {section === 'integrations' ? <SapIntegrationCenterV1G1View embedded /> : (
       <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
         <div className="space-y-5">
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -473,6 +486,7 @@ export const SettingsV2View: React.FC = () => {
           </div>
         </section>
       </div>
+      )}
     </div>
   );
 };
