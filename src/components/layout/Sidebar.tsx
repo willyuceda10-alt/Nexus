@@ -13,12 +13,10 @@ import {
   Gauge,
   Layers3,
   PackageSearch,
-  ShoppingCart,
   PlugZap,
   Settings2,
   ShieldAlert,
   UsersRound,
-  Warehouse,
   Workflow,
   X,
 } from 'lucide-react';
@@ -79,11 +77,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'timeline', label: 'Plan maestro', icon: CalendarClock },
   ];
 
+  // Compras e Inventario eran entradas propias, pero operan sobre el mismo dominio
+  // que Materiales — que ya se titula "Materiales, inventario y abastecimiento" y
+  // compartía APIs con ambas. Ahora son pestañas dentro de ese módulo; sus rutas
+  // siguen existiendo para no romper enlaces guardados.
   const operationsItems: NavigationItem[] = [
     { id: 'resources', label: 'Recursos', icon: UsersRound },
-    { id: 'materials', label: 'Materiales', icon: PackageSearch },
-    { id: 'procurement', label: 'Compras / Por llegar', icon: ShoppingCart },
-    { id: 'inventory', label: 'Inventario', icon: Warehouse },
+    { id: 'materials', label: 'Materiales y abastecimiento', icon: PackageSearch },
     { id: 'costs', label: 'Costos', icon: CircleDollarSign },
   ];
 

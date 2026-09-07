@@ -26,9 +26,15 @@ import { useNexus } from '../../context/NexusContext';
 import type { NexusObject } from '../../types/nexus';
 import { MaterialsView } from './MaterialsView';
 import { SapMaterialFlowV1G2 } from './SapMaterialFlowV1G2';
+import { SapProcurementV1G3View } from './SapProcurementV1G3View';
+import { SapInventoryV1G4View } from './SapInventoryV1G4View';
 
 type Panel = 'material' | 'warehouse' | 'supplier' | 'requirement' | 'reserve' | 'order' | 'receive' | 'issue' | null;
-type Tab = 'sap' | 'requirements' | 'stock';
+// "Compras" e "Inventario SAP" eran módulos propios en la navegación, pero operan
+// sobre el mismo dominio que este hub — de hecho Compras usaba el mismo API que la
+// pestaña "Flujo SAP" de aquí, e Inventario llamaba al mismo materialOverviewV2.
+// Viven como pestañas para que el ciclo de abastecimiento sea un solo lugar.
+type Tab = 'sap' | 'requirements' | 'stock' | 'procurement' | 'sapStock';
 
 function messageOf(cause: unknown): string {
   if (cause instanceof BridataApiError) {
@@ -214,6 +220,8 @@ export const MaterialsInventoryV2View: React.FC = () => {
               <button onClick={() => setTab('sap')} className={`rounded-lg px-3 py-2 text-[9px] font-bold ${tab === 'sap' ? 'bg-white text-green-800 shadow-sm' : 'text-slate-500'}`}>Flujo SAP</button>
               <button onClick={() => setTab('requirements')} className={`rounded-lg px-3 py-2 text-[9px] font-bold ${tab === 'requirements' ? 'bg-white text-green-800 shadow-sm' : 'text-slate-500'}`}>Requerimientos y riesgo</button>
               <button onClick={() => setTab('stock')} className={`rounded-lg px-3 py-2 text-[9px] font-bold ${tab === 'stock' ? 'bg-white text-green-800 shadow-sm' : 'text-slate-500'}`}>Stock por almacén</button>
+              <button onClick={() => setTab('procurement')} className={`rounded-lg px-3 py-2 text-[9px] font-bold ${tab === 'procurement' ? 'bg-white text-green-800 shadow-sm' : 'text-slate-500'}`}>Compras / Por llegar</button>
+              <button onClick={() => setTab('sapStock')} className={`rounded-lg px-3 py-2 text-[9px] font-bold ${tab === 'sapStock' ? 'bg-white text-green-800 shadow-sm' : 'text-slate-500'}`}>Inventario SAP</button>
             </div>
             <div className="flex items-center gap-2">
               <select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)} className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-[9px] font-bold text-slate-600 outline-none">
@@ -224,7 +232,11 @@ export const MaterialsInventoryV2View: React.FC = () => {
             </div>
           </div>
 
-          {tab === 'sap' ? (
+          {tab === 'procurement' ? (
+            <SapProcurementV1G3View embedded />
+          ) : tab === 'sapStock' ? (
+            <SapInventoryV1G4View embedded />
+          ) : tab === 'sap' ? (
             <SapMaterialFlowV1G2
               workspaceId={currentWorkspace.id}
               projectId={projectFilter === 'ALL' ? null : projectFilter}

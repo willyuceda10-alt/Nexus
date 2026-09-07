@@ -61,7 +61,12 @@ function MovementIcon({ type }: { type: string | null }) {
   return <RotateCcw className="h-4 w-4" />;
 }
 
-export const SapInventoryV1G4View: React.FC = () => {
+interface SapInventoryV1G4ViewProps {
+  /** Se renderiza dentro del hub de Materiales: sin cabecera ni lienzo propios. */
+  embedded?: boolean;
+}
+
+export const SapInventoryV1G4View: React.FC<SapInventoryV1G4ViewProps> = ({ embedded = false }) => {
   const apiBootstrap = useApiBootstrap();
   const { currentWorkspace } = useNexus();
   const [tab, setTab] = useState<Tab>('stock');
@@ -178,17 +183,21 @@ export const SapInventoryV1G4View: React.FC = () => {
   }
 
   return (
-    <div className="min-h-full p-5 lg:p-7">
-      <div className="mx-auto max-w-[1700px] space-y-5">
-        <header className="flex flex-col gap-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+    <div className={embedded ? '' : 'min-h-full p-5 lg:p-7'}>
+      <div className={embedded ? 'space-y-5' : 'mx-auto max-w-[1700px] space-y-5'}>
+        <header className={`flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between ${embedded ? '' : 'rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm'}`}>
           <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-green-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-green-700 ring-1 ring-green-200">SAP · V1-G4</span>
-              <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 ring-1 ring-slate-200">PostgreSQL Bridata</span>
-              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700 ring-1 ring-emerald-200">Sin lectura Excel</span>
-            </div>
-            <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-950">Inventario</h1>
-            <p className="mt-1 text-sm text-slate-500">Stock canónico por almacén y trazabilidad exacta de movimientos SAP 101 / 102 / 221 / 222.</p>
+            {!embedded && (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-green-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-green-700 ring-1 ring-green-200">SAP · V1-G4</span>
+                  <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 ring-1 ring-slate-200">PostgreSQL Bridata</span>
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700 ring-1 ring-emerald-200">Sin lectura Excel</span>
+                </div>
+                <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-950">Inventario</h1>
+              </>
+            )}
+            <p className={`text-sm text-slate-500 ${embedded ? '' : 'mt-1'}`}>Stock canónico por almacén y trazabilidad exacta de movimientos SAP 101 / 102 / 221 / 222.</p>
           </div>
           <button
             onClick={() => void load()}
