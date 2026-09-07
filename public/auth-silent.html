@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Bridata · renovación de sesión</title>
+  </head>
+  <body>
+    <!--
+      Silent-renewal landing page.
+
+      Microsoft Entra redirects a hidden iframe here with the authorization code (or an
+      error) in the URL fragment. This page exists only to hand that fragment back to the
+      parent window; it deliberately does NOT load the application bundle, so a renewal
+      never boots a second copy of the SPA inside the iframe.
+
+      Register this exact URL as an additional SPA redirect URI on the web app
+      registration, alongside the app root.
+    -->
+    <script>
+      (function () {
+        if (window.parent === window) return;
+        try {
+          window.parent.postMessage(
+            { type: 'bridata:entra-silent-result', hash: window.location.hash, search: window.location.search },
+            window.location.origin,
+          );
+        } catch (error) {
+          // The parent is same-origin by construction; if posting fails there is nothing
+          // useful to do here — the parent's timeout will treat it as interaction required.
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -1,8 +1,8 @@
-import { CheckCircle2, Cloud, CloudOff, LoaderCircle } from 'lucide-react';
+import { CheckCircle2, Cloud, CloudOff, LoaderCircle, LogIn } from 'lucide-react';
 import { useApiBootstrap } from '../../context/ApiBootstrapContext';
 
 export function ApiStatusBadge() {
-  const { status, bootstrap, error, retry } = useApiBootstrap();
+  const { status, bootstrap, error, retry, signIn } = useApiBootstrap();
 
   if (status === 'mock') {
     return (
@@ -22,6 +22,20 @@ export function ApiStatusBadge() {
         <LoaderCircle className="h-3 w-3 animate-spin" />
         Conectando
       </span>
+    );
+  }
+
+  if (status === 'reauth-required') {
+    return (
+      <button
+        type="button"
+        onClick={() => void signIn()}
+        className="hidden xl:inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700 hover:bg-amber-100"
+        title={error || 'Tu sesión de Microsoft expiró. Haz clic para volver a iniciar sesión.'}
+      >
+        <LogIn className="h-3 w-3" />
+        Sesión expirada
+      </button>
     );
   }
 

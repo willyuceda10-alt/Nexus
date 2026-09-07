@@ -185,6 +185,16 @@ jobs:
             notification_identity_client_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-notification-mi --query clientId --output tsv)"
           fi
 
+          # Least-privilege split: the migration job runs under its own identity so the
+          # API container never holds Key Vault access to the admin credential. Falls back
+          # to the API identity until grant-dev-rbac.ps1 has created and granted it, so
+          # this stays deployable on an environment that has not been migrated yet.
+          migrate_identity_id="$(az identity show --resource-group "$AZURE_RESOURCE_GROUP" --name nexus-dev-migrate-mi --query id --output tsv 2>/dev/null || true)"
+          if [ -z "$migrate_identity_id" ]; then
+            echo "::warning title=Migration identity missing::nexus-dev-migrate-mi not found; the migration job will run under the API identity. Run infra/azure/grant-dev-rbac.ps1 to complete the least-privilege split."
+          fi
+          echo "migrate_identity_id=$migrate_identity_id" >> "$GITHUB_OUTPUT"
+
           echo "location=$location" >> "$GITHUB_OUTPUT"
           echo "acr_name=$acr_name" >> "$GITHUB_OUTPUT"
           echo "login_server=$login_server" >> "$GITHUB_OUTPUT"
@@ -222,6 +232,7 @@ jobs:
           LOGIN_SERVER: ${{ steps.runtime.outputs.login_server }}
           API_IDENTITY_ID: ${{ steps.runtime.outputs.api_identity_id }}
           API_IDENTITY_CLIENT_ID: ${{ steps.runtime.outputs.api_identity_client_id }}
+          MIGRATE_IDENTITY_ID: ${{ steps.runtime.outputs.migrate_identity_id }}
           AUTOMATION_IDENTITY_ID: ${{ steps.runtime.outputs.automation_identity_id }}
           AUTOMATION_IDENTITY_CLIENT_ID: ${{ steps.runtime.outputs.automation_identity_client_id }}
           NOTIFICATION_IDENTITY_ID: ${{ steps.runtime.outputs.notification_identity_id }}
@@ -240,6 +251,7 @@ jobs:
             --arg registryServer "$LOGIN_SERVER" \
             --arg apiIdentityResourceId "$API_IDENTITY_ID" \
             --arg apiIdentityClientId "$API_IDENTITY_CLIENT_ID" \
+            --arg migrateIdentityResourceId "$MIGRATE_IDENTITY_ID" \
             --arg automationIdentityResourceId "$AUTOMATION_IDENTITY_ID" \
             --arg automationIdentityClientId "$AUTOMATION_IDENTITY_CLIENT_ID" \
             --arg notificationIdentityResourceId "$NOTIFICATION_IDENTITY_ID" \
@@ -262,6 +274,7 @@ jobs:
                 "registryServer":{"value":$registryServer},
                 "apiIdentityResourceId":{"value":$apiIdentityResourceId},
                 "apiIdentityClientId":{"value":$apiIdentityClientId},
+                "migrateIdentityResourceId":{"value":$migrateIdentityResourceId},
                 "automationIdentityResourceId":{"value":$automationIdentityResourceId},
                 "automationIdentityClientId":{"value":$automationIdentityClientId},
                 "notificationIdentityResourceId":{"value":$notificationIdentityResourceId},
@@ -339,6 +352,37 @@ jobs:
 
           echo "::error title=Migration timeout::Migration job did not complete within 15 minutes."
           exit 1
+
+      - name: Diagnose failed migration
+        if: failure() && steps.migration.outcome == 'failure'
+        shell: bash
+        env:
+          EXECUTION_NAME: ${{ steps.migration.outputs.execution_name }}
+        run: |
+          set +e
+          echo "::group::Migration job logs"
+          az containerapp job logs show \
+            --name nexus-dev-migrate \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --job-execution-name "$EXECUTION_NAME" \
+            --tail 200
+          echo "::endgroup::"
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ### Migration failed — read before redeploying
+
+          `prisma migrate deploy` refuses to run once a migration is recorded as failed,
+          so **every future runtime deploy will fail at this step** until the failed
+          migration is resolved by hand. Retrying this workflow will not clear it.
+
+          Connect with the admin credential (`admin-database-url` in Key Vault) and run:
+
+          ```
+          npx prisma migrate resolve --rolled-back <migration_name>
+          ```
+
+          Use `--applied` instead only if the migration's changes are in fact fully
+          present in the database. Then re-run this workflow.
+          EOF
 
       - name: Review API runtime what-if
         shell: bash

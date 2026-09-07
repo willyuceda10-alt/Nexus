@@ -45,6 +45,139 @@ function redirectUri(): string {
   return `${window.location.origin}${window.location.pathname}`;
 }
 
+// Dedicated blank page (public/auth-silent.html) so a silent renewal does not boot a
+// second copy of the SPA inside the hidden iframe. Must also be registered as a SPA
+// redirect URI on the Entra app registration.
+function silentRedirectUri(): string {
+  return `${window.location.origin}/auth-silent.html`;
+}
+
+/**
+ * Thrown when a token cannot be obtained without showing UI to the person — their
+ * Entra SSO session is gone, or Entra wants MFA/consent.
+ *
+ * This exists so an expired token surfaces as a catchable error instead of the caller
+ * hanging forever, and so the redirect to Entra happens from an explicit user action
+ * rather than from inside a background data fetch (which would discard unsaved work).
+ */
+export class AuthInteractionRequiredError extends Error {
+  readonly reason: string;
+
+  constructor(reason: string) {
+    super('Tu sesión de Microsoft expiró. Vuelve a iniciar sesión para continuar.');
+    this.name = 'AuthInteractionRequiredError';
+    this.reason = reason;
+  }
+}
+
+const SILENT_TIMEOUT_MS = 12_000;
+
+async function exchangeCodeForToken(code: string, verifier: string, usedRedirectUri: string): Promise<void> {
+  const { entraTenantId, entraWebClientId, entraApiScope } = requireEntraConfig();
+  const body = new URLSearchParams({
+    client_id: entraWebClientId,
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: usedRedirectUri,
+    code_verifier: verifier,
+    scope: `openid profile ${entraApiScope}`,
+  });
+
+  const response = await fetch(
+    `https://login.microsoftonline.com/${encodeURIComponent(entraTenantId)}/oauth2/v2.0/token`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+    },
+  );
+
+  const payload = (await response.json()) as TokenResponse;
+  if (!response.ok || !payload.access_token) {
+    throw new Error(
+      payload.error_description || payload.error || 'Microsoft Entra did not return an access token.',
+    );
+  }
+
+  storeToken(payload.access_token, payload.expires_in ?? 3600);
+}
+
+/**
+ * Renews the access token without any user interaction, using the Entra SSO cookie via
+ * a hidden iframe with prompt=none. This is how a public SPA with no refresh token stays
+ * signed in for the life of the SSO session.
+ */
+async function acquireTokenSilently(): Promise<string> {
+  const { entraTenantId, entraWebClientId, entraApiScope } = requireEntraConfig();
+  const verifier = randomValue(64);
+  const state = randomValue(32);
+  const challenge = await codeChallenge(verifier);
+  const uri = silentRedirectUri();
+
+  const authorize = new URL(
+    `https://login.microsoftonline.com/${encodeURIComponent(entraTenantId)}/oauth2/v2.0/authorize`,
+  );
+  authorize.searchParams.set('client_id', entraWebClientId);
+  authorize.searchParams.set('response_type', 'code');
+  authorize.searchParams.set('redirect_uri', uri);
+  authorize.searchParams.set('response_mode', 'fragment');
+  authorize.searchParams.set('scope', `openid profile ${entraApiScope}`);
+  authorize.searchParams.set('state', state);
+  authorize.searchParams.set('code_challenge', challenge);
+  authorize.searchParams.set('code_challenge_method', 'S256');
+  authorize.searchParams.set('prompt', 'none');
+
+  const params = await new Promise<URLSearchParams>((resolve, reject) => {
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.display = 'none';
+
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', onMessage);
+      clearTimeout(timer);
+      iframe.remove();
+      fn();
+    };
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { type?: string; hash?: string } | null;
+      if (!data || data.type !== 'bridata:entra-silent-result') return;
+      finish(() => resolve(new URLSearchParams((data.hash ?? '').replace(/^#/, ''))));
+    };
+
+    const timer = setTimeout(
+      () => finish(() => reject(new AuthInteractionRequiredError('silent_renewal_timeout'))),
+      SILENT_TIMEOUT_MS,
+    );
+
+    window.addEventListener('message', onMessage);
+    iframe.src = authorize.toString();
+    document.body.appendChild(iframe);
+  });
+
+  const error = params.get('error');
+  if (error) {
+    // login_required / interaction_required / consent_required all mean the same thing
+    // to us: we cannot proceed without showing the person something.
+    throw new AuthInteractionRequiredError(error);
+  }
+
+  const code = params.get('code');
+  if (!code || params.get('state') !== state) {
+    throw new AuthInteractionRequiredError('silent_renewal_invalid_response');
+  }
+
+  await exchangeCodeForToken(code, verifier, uri);
+
+  const token = cachedToken();
+  if (!token) throw new AuthInteractionRequiredError('silent_renewal_token_not_stored');
+  return token;
+}
+
 function clearTransientAuthState(): void {
   sessionStorage.removeItem(PKCE_VERIFIER_KEY);
   sessionStorage.removeItem(OAUTH_STATE_KEY);
@@ -100,36 +233,14 @@ export async function handleEntraRedirectCallback(): Promise<void> {
     throw new Error('Microsoft Entra callback state validation failed.');
   }
 
-  const { entraTenantId, entraWebClientId, entraApiScope } = requireEntraConfig();
-  const body = new URLSearchParams({
-    client_id: entraWebClientId,
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: redirectUri(),
-    code_verifier: verifier,
-    scope: `openid profile ${entraApiScope}`,
-  });
-
-  const response = await fetch(
-    `https://login.microsoftonline.com/${encodeURIComponent(entraTenantId)}/oauth2/v2.0/token`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body,
-    },
-  );
-
-  const payload = (await response.json()) as TokenResponse;
-  clearTransientAuthState();
-  cleanOAuthQuery();
-
-  if (!response.ok || !payload.access_token) {
-    throw new Error(
-      payload.error_description || payload.error || 'Microsoft Entra did not return an access token.',
-    );
+  try {
+    await exchangeCodeForToken(code, verifier, redirectUri());
+  } finally {
+    // Always clear the one-time verifier/state and strip the code from the URL, so a
+    // failed exchange cannot be retried from history with a burned authorization code.
+    clearTransientAuthState();
+    cleanOAuthQuery();
   }
-
-  storeToken(payload.access_token, payload.expires_in ?? 3600);
 
   const returnUrl = sessionStorage.getItem(RETURN_URL_KEY);
   sessionStorage.removeItem(RETURN_URL_KEY);
@@ -167,17 +278,31 @@ export async function beginEntraLogin(): Promise<never> {
   return new Promise<never>(() => undefined);
 }
 
+// Collapses N parallel requests hitting an expired token into one renewal.
+let inFlightRenewal: Promise<string> | null = null;
+
 export async function getEntraAccessToken(): Promise<string | null> {
   if (runtimeConfig.authMode !== 'entra') return null;
   await handleEntraRedirectCallback();
+
   const token = cachedToken();
   if (token) return token;
-  return beginEntraLogin();
+
+  // Never redirect from here: this runs inside data fetches, and navigating away would
+  // destroy unsaved work. Renew silently, or throw so the caller can surface a re-login.
+  if (!inFlightRenewal) {
+    inFlightRenewal = acquireTokenSilently().finally(() => {
+      inFlightRenewal = null;
+    });
+  }
+  return inFlightRenewal;
 }
 
 export function clearEntraSession(): void {
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(TOKEN_EXPIRY_KEY);
+  sessionStorage.removeItem(RETURN_URL_KEY);
+  inFlightRenewal = null;
   clearTransientAuthState();
 }
 

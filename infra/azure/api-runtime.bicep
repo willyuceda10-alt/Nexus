@@ -7,6 +7,9 @@ param managedEnvironmentId string
 param registryServer string
 param apiIdentityResourceId string
 param apiIdentityClientId string
+
+@description('Identity for the migration job, which alone needs the admin database credential. Defaults to the API identity for backward compatibility; pass a dedicated identity (see grant-dev-rbac.ps1) so the API container cannot read admin-database-url.')
+param migrateIdentityResourceId string = ''
 param automationIdentityResourceId string
 param automationIdentityClientId string
 param notificationIdentityResourceId string
@@ -387,25 +390,30 @@ resource projectRiskMonitorJob 'Microsoft.App/jobs@2024-03-01' = if (deployProje
   }
 }
 
+var migrationIdentity = empty(migrateIdentityResourceId) ? apiIdentityResourceId : migrateIdentityResourceId
+
 resource migrations 'Microsoft.App/jobs@2024-03-01' = if (deployMigrationJob) {
   name: '${baseName}-migrate'
   location: location
   tags: tags
   identity: {
     type: 'UserAssigned'
-    userAssignedIdentities: { '${apiIdentityResourceId}': {} }
+    userAssignedIdentities: { '${migrationIdentity}': {} }
   }
   properties: {
     environmentId: managedEnvironmentId
     configuration: {
       triggerType: 'Manual'
-      replicaTimeout: 900
-      replicaRetryLimit: 1
+      // A failed migration cannot succeed on retry — prisma migrate deploy refuses to
+      // proceed past a migration recorded as failed — so a retry only doubles the wait
+      // before the pipeline reports the failure that a human must resolve.
+      replicaTimeout: 1800
+      replicaRetryLimit: 0
       manualTriggerConfig: { parallelism: 1, replicaCompletionCount: 1 }
-      registries: [{ server: registryServer, identity: apiIdentityResourceId }]
+      registries: [{ server: registryServer, identity: migrationIdentity }]
       secrets: [
-        { name: 'admin-database-url', keyVaultUrl: adminDatabaseSecretUri, identity: apiIdentityResourceId }
-        { name: 'runtime-database-url', keyVaultUrl: runtimeDatabaseSecretUri, identity: apiIdentityResourceId }
+        { name: 'admin-database-url', keyVaultUrl: adminDatabaseSecretUri, identity: migrationIdentity }
+        { name: 'runtime-database-url', keyVaultUrl: runtimeDatabaseSecretUri, identity: migrationIdentity }
       ]
     }
     template: {

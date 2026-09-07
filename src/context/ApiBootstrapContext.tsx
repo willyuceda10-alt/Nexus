@@ -22,6 +22,7 @@ import {
   type DataMode,
 } from '../config/runtime';
 import {
+  AuthInteractionRequiredError,
   beginEntraLogin,
   clearEntraSession,
   getEntraAccessToken,
@@ -31,7 +32,9 @@ export type ApiBootstrapStatus =
   | 'mock'
   | 'loading'
   | 'ready'
-  | 'error';
+  | 'error'
+  // Silent renewal failed: the person must sign in again, from an explicit click.
+  | 'reauth-required';
 
 interface ApiBootstrapContextValue {
   dataMode: DataMode;
@@ -43,6 +46,7 @@ interface ApiBootstrapContextValue {
   correlationId: string | null;
   retry: () => Promise<void>;
   selectTenant: (tenantId: string) => Promise<void>;
+  signIn: () => Promise<void>;
 }
 
 const ACTIVE_TENANT_KEY = 'bridata.active-tenant-id.v1';
@@ -106,13 +110,12 @@ export function ApiBootstrapProvider({
             ? getEntraAccessToken
             : null,
         getTenantId: () => tenantRef.current,
-        onUnauthorized:
-          runtimeConfig.authMode === 'entra'
-            ? async () => {
-                clearEntraSession();
-                await beginEntraLogin();
-              }
-            : null,
+        // A 401 does not necessarily mean the token is bad — it is also returned when
+        // the identity is not provisioned for the requested tenant. Clearing a valid
+        // token and bouncing to Entra in that case produced an endless redirect loop,
+        // since Entra's SSO would immediately hand back another working token.
+        // Silent renewal now covers genuine expiry, so surface the error instead.
+        onUnauthorized: null,
       });
     }, []);
 
@@ -199,6 +202,17 @@ export function ApiBootstrapProvider({
         setStatus('ready');
       } catch (cause) {
         setBootstrap(null);
+
+        if (
+          cause instanceof AuthInteractionRequiredError
+        ) {
+          // Not an outage — the SSO session lapsed. Ask for a click rather than
+          // redirecting mid-flight and discarding whatever the person was doing.
+          setStatus('reauth-required');
+          setError(cause.message);
+          return;
+        }
+
         setStatus('error');
 
         if (
@@ -222,6 +236,12 @@ export function ApiBootstrapProvider({
       bootstrapTenant,
       configureSessionProviders,
     ]);
+
+  const signIn =
+    useCallback(async () => {
+      clearEntraSession();
+      await beginEntraLogin();
+    }, []);
 
   const selectTenant =
     useCallback(
@@ -282,6 +302,7 @@ export function ApiBootstrapProvider({
         correlationId,
         retry: load,
         selectTenant,
+        signIn,
       }),
       [
         status,
@@ -292,6 +313,7 @@ export function ApiBootstrapProvider({
         correlationId,
         load,
         selectTenant,
+        signIn,
       ],
     );
 

@@ -2,7 +2,9 @@ param(
     [string]$ResourceGroup = 'rg-nexus-dev',
     [string]$CiAppDisplayName = 'nexus-github-deploy',
     [string]$ApiIdentityName = 'nexus-dev-api-mi',
-    [string]$WebIdentityName = 'nexus-dev-web-mi'
+    [string]$WebIdentityName = 'nexus-dev-web-mi',
+    [string]$MigrateIdentityName = 'nexus-dev-migrate-mi',
+    [string]$Location = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -75,18 +77,53 @@ Write-Host ""
 # GitHub can push approved images, but receives no Key Vault data-plane access.
 Ensure-RoleAssignment -AssigneeObjectId $ciPrincipalId -Role 'AcrPush' -Scope $acrId
 
-# API runtime identity: pull images + read secrets.
+# The migration job is the only workload that legitimately needs the Postgres admin
+# credential, so it gets its own identity. Without this split, a vault-scoped grant to
+# the API identity would let the API container read admin-database-url and bypass RLS
+# entirely — defeating the restricted runtime role that provision-runtime-role.ts creates.
+$migratePrincipalId = az identity show --resource-group $ResourceGroup --name $MigrateIdentityName --query principalId --output tsv 2>$null
+if ([string]::IsNullOrWhiteSpace($migratePrincipalId)) {
+    $identityLocation = $Location
+    if ([string]::IsNullOrWhiteSpace($identityLocation)) {
+        $identityLocation = Require-Value 'resource group location' (az group show --name $ResourceGroup --query location --output tsv)
+    }
+    Write-Host "ADD managed identity $MigrateIdentityName" -ForegroundColor Yellow
+    az identity create --name $MigrateIdentityName --resource-group $ResourceGroup --location $identityLocation --output none
+    $migratePrincipalId = Require-Value 'migration managed identity principal' (az identity show --resource-group $ResourceGroup --name $MigrateIdentityName --query principalId --output tsv)
+}
+
+# API runtime identity: pull images, and read ONLY the restricted runtime credential.
 Ensure-RoleAssignment -AssigneeObjectId $apiPrincipalId -Role 'AcrPull' -Scope $acrId
-Ensure-RoleAssignment -AssigneeObjectId $apiPrincipalId -Role 'Key Vault Secrets User' -Scope $keyVaultId
+Ensure-RoleAssignment -AssigneeObjectId $apiPrincipalId -Role 'Key Vault Secrets User' -Scope "$keyVaultId/secrets/runtime-database-url"
+
+# Migration identity: pull images + read both credentials.
+Ensure-RoleAssignment -AssigneeObjectId $migratePrincipalId -Role 'AcrPull' -Scope $acrId
+Ensure-RoleAssignment -AssigneeObjectId $migratePrincipalId -Role 'Key Vault Secrets User' -Scope "$keyVaultId/secrets/admin-database-url"
+Ensure-RoleAssignment -AssigneeObjectId $migratePrincipalId -Role 'Key Vault Secrets User' -Scope "$keyVaultId/secrets/runtime-database-url"
 
 # Web runtime identity: pull images only (no Key Vault — Entra config arrives via env vars).
 if ($webPrincipalId) {
     Ensure-RoleAssignment -AssigneeObjectId $webPrincipalId -Role 'AcrPull' -Scope $acrId -PrincipalType 'ServicePrincipal'
 }
 
+# A previously granted vault-wide assignment would silently keep admin access alive, so
+# report it rather than leaving the least-privilege split as a false claim.
+$vaultWideApiGrant = az role assignment list `
+    --assignee-object-id $apiPrincipalId `
+    --scope $keyVaultId `
+    --query "[?roleDefinitionName=='Key Vault Secrets User' && scope=='$keyVaultId'] | length(@)" `
+    --output tsv
+
 Write-Host ""
 Write-Host "RBAC READY" -ForegroundColor Green
 Write-Host "GitHub CI: AcrPush"
-Write-Host "API managed identity: AcrPull + Key Vault Secrets User"
+Write-Host "API managed identity: AcrPull + Key Vault Secrets User (runtime-database-url only)"
+Write-Host "Migration managed identity: AcrPull + Key Vault Secrets User (admin + runtime)"
 if ($webPrincipalId) { Write-Host "Web managed identity: AcrPull" }
 Write-Host "No PostgreSQL administrator role was granted to either runtime identity."
+
+if ([int]$vaultWideApiGrant -gt 0) {
+    Write-Host ""
+    Write-Warning "The API identity still holds a VAULT-WIDE 'Key Vault Secrets User' assignment, so it can still read admin-database-url. Remove it to complete the least-privilege split:"
+    Write-Host "  az role assignment delete --assignee-object-id $apiPrincipalId --role 'Key Vault Secrets User' --scope $keyVaultId" -ForegroundColor Yellow
+}
