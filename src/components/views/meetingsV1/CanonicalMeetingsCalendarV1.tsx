@@ -138,7 +138,9 @@ export const CanonicalMeetingsCalendarV1: React.FC<{ projectId?: string }> = ({ 
           const dayItems = itemsByDay.get(key) ?? [];
           return (
             <div key={key} className={`min-h-[122px] p-2 ${inMonth ? 'bg-white' : 'bg-slate-50/70'}`}>
-              <div className="flex items-center justify-between"><span className={`grid h-6 min-w-6 place-items-center rounded-full px-1 text-[9px] font-bold ${key === today ? 'bg-green-700 text-white' : inMonth ? 'text-slate-700' : 'text-slate-300'}`}>{date.getDate()}</span>{dayItems.length > 0 && <span className="text-[8px] font-black text-slate-300">{dayItems.length}</span>}</div>
+              {/* slate-300 sobre la celda da 1.49:1 — la fecha era ilegible. El fondo
+                  gris ya distingue los días fuera del mes; basta un gris secundario. */}
+              <div className="flex items-center justify-between"><span className={`grid h-6 min-w-6 place-items-center rounded-full px-1 text-micro font-bold ${key === today ? 'bg-green-700 text-white' : inMonth ? 'text-slate-700' : 'text-slate-500'}`}>{date.getDate()}</span>{dayItems.length > 0 && <span className="text-micro font-black text-slate-500">{dayItems.length}</span>}</div>
               <div className="mt-1.5 space-y-1">
                 {dayItems.slice(0, 4).map((item) => (
                   <div key={`${key}-${item.id}`} className={`rounded-lg border px-2 py-1.5 ${itemTone(item)}`}>

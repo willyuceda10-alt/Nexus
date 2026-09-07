@@ -72,7 +72,12 @@ export function BoardCalendarV1({
           return (
             <div key={key} className={`min-h-[118px] border-b border-r border-slate-100 p-2 ${inMonth ? 'bg-white' : 'bg-slate-50/50'}`}>
               <div className="flex items-center justify-between">
-                <span className={`grid h-6 w-6 place-items-center rounded-full text-[9px] font-bold ${key === today ? 'bg-green-700 text-white' : inMonth ? 'text-slate-700' : 'text-slate-300'}`}>{day.getUTCDate()}</span>
+                {/*
+                  Los días fuera del mes se atenuaban con slate-300, que da 1.49:1 sobre
+                  la celda: la fecha quedaba ilegible. El fondo gris de la celda ya los
+                  distingue del mes actual, así que basta un tono secundario legible.
+                */}
+                <span className={`grid h-6 w-6 place-items-center rounded-full text-micro font-bold ${key === today ? 'bg-green-700 text-white' : inMonth ? 'text-slate-700' : 'text-slate-500'}`}>{day.getUTCDate()}</span>
                 {dayItems.length > 3 && <span className="text-[8px] font-bold text-slate-400">+{dayItems.length - 3}</span>}
               </div>
               <div className="mt-1.5 space-y-1">

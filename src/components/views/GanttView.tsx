@@ -616,7 +616,7 @@ export const GanttView: React.FC<{ projectId: string }> = ({ projectId }) => {
                       <span className="flex items-center gap-1.5"><span className="block truncate text-[10px] font-semibold text-slate-800">{item.title}</span>{isCritical && <span className="flex-shrink-0 rounded bg-rose-50 px-1 py-0.5 text-[7px] font-black text-rose-700 ring-1 ring-rose-100">CRÍTICA</span>}</span>
                       <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[8px] font-medium text-slate-400">
                         <span>{item.type}</span><span>•</span><span>{item.progress}%</span>
-                        {actualStart && actualEnd ? <><span>•</span><span>{formatShortDate(actualStart)} → {formatShortDate(actualEnd)}</span></> : <><span>•</span><span className="text-amber-600">Sin fecha actual</span></>}
+                        {actualStart && actualEnd ? <><span>•</span><span>{formatShortDate(actualStart)} → {formatShortDate(actualEnd)}</span></> : <><span>•</span><span className="text-amber-700">Sin fecha actual</span></>}
                         {scheduleTask && <><span>•</span><span className={scheduleTask.totalFloat === 0 ? 'font-bold text-rose-600' : 'text-sky-600'}>Holgura {scheduleTask.totalFloat}d</span></>}
                         {varianceDays !== null && <><span>•</span><span className={varianceClass}>{varianceLabel(varianceDays, isWorkingCalendar)}</span></>}
                         {predecessorCount > 0 && <><span>•</span><span>{predecessorCount} pred.</span></>}

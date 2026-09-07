@@ -234,7 +234,7 @@ export const ResourcePlanningEditor: React.FC<Props> = ({ onSaved }) => {
             <div className="mt-4">
               <label className="text-[8px] font-bold uppercase tracking-[0.1em] text-slate-400">Esfuerzo total</label>
               <div className="relative mt-1.5 max-w-[220px]"><input type="number" min={0} max={100000} step={0.5} value={effortHours} onChange={(event) => setEffortHours(event.target.value)} disabled={!apiEditingAvailable || !task} placeholder="Ej. 40" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 pr-8 text-[11px] font-bold text-slate-800 outline-none focus:border-green-500 disabled:bg-slate-50" /><span className="absolute right-3 top-2.5 text-[10px] font-semibold text-slate-400">h</span></div>
-              <p className="mt-2 max-w-lg text-[9px] leading-4 text-slate-400">Déjalo vacío o en 0 para marcar la actividad como <strong className="font-semibold text-amber-600">sin dimensionar</strong>. Bridata nunca inferirá horas de esfuerzo sin una regla explícita.</p>
+              <p className="mt-2 max-w-lg text-[9px] leading-4 text-slate-400">Déjalo vacío o en 0 para marcar la actividad como <strong className="font-semibold text-amber-700">sin dimensionar</strong>. Bridata nunca inferirá horas de esfuerzo sin una regla explícita.</p>
             </div>
 
             <button type="button" onClick={() => void saveEffort()} disabled={!apiEditingAvailable || !task || isObjectMutationPending} className="mt-5 inline-flex h-9 items-center gap-2 rounded-xl bg-green-700 px-4 text-[10px] font-bold text-white transition hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-40"><Save className="h-3.5 w-3.5" /> Guardar esfuerzo</button>

@@ -122,6 +122,7 @@
  * Al migrar un módulo, sustituye el valor arbitrario por la clase semántica
  * (.text-micro / .text-meta / .text-body) y esta capa deja de aplicarle.
  */
+.text-\[7px\],
 .text-\[8px\],
 .text-\[9px\] { font-size: var(--bridata-text-micro); }
 .text-\[10px\] { font-size: var(--bridata-text-meta); }
@@ -141,8 +142,13 @@
  * más oscuro que slate-500: éste da 4.8:1 sobre blanco puro, pero cae por debajo
  * de 4.5 sobre los fondos teñidos (slate-50, green-50/30) que usan las tarjetas.
  * Los bordes e iconos conservan su tono porque no pasan por esta utilidad.
+ *
+ * slate-500 (#64748b) da 4.76:1 sobre blanco puro y pasaría, pero casi nunca se
+ * pinta sobre blanco: el lienzo de la aplicación es #f4f7f5 y las insignias usan
+ * slate-100, donde cae a 4.42:1. Se oscurece lo justo para cubrir ambos fondos.
  */
 .text-slate-400 { color: #566476; }
+.text-slate-500 { color: #5a6878; }
 
 /*
  * Compatibilidad temporal para módulos que todavía conservan utilidades

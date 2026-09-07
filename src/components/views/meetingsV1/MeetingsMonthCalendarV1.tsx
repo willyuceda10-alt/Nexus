@@ -113,8 +113,9 @@ export const MeetingsMonthCalendarV1: React.FC<{
           return (
             <div key={key} className={`min-h-[116px] bg-white p-2 ${inMonth ? '' : 'bg-slate-50/70'}`}>
               <div className="flex items-center justify-between">
-                <span className={`grid h-6 min-w-6 place-items-center rounded-full px-1 text-[9px] font-bold ${key === today ? 'bg-green-700 text-white' : inMonth ? 'text-slate-700' : 'text-slate-300'}`}>{date.getDate()}</span>
-                {dayMeetings.length > 0 && <span className="text-[8px] font-black text-slate-300">{dayMeetings.length}</span>}
+                {/* slate-300 sobre la celda da 1.49:1 — la fecha era ilegible. */}
+                <span className={`grid h-6 min-w-6 place-items-center rounded-full px-1 text-micro font-bold ${key === today ? 'bg-green-700 text-white' : inMonth ? 'text-slate-700' : 'text-slate-500'}`}>{date.getDate()}</span>
+                {dayMeetings.length > 0 && <span className="text-micro font-black text-slate-500">{dayMeetings.length}</span>}
               </div>
               <div className="mt-1.5 space-y-1">
                 {dayMeetings.slice(0, 3).map((meeting) => (

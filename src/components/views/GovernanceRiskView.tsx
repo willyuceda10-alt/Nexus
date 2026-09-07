@@ -17,7 +17,10 @@ export const GovernanceRiskView: React.FC<{ projectId?: string }> = ({ projectId
 
     let bg = 'bg-emerald-100 text-emerald-900 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200';
     if (score >= 15) {
-      bg = 'bg-rose-500 text-white font-extrabold animate-pulse';
+      // rose-600 en vez de rose-500: el blanco sobre rose-500 daba 3.75:1. Sin
+      // animate-pulse — una celda parpadeando permanentemente en una matriz de 25
+      // no añade información y dificulta leer el número.
+      bg = 'bg-rose-600 text-white font-extrabold';
     } else if (score >= 8) {
       bg = 'bg-amber-200 text-amber-900 font-bold dark:bg-amber-900 dark:text-amber-100';
     }
@@ -27,8 +30,9 @@ export const GovernanceRiskView: React.FC<{ projectId?: string }> = ({ projectId
         key={`${prob}-${imp}`}
         className={`flex h-12 flex-col items-center justify-center rounded-lg border text-xs shadow-xs ${bg}`}
       >
-        <span className="text-[10px] opacity-75">Score {score}</span>
-        {count > 0 && <span className="text-sm font-extrabold">{count} Risks</span>}
+        {/* opacity-75 bajaba la celda a 3.75:1; el color ya distingue la severidad. */}
+        <span className="text-micro opacity-90">Score {score}</span>
+        {count > 0 && <span className="text-meta font-extrabold">{count} {count === 1 ? 'riesgo' : 'riesgos'}</span>}
       </div>
     );
   };
@@ -171,7 +175,7 @@ export const GovernanceRiskView: React.FC<{ projectId?: string }> = ({ projectId
                   </div>
                   <div className="rounded bg-white p-2 border border-slate-100 dark:bg-slate-800 dark:border-slate-700">
                     <span className="text-[10px] text-slate-400 block">Impacto Tiempo</span>
-                    <span className="font-extrabold text-amber-600">+{cr.timeImpactDays || 0} Días</span>
+                    <span className="font-extrabold text-amber-700">+{cr.timeImpactDays || 0} Días</span>
                   </div>
                 </div>
 
@@ -179,7 +183,7 @@ export const GovernanceRiskView: React.FC<{ projectId?: string }> = ({ projectId
                   <div className="mt-3 flex justify-end space-x-2">
                     <button
                       onClick={() => decideApproval(app.id, 'APPROVED', 'Aprobado oficialmente')}
-                      className="flex items-center space-x-1 rounded bg-emerald-600 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+                      className="flex items-center space-x-1 rounded bg-emerald-700 px-3 py-1 text-xs font-bold text-white shadow-xs hover:bg-emerald-800"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       <span>Aprobar CR</span>
