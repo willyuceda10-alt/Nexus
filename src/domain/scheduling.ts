@@ -1,3 +1,18 @@
+/**
+ * DEPRECATED — do not add new functionality.
+ *
+ * Segunda implementación del cálculo de cronograma, esta vez en el cliente. Solo se
+ * alcanza en modo demo: SchedulingContext.analyzeProject la invoca cuando `isApiMode`
+ * es false. En modo API el cálculo lo hace el backend y este archivo no participa,
+ * así que nunca produce fechas contractuales.
+ *
+ * Canonical scheduling engine: apps/api/src/domain/scheduling-v2.ts
+ * Canonical planner view:      src/components/views/WbsGanttV2View.tsx
+ *
+ * Retirada (SCH-01b): depende de que WbsGanttV2View sepa renderizar sin API. Eso es
+ * lo único que hoy obliga a mantener esta cadena viva.
+ */
+
 import type { ApiDependencyType, ApiScheduleAnalysis } from '../api/contracts';
 import type { NexusObject, ObjectRelation } from '../types/nexus';
 import { calendarFromProject, durationUnits } from './workCalendar';

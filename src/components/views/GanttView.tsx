@@ -1,3 +1,17 @@
+/**
+ * DEPRECATED — do not add new functionality.
+ *
+ * Superficie Gantt legacy. Solo se monta en modo demo: WbsGanttV2View delega en ella
+ * cuando `isApiMode` es false. No llama a ninguna API y no persiste nada; su cálculo
+ * viene del motor de cliente, también deprecado.
+ *
+ * Canonical planner view:      src/components/views/WbsGanttV2View.tsx
+ * Canonical scheduling engine: apps/api/src/domain/scheduling-v2.ts
+ *
+ * Retirada (SCH-01b): eliminar cuando WbsGanttV2View renderice sin API. Borrarla antes
+ * dejaría el modo demo sin cronograma.
+ */
+
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,

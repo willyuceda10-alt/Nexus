@@ -1,3 +1,17 @@
+/**
+ * DEPRECATED — do not add new functionality.
+ *
+ * Motor CPM de primera generación (`calculateCpm`), expuesto por
+ * /api/v1/schedule-analysis. Su único consumidor es SchedulingContext.analyzeProject,
+ * que a su vez solo se ejecuta desde GanttView — una vista que no se monta en modo API.
+ * En la práctica este endpoint no se alcanza desde producción.
+ *
+ * Canonical scheduling engine: apps/api/src/domain/scheduling-v2.ts (calculateScheduleV2)
+ * Canonical endpoint:          /api/v1/projects/:id/schedule-analysis-v2
+ *
+ * Retirada (SCH-01b): eliminar junto con la cadena GanttView + motor de cliente.
+ */
+
 export type DependencyType = 'FS' | 'SS' | 'FF' | 'SF';
 
 export interface ScheduleTask {

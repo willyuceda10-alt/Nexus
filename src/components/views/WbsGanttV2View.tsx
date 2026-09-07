@@ -45,6 +45,21 @@ import { GanttView } from './GanttView';
 
 const DAY_MS = 86_400_000;
 const LEFT_WIDTH = 790;
+
+/**
+ * SCH-03 — Vista de columnas CPM.
+ *
+ * El motor V2 ya devuelve early/late start y finish y ambas holguras por tarea; hasta
+ * ahora la grilla solo pintaba la holgura total. Estas columnas no calculan nada: leen
+ * lo que `projectScheduleAnalysisV2` ya trae. No se muestran por defecto porque un
+ * planner solo las necesita al analizar la red, no al capturar el plan.
+ */
+const CPM_LEFT_WIDTH = 856;
+const STANDARD_COLUMNS = 'grid-cols-[58px_280px_72px_64px_84px_84px_62px_86px]';
+const CPM_COLUMNS = 'grid-cols-[58px_240px_64px_78px_78px_78px_78px_60px_60px_62px]';
+
+/** Umbral por defecto de «casi crítica», en días hábiles. Configurable más adelante. */
+const NEAR_CRITICAL_DAYS = 3;
 const ROW_HEIGHT = 44;
 
 const constraintLabels: Record<ApiScheduleConstraintTypeV2, string> = {
@@ -85,6 +100,27 @@ function addDays(date: Date, days: number): Date {
 
 function dayDistance(from: Date, to: Date): number {
   return Math.round((to.getTime() - from.getTime()) / DAY_MS);
+}
+
+/**
+ * SCH-03 — El motor entrega early/late start y finish en minutos desde el ancla del
+ * proyecto. Convertirlos a fecha de calendario exigiría recorrer el calendario saltando
+ * días no laborables, es decir recalcular el cronograma en el cliente. Se muestran como
+ * día hábil del proyecto, que es una conversión de unidad y no una regla de negocio.
+ *
+ * Exponerlos como fecha requiere que el backend los serialice; queda anotado como el
+ * único cambio de API que SCH-03 justifica.
+ */
+function cpmDay(minutes: number | undefined, minutesPerDay: number): string {
+  if (minutes === undefined || minutesPerDay <= 0) return '—';
+  return `d${Math.round(minutes / minutesPerDay)}`;
+}
+
+/** Rojo si es crítica, ámbar si entra en el umbral de casi crítica. */
+function floatTone(days: number | undefined, critical: boolean | undefined): string {
+  if (critical) return 'text-rose-600';
+  if (days !== undefined && days <= NEAR_CRITICAL_DAYS) return 'text-amber-600';
+  return 'text-slate-400';
 }
 
 function shortDate(value?: string | null): string {
@@ -152,6 +188,12 @@ export const WbsGanttV2View: React.FC<{ projectId: string }> = ({ projectId }) =
   const [predecessorId, setPredecessorId] = useState('');
   const [dependencyType, setDependencyType] = useState<DependencyType>('FS');
   const [lagDays, setLagDays] = useState(0);
+  // SCH-03: la vista CPM se activa a demanda; la estándar queda limpia para capturar.
+  const [cpmView, setCpmView] = useState(false);
+  const [onlyCritical, setOnlyCritical] = useState(false);
+
+  const leftWidth = cpmView ? CPM_LEFT_WIDTH : LEFT_WIDTH;
+  const columnTemplate = cpmView ? CPM_COLUMNS : STANDARD_COLUMNS;
 
   const reload = useCallback(async () => {
     if (!apiReady) return;
@@ -187,7 +229,16 @@ export const WbsGanttV2View: React.FC<{ projectId: string }> = ({ projectId }) =
   const nodes = wbs?.nodes ?? [];
   const nodeIds = useMemo(() => new Set(nodes.map((node) => node.objectId)), [nodes]);
   const selected = nodes.find((node) => node.objectId === selectedId) ?? null;
-  const visibleNodes = useMemo(() => visibleWbsNodes(nodes, collapsed), [nodes, collapsed]);
+  const allVisibleNodes = useMemo(() => visibleWbsNodes(nodes, collapsed), [nodes, collapsed]);
+  // SCH-03: el filtro de ruta crítica usa criticalTaskIds del motor, sin recalcular nada.
+  const criticalIds = useMemo(
+    () => new Set(analysis?.criticalTaskIds ?? []),
+    [analysis],
+  );
+  const visibleNodes = useMemo(
+    () => (onlyCritical ? allVisibleNodes.filter((node) => criticalIds.has(node.objectId)) : allVisibleNodes),
+    [allVisibleNodes, criticalIds, onlyCritical],
+  );
   const analysisTaskById = useMemo(
     () => new Map(analysis?.tasks.map((task) => [task.id, task]) ?? []),
     [analysis],
@@ -532,6 +583,24 @@ export const WbsGanttV2View: React.FC<{ projectId: string }> = ({ projectId }) =
             <button disabled={!selected || mutating} onClick={() => selected && void persistHierarchy(moveWbsNode(nodes, selected.objectId, -1), 'Actividad movida hacia arriba.')} title="Mover arriba" className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
             <button disabled={!selected || mutating} onClick={() => selected && void persistHierarchy(moveWbsNode(nodes, selected.objectId, 1), 'Actividad movida hacia abajo.')} title="Mover abajo" className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
             <span className="mx-0.5 h-5 w-px bg-slate-200" />
+            {/* SCH-03 · vista de columnas y filtro de red, ambos sobre datos del motor. */}
+            <button
+              onClick={() => setCpmView((value) => !value)}
+              aria-pressed={cpmView}
+              title="Columnas de análisis CPM: inicio y fin temprano y tardío, holguras"
+              className={`h-8 rounded-lg border px-2.5 text-[9px] font-bold transition ${cpmView ? 'border-green-300 bg-green-50 text-green-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+            >
+              CPM
+            </button>
+            <button
+              onClick={() => setOnlyCritical((value) => !value)}
+              aria-pressed={onlyCritical}
+              disabled={criticalCount === 0}
+              title={criticalCount === 0 ? 'Sin ruta crítica calculada' : 'Mostrar solo la ruta crítica'}
+              className={`h-8 rounded-lg border px-2.5 text-[9px] font-bold transition disabled:opacity-40 ${onlyCritical ? 'border-rose-300 bg-rose-50 text-rose-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+            >
+              Ruta crítica
+            </button>
             <button disabled={mutating} onClick={() => setDayWidth((value) => Math.max(14, value - 4))} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><ZoomOut className="h-3.5 w-3.5" /></button>
             <button disabled={mutating} onClick={() => setDayWidth((value) => Math.min(52, value + 4))} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><ZoomIn className="h-3.5 w-3.5" /></button>
             <button disabled={mutating} onClick={() => void reload()} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-slate-950 px-3 text-[9px] font-bold text-white hover:bg-slate-800 disabled:opacity-40"><RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} /> Recalcular</button>
@@ -624,8 +693,23 @@ export const WbsGanttV2View: React.FC<{ projectId: string }> = ({ projectId }) =
         <div className="max-h-[660px] overflow-auto">
           <div style={{ width: LEFT_WIDTH + timeline.width }} className="min-w-max">
             <div className="sticky top-0 z-30 flex h-12 border-b border-slate-200 bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)]">
-              <div style={{ width: LEFT_WIDTH }} className="sticky left-0 z-40 grid flex-shrink-0 grid-cols-[58px_280px_72px_64px_84px_84px_62px_86px] items-center border-r border-slate-200 bg-slate-50 px-2 text-[7px] font-extrabold uppercase tracking-[0.1em] text-slate-400">
-                <span>WBS</span><span>Actividad</span><span>Duración</span><span>Avance</span><span>Inicio</span><span>Fin</span><span>Holg.</span><span>Restricción</span>
+              <div style={{ width: leftWidth }} className={`sticky left-0 z-40 grid flex-shrink-0 ${columnTemplate} items-center border-r border-slate-200 bg-slate-50 px-2 text-[7px] font-extrabold uppercase tracking-[0.1em] text-slate-400`}>
+                {cpmView ? (
+                  <>
+                    <span>WBS</span><span>Actividad</span><span>Duración</span>
+                    <span title="Inicio temprano">ES</span>
+                    <span title="Fin temprano">EF</span>
+                    <span title="Inicio tardío">LS</span>
+                    <span title="Fin tardío">LF</span>
+                    <span title="Holgura total">TF</span>
+                    <span title="Holgura libre">FF</span>
+                    <span>Crítica</span>
+                  </>
+                ) : (
+                  <>
+                    <span>WBS</span><span>Actividad</span><span>Duración</span><span>Avance</span><span>Inicio</span><span>Fin</span><span>Holg.</span><span>Restricción</span>
+                  </>
+                )}
               </div>
               <div style={{ width: timeline.width }} className="relative flex-shrink-0 bg-slate-50">
                 {timeline.days.map((day, index) => {
@@ -661,7 +745,7 @@ export const WbsGanttV2View: React.FC<{ projectId: string }> = ({ projectId }) =
 
               return (
                 <div key={node.objectId} className={`flex border-b border-slate-100 ${selectedRow ? 'bg-green-50/30' : 'bg-white'}`} style={{ height: ROW_HEIGHT }}>
-                  <div style={{ width: LEFT_WIDTH }} onClick={() => setSelectedId(node.objectId)} className={`sticky left-0 z-20 grid flex-shrink-0 grid-cols-[58px_280px_72px_64px_84px_84px_62px_86px] items-center border-r border-slate-200 px-2 text-[8px] ${selectedRow ? 'bg-green-50' : 'bg-white'}`}>
+                  <div style={{ width: leftWidth }} onClick={() => setSelectedId(node.objectId)} className={`sticky left-0 z-20 grid flex-shrink-0 ${columnTemplate} items-center border-r border-slate-200 px-2 text-[8px] ${selectedRow ? 'bg-green-50' : 'bg-white'}`}>
                     <span className="font-extrabold text-slate-500">{node.wbsCode}</span>
                     <div className="flex min-w-0 items-center" style={{ paddingLeft: node.outlineLevel * 16 }}>
                       {node.isSummary ? (
@@ -688,18 +772,38 @@ export const WbsGanttV2View: React.FC<{ projectId: string }> = ({ projectId }) =
                         <input key={`${node.objectId}-${node.durationMinutes}`} defaultValue={Number(workingDays.toFixed(2))} onClick={(event) => event.stopPropagation()} onBlur={(event) => void changeDuration(node, event.target.value)} className="h-7 w-14 rounded-md border border-transparent bg-transparent px-1 text-[8px] font-bold text-slate-600 outline-none hover:border-slate-200 focus:border-green-300 focus:bg-white" />
                       )}
                     </div>
-                    <div><input key={`${node.objectId}-${node.progress}`} defaultValue={node.progress} type="number" min={0} max={100} onClick={(event) => event.stopPropagation()} onBlur={(event) => void changeProgress(node, event.target.value)} className="h-7 w-12 rounded-md border border-transparent bg-transparent px-1 text-[8px] font-bold text-slate-600 outline-none hover:border-slate-200 focus:border-green-300 focus:bg-white" /></div>
-                    <span className="font-semibold text-slate-500">{shortDate(bar?.plannedStart)}</span>
-                    <span className="font-semibold text-slate-500">{shortDate(bar?.plannedFinish)}</span>
-                    <span className={`font-bold ${task?.critical ? 'text-rose-600' : 'text-slate-400'}`}>{node.isSummary ? '—' : task ? `${task.totalFloatWorkingDays}d` : '—'}</span>
-                    <div className="flex min-w-0 flex-col gap-0.5 pr-1">
-                      <select value={node.constraintType} disabled={node.isSummary || mutating} onClick={(event) => event.stopPropagation()} onChange={(event) => void changeConstraint(node, event.target.value as ApiScheduleConstraintTypeV2)} className="h-6 w-full rounded-md border border-transparent bg-transparent text-[7px] font-semibold text-slate-500 outline-none hover:border-slate-200 disabled:opacity-50">
-                        {Object.entries(constraintLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                      </select>
-                      {constraintNeedsDate && !node.isSummary && (
-                        <input type="date" value={node.constraintDate ?? ''} onClick={(event) => event.stopPropagation()} onChange={(event) => void mutateSchedule(node, { constraintDate: event.target.value || null }, 'Fecha de restricción actualizada.')} className="h-5 w-full border-0 bg-transparent text-[6.5px] text-slate-400 outline-none" />
-                      )}
-                    </div>
+                    {cpmView ? (
+                      /* SCH-03: sin cálculo en cliente — todo sale del análisis V2 del backend. */
+                      <>
+                        <span className="font-semibold text-slate-500">{cpmDay(task?.earlyStartMinutes, wbs.minutesPerDay)}</span>
+                        <span className="font-semibold text-slate-500">{cpmDay(task?.earlyFinishMinutes, wbs.minutesPerDay)}</span>
+                        <span className="font-semibold text-slate-500">{cpmDay(task?.lateStartMinutes, wbs.minutesPerDay)}</span>
+                        <span className="font-semibold text-slate-500">{cpmDay(task?.lateFinishMinutes, wbs.minutesPerDay)}</span>
+                        <span className={`font-bold ${floatTone(task?.totalFloatWorkingDays, task?.critical)}`}>{node.isSummary || !task ? '—' : `${task.totalFloatWorkingDays}d`}</span>
+                        <span className="font-bold text-slate-400">{node.isSummary || !task ? '—' : `${task.freeFloatWorkingDays}d`}</span>
+                        <span>
+                          {node.isSummary || !task ? <span className="text-slate-300">—</span>
+                            : task.critical ? <span className="rounded bg-rose-50 px-1.5 py-0.5 font-bold text-rose-700">Crítica</span>
+                            : task.totalFloatWorkingDays <= NEAR_CRITICAL_DAYS ? <span className="rounded bg-amber-50 px-1.5 py-0.5 font-bold text-amber-700">Casi</span>
+                            : <span className="text-slate-300">—</span>}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <div><input key={`${node.objectId}-${node.progress}`} defaultValue={node.progress} type="number" min={0} max={100} onClick={(event) => event.stopPropagation()} onBlur={(event) => void changeProgress(node, event.target.value)} className="h-7 w-12 rounded-md border border-transparent bg-transparent px-1 text-[8px] font-bold text-slate-600 outline-none hover:border-slate-200 focus:border-green-300 focus:bg-white" /></div>
+                        <span className="font-semibold text-slate-500">{shortDate(bar?.plannedStart)}</span>
+                        <span className="font-semibold text-slate-500">{shortDate(bar?.plannedFinish)}</span>
+                        <span className={`font-bold ${task?.critical ? 'text-rose-600' : 'text-slate-400'}`}>{node.isSummary ? '—' : task ? `${task.totalFloatWorkingDays}d` : '—'}</span>
+                        <div className="flex min-w-0 flex-col gap-0.5 pr-1">
+                          <select value={node.constraintType} disabled={node.isSummary || mutating} onClick={(event) => event.stopPropagation()} onChange={(event) => void changeConstraint(node, event.target.value as ApiScheduleConstraintTypeV2)} className="h-6 w-full rounded-md border border-transparent bg-transparent text-[7px] font-semibold text-slate-500 outline-none hover:border-slate-200 disabled:opacity-50">
+                            {Object.entries(constraintLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          </select>
+                          {constraintNeedsDate && !node.isSummary && (
+                            <input type="date" value={node.constraintDate ?? ''} onClick={(event) => event.stopPropagation()} onChange={(event) => void mutateSchedule(node, { constraintDate: event.target.value || null }, 'Fecha de restricción actualizada.')} className="h-5 w-full border-0 bg-transparent text-[6.5px] text-slate-400 outline-none" />
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div style={{ width: timeline.width }} className="relative flex-shrink-0 bg-white">
