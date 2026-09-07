@@ -293,7 +293,9 @@ resource notificationWorker 'Microsoft.App/containerApps@2024-03-01' = if (deplo
             { name: 'SERVICE_BUS_NAMESPACE', value: serviceBusNamespaceFqdn }
             { name: 'SERVICE_BUS_TOPIC', value: serviceBusTopicName }
             { name: 'SERVICE_BUS_NOTIFICATION_SUBSCRIPTION', value: serviceBusNotificationSubscriptionName }
-            { name: 'M365_GRAPH_DELIVERY_ENABLED', value: string(m365GraphDeliveryEnabled) }
+            // Ternary, not string(): Bicep renders a bool as 'True'/'False', which fails
+            // the API's z.enum(['true','false']) parse and crashes the worker at startup.
+            { name: 'M365_GRAPH_DELIVERY_ENABLED', value: m365GraphDeliveryEnabled ? 'true' : 'false' }
             { name: 'M365_OUTLOOK_SENDER_USER', value: m365OutlookSenderUser }
             { name: 'M365_TEAMS_ACTIVITY_TYPE', value: m365TeamsActivityType }
             { name: 'M365_TEAMS_TOPIC_WEB_URL', value: m365TeamsTopicWebUrl }

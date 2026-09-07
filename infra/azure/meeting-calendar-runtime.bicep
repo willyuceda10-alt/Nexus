@@ -138,7 +138,9 @@ resource meetingWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployMeet
             { name: 'SERVICE_BUS_NAMESPACE', value: '${serviceBus.name}.servicebus.windows.net' }
             { name: 'SERVICE_BUS_TOPIC', value: serviceBusTopicName }
             { name: 'SERVICE_BUS_MEETING_SUBSCRIPTION', value: meetingSubscriptionName }
-            { name: 'M365_CALENDAR_SYNC_ENABLED', value: string(m365CalendarSyncEnabled) }
+            // Ternary, not string(): Bicep renders a bool as 'True'/'False', which fails
+            // the API's z.enum(['true','false']) parse and crashes the worker at startup.
+            { name: 'M365_CALENDAR_SYNC_ENABLED', value: m365CalendarSyncEnabled ? 'true' : 'false' }
             { name: 'AZURE_CLIENT_ID', value: meetingIdentity!.properties.clientId }
           ]
           resources: {
